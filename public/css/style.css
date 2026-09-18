@@ -603,3 +603,68 @@ input {
   flex-shrink: 0;
   margin-left: auto;
 }
+
+.roster-toolbar__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.loading-hint {
+  font-size: 14px;
+  color: var(--color-text-faint);
+}
+
+.field-hint {
+  font-size: 12px;
+  color: var(--color-text-faint);
+}
+
+.roster-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--color-input-border);
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--color-text);
+  outline: none;
+  resize: vertical;
+}
+
+.roster-form textarea:focus {
+  border-color: var(--color-active);
+}
+
+.bulk-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bulk-preview__list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.bulk-preview__row {
+  font-size: 13px;
+  color: var(--color-text);
+  padding: 6px 10px;
+  background: var(--color-bg);
+  border-radius: 8px;
+}
+
+.bulk-preview__errors {
+  font-size: 13px;
+  color: var(--color-out);
+  background: var(--color-out-bg);
+  border-radius: var(--radius-control);
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}

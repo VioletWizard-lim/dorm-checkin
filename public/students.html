@@ -23,8 +23,11 @@
   </header>
 
   <div class="roster-toolbar">
-    <div class="filter-chips" id="gradeTabs"></div>
-    <button type="button" class="btn-add" id="addStudentBtn">+ 학생 추가</button>
+    <div class="filter-chips" id="gradeTabs"><span class="loading-hint">불러오는 중...</span></div>
+    <div class="roster-toolbar__actions">
+      <button type="button" class="btn-secondary" id="bulkAddBtn" disabled>여러 명 한번에 추가</button>
+      <button type="button" class="btn-add" id="addStudentBtn" disabled>+ 학생 추가</button>
+    </div>
   </div>
 
   <div class="roster-form-wrap" id="formWrap" hidden>
@@ -42,6 +45,7 @@
         <div class="field">
           <label for="inputCls">반</label>
           <input id="inputCls" type="text" placeholder="예: 1학년 3반" autocomplete="off">
+          <span class="field-hint">학번 입력 시 자동으로 채워집니다. 필요하면 직접 수정하세요.</span>
         </div>
       </div>
       <div class="field">
@@ -55,7 +59,23 @@
     </form>
   </div>
 
-  <div class="student-list" id="rosterList"></div>
+  <div class="roster-form-wrap" id="bulkFormWrap" hidden>
+    <div class="roster-form">
+      <div class="field">
+        <label for="bulkInput">여러 명 붙여넣기</label>
+        <span class="field-hint">한 줄에 한 명씩 "이름 학번" 형식입니다. 엑셀에서 이름·학번 두 열을 선택해 그대로 복사·붙여넣기 하면 됩니다. 반은 학번으로 자동 계산됩니다.</span>
+        <textarea id="bulkInput" rows="8" placeholder="홍길동	10305
+김민준	10312"></textarea>
+      </div>
+      <div class="bulk-preview" id="bulkPreview"></div>
+      <div class="roster-form__actions">
+        <button type="button" class="btn-secondary" id="cancelBulkFormBtn">취소</button>
+        <button type="button" class="btn-add" id="bulkSaveBtn" disabled>일괄 저장 (0명)</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="student-list" id="rosterList"><div class="student-list__empty">불러오는 중...</div></div>
 
 </div>
 

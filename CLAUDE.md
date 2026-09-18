@@ -51,6 +51,8 @@
 - teacher는 접근 시 `check.html`로 리다이렉트(권한 없음). gradeManager·admin만 사용 가능
 - 학년 탭: admin은 1/2/3학년 전체, gradeManager는 자기 `managedGrades`에 속한 학년만 노출
 - "+ 학생 추가" → 이름/학번/반/방과후 요일(월~금 토글) 입력 폼 → `students/{grade}/{push로 생성된 id}`에 저장
+  - 학번(5자리: 학년1+반2+번호2)을 입력하면 반이 자동 계산되어 채워짐(직접 수정하면 그 값을 우선)
+- "여러 명 한번에 추가" → 엑셀에서 복사한 "이름[탭]학번" 줄들을 붙여넣으면 실시간 미리보기 후 일괄 저장
 - 명단 카드의 "수정"/"삭제"로 기존 학생 정보 수정·삭제 (`students/{grade}/{studentId}` set/remove)
 - `check.html` 상단에 이 화면으로 가는 "학생 명단 관리" 링크가 admin·gradeManager에게만 노출됨
 
