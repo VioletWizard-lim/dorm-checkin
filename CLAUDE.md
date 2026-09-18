@@ -110,10 +110,10 @@ outings/
 ## 남은 작업 체크리스트
 - [ ] Firebase 프로젝트 생성, Authentication(이메일/비밀번호) + Realtime Database 활성화
 - [ ] `database.rules.json` 배포 (`firebase deploy --only database`)
-- [ ] `public/js/firebase-config.js` 실제 값 채우기 (gitignore 처리됨, 예시는 `firebase-config.example.js`)
+- [x] `public/js/firebase-config.js` 실제 값 채우기 (비밀키가 아니라 공개돼도 안전한 값이라 그대로 커밋함, `.gitignore` 대상 아님)
 - [x] 로그인 화면: 아이디→이메일 변환 로직 구현
 - [ ] 외출 체크 입력 화면: Realtime DB 연동, 토글 시 `outings/{studentId}` 갱신
 - [ ] 현황판: `outings`, `students`, `rooms` 구독해서 실시간 렌더링
 - [ ] 좌석 배치판: `rooms` CRUD, 좌석 배정 로직, 권한별 편집 가능 여부 분기
 - [ ] 관리자용 계정 생성 화면 또는 Firebase 콘솔에서 수동 생성 결정
-- [ ] `firebase init hosting:github` 실행해 GitHub Actions 자동 배포 연결
+- [x] `firebase init hosting:github` 실행해 GitHub Actions 자동 배포 연결
