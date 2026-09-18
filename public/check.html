@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="google-site-verification" content="PskTvPUma23TKR9FEzgMFdyuOPyNKl2Cs_kTToIcHhw" />
+<title>기숙사 외출체크 - 체크 입력</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+
+<div class="check-page">
+
+  <header class="check-header">
+    <div class="check-header__titles">
+      <div class="check-header__title">기숙사 외출 체크</div>
+      <div class="check-header__subtitle">사감·당직 교사용 입력 화면</div>
+    </div>
+    <div class="check-header__meta">
+      <div class="check-header__date" id="todayDate"></div>
+      <div class="out-count-badge">
+        <span class="out-count-badge__dot"></span>
+        <span id="outCountText">외출중 0명</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="check-toolbar">
+    <label for="search" class="sr-only">학생 이름 검색</label>
+    <div class="check-toolbar__search">
+      <input id="search" type="text" placeholder="학생 이름 검색" autocomplete="off">
+    </div>
+    <div class="check-toolbar__divider"></div>
+    <div class="filter-chips" id="filterChips"></div>
+  </div>
+
+  <div class="student-list" id="studentList"></div>
+
+</div>
+
+<script type="module" src="./js/check.js"></script>
+</body>
+</html>
