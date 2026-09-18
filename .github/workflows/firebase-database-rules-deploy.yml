@@ -1,0 +1,23 @@
+name: Deploy Database Rules on merge
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "database.rules.json"
+      - ".github/workflows/firebase-database-rules-deploy.yml"
+jobs:
+  deploy_database_rules:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_DORM_CHECKIN_647D6 }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install -g firebase-tools
+      - run: firebase deploy --only database --project dorm-checkin-647d6
