@@ -21,6 +21,7 @@ const editingIdInput = document.getElementById("editingId");
 const inputName = document.getElementById("inputName");
 const inputSid = document.getElementById("inputSid");
 const inputCls = document.getElementById("inputCls");
+const inputEmail = document.getElementById("inputEmail");
 const dayToggleRow = document.getElementById("dayToggleRow");
 const cancelFormBtn = document.getElementById("cancelFormBtn");
 
@@ -58,12 +59,12 @@ function parseBulkInput(text) {
       .split(/\t|,/)
       .map((p) => p.trim())
       .filter((p) => p !== "");
-    const [name, sid] = parts;
+    const [name, sid, email] = parts;
     if (!name || !sid) {
       errors.push(`${i + 1}번째 줄을 확인해 주세요: "${trimmed}"`);
       return;
     }
-    rows.push({ name, sid, cls: deriveClsFromSid(sid) || "" });
+    rows.push({ name, sid, cls: deriveClsFromSid(sid) || "", email: email || "" });
   });
   return { rows, errors };
 }
@@ -117,6 +118,7 @@ function renderRoster() {
           <div class="student-info">
             <div class="student-name">${escapeHtml(s.name || "이름 없음")}</div>
             <div class="student-meta">학번 ${escapeHtml(s.sid || "-")} · ${escapeHtml(s.cls || "-")}</div>
+            ${s.email ? `<div class="student-meta">${escapeHtml(s.email)}</div>` : ""}
           </div>
           <div class="day-pill-row">${days}</div>
           <div class="roster-actions">
@@ -134,6 +136,7 @@ function openFormForAdd() {
   inputName.value = "";
   inputSid.value = "";
   inputCls.value = "";
+  inputEmail.value = "";
   state.dayFlags = [false, false, false, false, false];
   state.clsManuallyEdited = false;
   renderDayToggle();
@@ -149,6 +152,7 @@ function openFormForEdit(id) {
   inputName.value = s.name || "";
   inputSid.value = s.sid || "";
   inputCls.value = s.cls || "";
+  inputEmail.value = s.email || "";
   state.dayFlags = (s.afterschoolDays || [false, false, false, false, false]).slice();
   // 기존 학생은 이미 반이 저장되어 있으니, 학번을 고치더라도 자동으로 덮어쓰지 않는다.
   state.clsManuallyEdited = true;
@@ -184,7 +188,7 @@ function renderBulkPreview() {
       `<div class="bulk-preview__list">${rows
         .map(
           (r) =>
-            `<div class="bulk-preview__row">${escapeHtml(r.name)} · ${escapeHtml(r.sid)} · ${escapeHtml(r.cls || "반 확인 필요")}</div>`
+            `<div class="bulk-preview__row">${escapeHtml(r.name)} · ${escapeHtml(r.sid)} · ${escapeHtml(r.cls || "반 확인 필요")}${r.email ? ` · ${escapeHtml(r.email)}` : ""}</div>`
         )
         .join("")}</div>`
     );
@@ -230,6 +234,7 @@ bulkSaveBtn.addEventListener("click", () => {
       name: row.name,
       sid: row.sid,
       cls: row.cls,
+      email: row.email || "",
       afterschoolDays: [false, false, false, false, false],
     };
   }
@@ -287,6 +292,7 @@ studentForm.addEventListener("submit", (event) => {
   const name = inputName.value.trim();
   const sid = inputSid.value.trim();
   const cls = inputCls.value.trim();
+  const email = inputEmail.value.trim();
 
   if (!name || !sid || !cls) {
     alert("이름, 학번, 반을 모두 입력해 주세요.");
@@ -297,6 +303,7 @@ studentForm.addEventListener("submit", (event) => {
     name,
     sid,
     cls,
+    email,
     afterschoolDays: state.dayFlags.slice(),
   };
 

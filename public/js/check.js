@@ -6,6 +6,15 @@ import {
   set,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js";
+import {
+  EMAILJS_PUBLIC_KEY,
+  EMAILJS_SERVICE_ID,
+  EMAILJS_OUTING_TEMPLATE_ID,
+} from "./emailjs-config.js";
+
+if (window.emailjs) {
+  window.emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY });
+}
 
 const GRADES = ["1", "2", "3"];
 
@@ -111,7 +120,7 @@ function renderList(filtered) {
             <div class="status-badge ${isOut ? "status-badge--out" : "status-badge--in"}">${isOut ? "외출중" : "재실"}</div>
             <div class="since-text">${escapeHtml(sinceText)}</div>
           </div>
-          <button type="button" class="toggle-btn ${isOut ? "toggle-btn--mark-in" : "toggle-btn--mark-out"}" data-toggle-id="${escapeHtml(s.id)}" data-current-status="${status}">${isOut ? "복귀 체크" : "외출 체크"}</button>
+          <button type="button" class="toggle-btn ${isOut ? "toggle-btn--mark-in" : "toggle-btn--mark-out"}" data-toggle-id="${escapeHtml(s.id)}" data-grade="${escapeHtml(s.grade)}" data-current-status="${status}">${isOut ? "복귀 체크" : "외출 체크"}</button>
         </div>
       `;
     })
@@ -142,12 +151,30 @@ function render() {
   renderList(filtered);
 }
 
-function toggleOuting(studentId, currentStatus) {
+function sendOutingEmail(student) {
+  if (!student.email || !window.emailjs) return;
+  window.emailjs
+    .send(EMAILJS_SERVICE_ID, EMAILJS_OUTING_TEMPLATE_ID, {
+      to_email: student.email,
+      student_name: student.name || "",
+      sid: student.sid || "",
+      cls: student.cls || "",
+      out_time: formatTime(Date.now()),
+    })
+    .catch((err) => console.error("외출증 이메일 발송 실패:", err));
+}
+
+function toggleOuting(studentId, grade, currentStatus) {
   const nextStatus = currentStatus === "out" ? "in" : "out";
   set(ref(db, `outings/${studentId}`), {
     status: nextStatus,
     since: serverTimestamp(),
   });
+
+  if (nextStatus === "out") {
+    const student = (state.studentsByGrade[grade] || {})[studentId];
+    if (student) sendOutingEmail(student);
+  }
 }
 
 chipsEl.addEventListener("click", (event) => {
@@ -160,7 +187,7 @@ chipsEl.addEventListener("click", (event) => {
 listEl.addEventListener("click", (event) => {
   const btn = event.target.closest("[data-toggle-id]");
   if (!btn) return;
-  toggleOuting(btn.dataset.toggleId, btn.dataset.currentStatus);
+  toggleOuting(btn.dataset.toggleId, btn.dataset.grade, btn.dataset.currentStatus);
 });
 
 searchInput.addEventListener("input", (event) => {
