@@ -1,0 +1,13 @@
+{
+  "name": "dorm-checkin",
+  "version": "0.1.0",
+  "private": true,
+  "description": "기숙사 외출체크 및 좌석 배치 관리 웹 앱",
+  "scripts": {
+    "dev": "firebase emulators:start",
+    "deploy": "firebase deploy"
+  },
+  "devDependencies": {
+    "firebase-tools": "^13.0.0"
+  }
+}

@@ -1,0 +1,119 @@
+# 기숙사 외출체크 시스템 (dorm-checkin)
+
+이 문서는 Claude Code가 프로젝트를 이어서 개발할 때 참고하는 스펙입니다.
+와이어프레임(디자인 목업)은 여기에서 확인할 수 있습니다: https://claude.ai/artifact/G7UJ6u23e1Cqgepecepbsy
+
+## 한 줄 요약
+고등학교 기숙사에서 학생의 외출 여부와 오늘의 방과후 일정을 실시간으로 확인하고,
+좌석(실) 배치를 관리 교사가 직접 구성할 수 있는 웹 앱.
+
+## 기술 스택
+- **Frontend**: 순수 HTML/CSS/JS (프레임워크 없음), PWA(홈 화면 추가 지원)
+- **Backend**: Firebase Authentication + Realtime Database
+- **Hosting**: Firebase Hosting, GitHub Actions로 main 브랜치 push 시 자동 배포
+- **폰트**: Noto Sans KR (Google Fonts)
+- **대상 기기**: 교무실/사감실 PC(입력·현황판 화면), Android 기반 전자칠판(전체화면 PWA)
+
+## 화면 구성 (4개)
+
+### 1. 로그인 (`login.html`)
+- 이메일이 아닌 **아이디**로 로그인 (화면에는 아이디만 노출)
+- 내부적으로 `${아이디}@donghall.local` 형태로 변환해 Firebase Auth에 전달
+- 회원가입 화면 없음 — 계정은 관리자가 미리 생성
+- 아이디는 영문+숫자만 허용 (이메일 변환 시 깨짐 방지)
+
+### 2. 외출 체크 입력 화면 (`check.html`)
+- 상단: 오늘 날짜, 전체 외출중 인원 카운트
+- 실 필터: "전체" / 실 이름별 탭(실 목록은 `rooms`에서 동적으로 읽어옴)
+- 검색창(이름 검색)
+- 학생 카드 리스트: 아바타, 이름, "학번 · 반", 상태 배지(재실/외출중), 토글 버튼(외출 체크 ↔ 복귀 체크)
+- 로그인한 사용자 누구나(teacher 이상) 사용 가능
+
+### 3. 기숙사 현황판 (`display.html`)
+- 읽기 전용 모니터링 화면 (사감/당직 교사 PC에 띄워둠)
+- 실 탭으로 필터링
+- 좌우 2분할: 왼쪽 "외출중"(빨강 계열), 오른쪽 "오늘 방과후"(파랑 계열)
+- 각 항목: 아바타, 이름, "학번 · 반", 외출 시각 또는 방과후 활동명
+- Realtime Database 구독으로 실시간 갱신
+
+### 4. 좌석 배치 현황판 (`seat.html`)
+- 실(rooms)마다 **완전히 독립적인 좌석 그리드**를 가짐 (행/열 크기, 좌석 배정 모두 실별로 분리)
+- 보기 모드 / 편집 모드 토글
+- 편집 모드에서 관리자·학년관리자가 할 수 있는 것:
+  - 실 추가("+ 실 추가") / 실 이름 변경 / 실 삭제(최소 1개는 유지)
+  - 실의 **대상 학년** 지정 (1/2/3학년 토글) — 지정된 학년 학생만 그 실의 배정 후보로 노출
+  - 그리드 행/열 크기 조정(+/−)
+  - 빈 좌석 클릭 → 드롭다운으로 학생 배정 / 배정된 좌석 × 클릭 → 해제
+- 좌석 카드 색상 우선순위: **외출중(빨강) > 오늘 방과후(파랑) > 재실(회색) > 빈자리(점선)**
+- 학년관리자는 자기 `managedRooms`에 속한 실만 편집 가능(권한 규칙 참고)
+
+## 사용자 역할 (3단계)
+
+| 기능 | teacher | gradeManager | admin |
+|---|---|---|---|
+| 외출 체크 입력/조회 | ✅ | ✅ | ✅ |
+| 현황판·좌석배치판 열람 | ✅ | ✅ | ✅ |
+| 담당 실의 좌석 배치 편집 | ❌ | ✅ (담당 실만) | ✅ (전체) |
+| 담당 학년의 학생 명단·방과후 요일 등록/수정 | ❌ | ✅ (담당 학년만) | ✅ (전체) |
+| 실 추가/삭제·이름 변경·대상 학년 지정 | ❌ | ❌ | ✅ |
+| 교사 계정 추가/역할 지정 | ❌ | ❌ | ✅ |
+
+## 데이터 모델 (Realtime Database)
+
+```
+users/
+  {uid}: {
+    role: "teacher" | "gradeManager" | "admin",
+    managedRooms?: { [roomId]: true },   // gradeManager만 사용
+    managedGrades?: { [grade]: true }    // gradeManager만 사용
+  }
+
+students/
+  {grade}/                                // "1" | "2" | "3"
+    {studentId}: {
+      name: string,
+      sid: string,                        // 학번 (예: "10305" = 1학년 03반 05번 형식 예시)
+      cls: string,                        // 반 (예: "1학년 3반")
+      afterschoolDays: [bool,bool,bool,bool,bool]  // 월~금
+    }
+
+rooms/
+  {roomId}: {
+    name: string,                         // 관리자가 자유롭게 설정 (예: "1·2학년실")
+    grades: string[],                     // 이 실에 배정 가능한 학년 (예: ["1","2"])
+    rows: number,
+    cols: number,
+    seatMap: { "r0c0": studentId, ... }
+  }
+
+outings/
+  {studentId}: {
+    status: "out" | "in",
+    since: timestamp
+  }
+```
+
+## 보안 규칙 (`database.rules.json`에 이미 반영됨)
+- `students/{grade}`: admin 또는 `managedGrades`에 해당 학년이 있는 gradeManager만 쓰기 가능
+- `rooms/{roomId}`: admin 또는 `managedRooms`에 해당 실이 있는 gradeManager만 쓰기 가능
+- `outings`: 로그인한 사용자(teacher 이상) 누구나 읽기/쓰기 가능
+- `users`: 클라이언트에서 직접 쓰기 불가 (계정 생성/역할 부여는 관리자가 콘솔 또는 별도 관리 화면에서 처리)
+
+## 디자인 톤 (와이어프레임 기준)
+- 배경 `#F3F4F7`, 카드 배경 `#FFFFFF`, 텍스트 `#1C2230`
+- 외출중 강조색: `#C0392B` (배경 `#FDECEA`)
+- 방과후 강조색: `#2B6CB0` (배경 `#EAF1FB`)
+- 선택/활성 상태: `#1C2230` (다크 네이비)
+- 카드 radius 12~18px, 폰트 Noto Sans KR
+- 데스크톱 전용 레이아웃 (1280px 기준)
+
+## 남은 작업 체크리스트
+- [ ] Firebase 프로젝트 생성, Authentication(이메일/비밀번호) + Realtime Database 활성화
+- [ ] `database.rules.json` 배포 (`firebase deploy --only database`)
+- [ ] `public/js/firebase-config.js` 실제 값 채우기 (gitignore 처리됨, 예시는 `firebase-config.example.js`)
+- [x] 로그인 화면: 아이디→이메일 변환 로직 구현
+- [ ] 외출 체크 입력 화면: Realtime DB 연동, 토글 시 `outings/{studentId}` 갱신
+- [ ] 현황판: `outings`, `students`, `rooms` 구독해서 실시간 렌더링
+- [ ] 좌석 배치판: `rooms` CRUD, 좌석 배정 로직, 권한별 편집 가능 여부 분기
+- [ ] 관리자용 계정 생성 화면 또는 Firebase 콘솔에서 수동 생성 결정
+- [ ] `firebase init hosting:github` 실행해 GitHub Actions 자동 배포 연결

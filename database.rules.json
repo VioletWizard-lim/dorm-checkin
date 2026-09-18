@@ -1,0 +1,24 @@
+{
+  "rules": {
+    "users": {
+      ".read": "auth != null",
+      ".write": false
+    },
+    "students": {
+      "$grade": {
+        ".read": "auth != null",
+        ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('managedGrades').child($grade).exists()"
+      }
+    },
+    "rooms": {
+      "$roomId": {
+        ".read": "auth != null",
+        ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('managedRooms').child($roomId).exists()"
+      }
+    },
+    "outings": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    }
+  }
+}
