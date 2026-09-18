@@ -19,8 +19,9 @@ gh repo create dorm-checkin --private --source=. --push
 1. https://console.firebase.google.com 에서 새 프로젝트 생성
 2. Authentication → 로그인 방법 → 이메일/비밀번호 활성화
 3. Realtime Database → 데이터베이스 만들기 (프로덕션 모드)
-4. 프로젝트 설정 → 일반 탭에서 설정값 복사
-5. `public/js/firebase-config.example.js`를 `public/js/firebase-config.js`로 복사한 뒤 값 채우기
+4. 프로젝트 설정 → 일반 탭에서 설정값을 복사해 `public/js/firebase-config.js`에 채워 넣기
+   (이 값들은 비밀키가 아니라 공개되어도 안전해서 그대로 커밋되어 있습니다 — GitHub Actions 자동배포에도
+   항상 포함되어야 하므로 `.gitignore`에는 올리지 않습니다)
 
 ### 3. Firebase CLI 연결
 ```bash

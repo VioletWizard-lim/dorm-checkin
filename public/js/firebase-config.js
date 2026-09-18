@@ -1,6 +1,6 @@
-// 실제 값은 Firebase 콘솔 > 프로젝트 설정 > 일반 탭에서 복사하세요.
-// 이 파일을 복사해서 firebase-config.js로 저장한 뒤 값을 채우면 됩니다.
-// firebase-config.js는 .gitignore에 등록되어 있어 커밋되지 않습니다.
+// Firebase 콘솔 > 프로젝트 설정 > 일반 탭에서 확인한 이 프로젝트의 클라이언트 config.
+// 이 값들(apiKey 포함)은 비밀키가 아니라 공개되어도 안전한 식별자라 그대로 커밋합니다.
+// 실제 접근 제어는 Firebase Authentication + database.rules.json 보안 규칙이 담당합니다.
 
 export const firebaseConfig = {
   apiKey: "AIzaSyBpSSUW7hytuAJaLgawAc6xf3ETx6l1kas",
