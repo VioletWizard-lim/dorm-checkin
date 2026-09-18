@@ -11,8 +11,8 @@
       }
     },
     "rooms": {
+      ".read": "auth != null",
       "$roomId": {
-        ".read": "auth != null",
         ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('managedRooms').child($roomId).exists()"
       }
     },
