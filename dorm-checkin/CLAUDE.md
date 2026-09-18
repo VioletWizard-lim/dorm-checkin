@@ -111,7 +111,7 @@ outings/
 - [ ] Firebase 프로젝트 생성, Authentication(이메일/비밀번호) + Realtime Database 활성화
 - [ ] `database.rules.json` 배포 (`firebase deploy --only database`)
 - [ ] `public/js/firebase-config.js` 실제 값 채우기 (gitignore 처리됨, 예시는 `firebase-config.example.js`)
-- [ ] 로그인 화면: 아이디→이메일 변환 로직 구현
+- [x] 로그인 화면: 아이디→이메일 변환 로직 구현
 - [ ] 외출 체크 입력 화면: Realtime DB 연동, 토글 시 `outings/{studentId}` 갱신
 - [ ] 현황판: `outings`, `students`, `rooms` 구독해서 실시간 렌더링
 - [ ] 좌석 배치판: `rooms` CRUD, 좌석 배정 로직, 권한별 편집 가능 여부 분기
