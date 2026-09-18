@@ -5,6 +5,7 @@ import {
   onValue,
   push,
   set,
+  update,
   remove,
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js";
 
@@ -20,15 +21,53 @@ const editingIdInput = document.getElementById("editingId");
 const inputName = document.getElementById("inputName");
 const inputSid = document.getElementById("inputSid");
 const inputCls = document.getElementById("inputCls");
+const inputEmail = document.getElementById("inputEmail");
 const dayToggleRow = document.getElementById("dayToggleRow");
 const cancelFormBtn = document.getElementById("cancelFormBtn");
+
+const bulkAddBtn = document.getElementById("bulkAddBtn");
+const bulkFormWrap = document.getElementById("bulkFormWrap");
+const bulkInput = document.getElementById("bulkInput");
+const bulkPreviewEl = document.getElementById("bulkPreview");
+const bulkSaveBtn = document.getElementById("bulkSaveBtn");
+const cancelBulkFormBtn = document.getElementById("cancelBulkFormBtn");
+let bulkPreviewRows = [];
 
 const state = {
   allowedGrades: [],
   activeGrade: null,
   studentsByGrade: {},
   dayFlags: [false, false, false, false, false],
+  clsManuallyEdited: false,
 };
+
+// 학번 형식: 앞 1자리 학년 + 다음 2자리 반 + 마지막 2자리 번호 (예: "10305" = 1학년 3반 5번)
+function deriveClsFromSid(sid) {
+  const match = /^(\d)(\d{2})\d{2}$/.exec(sid.trim());
+  if (!match) return null;
+  const [, grade, cls] = match;
+  return `${grade}학년 ${Number(cls)}반`;
+}
+
+function parseBulkInput(text) {
+  const rows = [];
+  const errors = [];
+  text.split(/\r?\n/).forEach((line, i) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    const parts = trimmed
+      .split(/\t|,/)
+      .map((p) => p.trim())
+      .filter((p) => p !== "");
+    const [name, sid, email] = parts;
+    if (!name || !sid) {
+      errors.push(`${i + 1}번째 줄을 확인해 주세요: "${trimmed}"`);
+      return;
+    }
+    rows.push({ name, sid, cls: deriveClsFromSid(sid) || "", email: email || "" });
+  });
+  return { rows, errors };
+}
 
 function escapeHtml(value) {
   return String(value)
@@ -79,6 +118,7 @@ function renderRoster() {
           <div class="student-info">
             <div class="student-name">${escapeHtml(s.name || "이름 없음")}</div>
             <div class="student-meta">학번 ${escapeHtml(s.sid || "-")} · ${escapeHtml(s.cls || "-")}</div>
+            ${s.email ? `<div class="student-meta">${escapeHtml(s.email)}</div>` : ""}
           </div>
           <div class="day-pill-row">${days}</div>
           <div class="roster-actions">
@@ -96,7 +136,9 @@ function openFormForAdd() {
   inputName.value = "";
   inputSid.value = "";
   inputCls.value = "";
+  inputEmail.value = "";
   state.dayFlags = [false, false, false, false, false];
+  state.clsManuallyEdited = false;
   renderDayToggle();
   formWrap.hidden = false;
   inputName.focus();
@@ -105,11 +147,15 @@ function openFormForAdd() {
 function openFormForEdit(id) {
   const s = (state.studentsByGrade[state.activeGrade] || {})[id];
   if (!s) return;
+  closeBulkForm();
   editingIdInput.value = id;
   inputName.value = s.name || "";
   inputSid.value = s.sid || "";
   inputCls.value = s.cls || "";
+  inputEmail.value = s.email || "";
   state.dayFlags = (s.afterschoolDays || [false, false, false, false, false]).slice();
+  // 기존 학생은 이미 반이 저장되어 있으니, 학번을 고치더라도 자동으로 덮어쓰지 않는다.
+  state.clsManuallyEdited = true;
   renderDayToggle();
   formWrap.hidden = false;
   inputName.focus();
@@ -119,13 +165,91 @@ function closeForm() {
   formWrap.hidden = true;
 }
 
+function openBulkForm() {
+  closeForm();
+  bulkInput.value = "";
+  bulkPreviewRows = [];
+  renderBulkPreview();
+  bulkFormWrap.hidden = false;
+  bulkInput.focus();
+}
+
+function closeBulkForm() {
+  bulkFormWrap.hidden = true;
+}
+
+function renderBulkPreview() {
+  const { rows, errors } = parseBulkInput(bulkInput.value);
+  bulkPreviewRows = rows;
+
+  const parts = [];
+  if (rows.length > 0) {
+    parts.push(
+      `<div class="bulk-preview__list">${rows
+        .map(
+          (r) =>
+            `<div class="bulk-preview__row">${escapeHtml(r.name)} · ${escapeHtml(r.sid)} · ${escapeHtml(r.cls || "반 확인 필요")}${r.email ? ` · ${escapeHtml(r.email)}` : ""}</div>`
+        )
+        .join("")}</div>`
+    );
+  }
+  if (errors.length > 0) {
+    parts.push(
+      `<div class="bulk-preview__errors">${errors.map((e) => `<div>${escapeHtml(e)}</div>`).join("")}</div>`
+    );
+  }
+  bulkPreviewEl.innerHTML = parts.join("");
+
+  bulkSaveBtn.disabled = rows.length === 0;
+  bulkSaveBtn.textContent = `일괄 저장 (${rows.length}명)`;
+}
+
 addStudentBtn.addEventListener("click", () => {
   if (!state.activeGrade) return;
+  closeBulkForm();
   openFormForAdd();
+});
+
+bulkAddBtn.addEventListener("click", () => {
+  if (!state.activeGrade) return;
+  openBulkForm();
 });
 
 cancelFormBtn.addEventListener("click", () => {
   closeForm();
+});
+
+cancelBulkFormBtn.addEventListener("click", () => {
+  closeBulkForm();
+});
+
+bulkInput.addEventListener("input", renderBulkPreview);
+
+bulkSaveBtn.addEventListener("click", () => {
+  if (bulkPreviewRows.length === 0 || !state.activeGrade) return;
+  const updates = {};
+  for (const row of bulkPreviewRows) {
+    const newKey = push(ref(db, `students/${state.activeGrade}`)).key;
+    updates[`students/${state.activeGrade}/${newKey}`] = {
+      name: row.name,
+      sid: row.sid,
+      cls: row.cls,
+      email: row.email || "",
+      afterschoolDays: [false, false, false, false, false],
+    };
+  }
+  update(ref(db), updates);
+  closeBulkForm();
+});
+
+inputSid.addEventListener("input", () => {
+  if (state.clsManuallyEdited) return;
+  const derived = deriveClsFromSid(inputSid.value);
+  if (derived) inputCls.value = derived;
+});
+
+inputCls.addEventListener("input", () => {
+  state.clsManuallyEdited = true;
 });
 
 dayToggleRow.addEventListener("click", (event) => {
@@ -141,6 +265,7 @@ gradeTabsEl.addEventListener("click", (event) => {
   if (!btn) return;
   state.activeGrade = btn.dataset.grade;
   closeForm();
+  closeBulkForm();
   renderGradeTabs();
   renderRoster();
 });
@@ -167,6 +292,7 @@ studentForm.addEventListener("submit", (event) => {
   const name = inputName.value.trim();
   const sid = inputSid.value.trim();
   const cls = inputCls.value.trim();
+  const email = inputEmail.value.trim();
 
   if (!name || !sid || !cls) {
     alert("이름, 학번, 반을 모두 입력해 주세요.");
@@ -177,6 +303,7 @@ studentForm.addEventListener("submit", (event) => {
     name,
     sid,
     cls,
+    email,
     afterschoolDays: state.dayFlags.slice(),
   };
 
@@ -198,8 +325,12 @@ function initForGrades(allowedGrades) {
   if (!state.activeGrade) {
     rosterListEl.innerHTML = `<div class="student-list__empty">담당 학년이 없습니다. 관리자에게 문의해 주세요.</div>`;
     addStudentBtn.disabled = true;
+    bulkAddBtn.disabled = true;
     return;
   }
+
+  addStudentBtn.disabled = false;
+  bulkAddBtn.disabled = false;
 
   for (const grade of allowedGrades) {
     onValue(ref(db, `students/${grade}`), (snapshot) => {
