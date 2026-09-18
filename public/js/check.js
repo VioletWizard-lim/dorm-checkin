@@ -9,6 +9,7 @@ import {
 
 const GRADES = ["1", "2", "3"];
 
+const manageLink = document.getElementById("manageLink");
 const dateEl = document.getElementById("todayDate");
 const outCountEl = document.getElementById("outCountText");
 const searchInput = document.getElementById("search");
@@ -189,6 +190,15 @@ onAuthStateChanged(auth, (user) => {
     state.rooms = snapshot.val() || {};
     render();
   });
+
+  onValue(
+    ref(db, `users/${user.uid}`),
+    (snapshot) => {
+      const role = (snapshot.val() || {}).role;
+      manageLink.hidden = role !== "admin" && role !== "gradeManager";
+    },
+    { onlyOnce: true }
+  );
 });
 
 render();

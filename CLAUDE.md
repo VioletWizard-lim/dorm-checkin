@@ -14,7 +14,7 @@
 - **폰트**: Noto Sans KR (Google Fonts)
 - **대상 기기**: 교무실/사감실 PC(입력·현황판 화면), Android 기반 전자칠판(전체화면 PWA)
 
-## 화면 구성 (4개)
+## 화면 구성 (5개)
 
 ### 1. 로그인 (`login.html`)
 - 이메일이 아닌 **아이디**로 로그인 (화면에는 아이디만 노출)
@@ -46,6 +46,13 @@
   - 빈 좌석 클릭 → 드롭다운으로 학생 배정 / 배정된 좌석 × 클릭 → 해제
 - 좌석 카드 색상 우선순위: **외출중(빨강) > 오늘 방과후(파랑) > 재실(회색) > 빈자리(점선)**
 - 학년관리자는 자기 `managedRooms`에 속한 실만 편집 가능(권한 규칙 참고)
+
+### 5. 학생 명단 관리 (`students.html`)
+- teacher는 접근 시 `check.html`로 리다이렉트(권한 없음). gradeManager·admin만 사용 가능
+- 학년 탭: admin은 1/2/3학년 전체, gradeManager는 자기 `managedGrades`에 속한 학년만 노출
+- "+ 학생 추가" → 이름/학번/반/방과후 요일(월~금 토글) 입력 폼 → `students/{grade}/{push로 생성된 id}`에 저장
+- 명단 카드의 "수정"/"삭제"로 기존 학생 정보 수정·삭제 (`students/{grade}/{studentId}` set/remove)
+- `check.html` 상단에 이 화면으로 가는 "학생 명단 관리" 링크가 admin·gradeManager에게만 노출됨
 
 ## 사용자 역할 (3단계)
 
@@ -109,11 +116,13 @@ outings/
 
 ## 남은 작업 체크리스트
 - [ ] Firebase 프로젝트 생성, Authentication(이메일/비밀번호) + Realtime Database 활성화
-- [ ] `database.rules.json` 배포 (`firebase deploy --only database`)
+- [x] `database.rules.json` 배포 (`firebase deploy --only database`) — GitHub Actions 자동 배포로 전환됨(아래 항목 참고)
 - [x] `public/js/firebase-config.js` 실제 값 채우기 (비밀키가 아니라 공개돼도 안전한 값이라 그대로 커밋함, `.gitignore` 대상 아님)
 - [x] 로그인 화면: 아이디→이메일 변환 로직 구현
 - [x] 외출 체크 입력 화면: Realtime DB 연동, 토글 시 `outings/{studentId}` 갱신
+- [x] 학생 명단 관리 화면(`students.html`): 학년별 학생 등록/수정/삭제, gradeManager·admin만 접근 가능
 - [ ] 현황판: `outings`, `students`, `rooms` 구독해서 실시간 렌더링
 - [ ] 좌석 배치판: `rooms` CRUD, 좌석 배정 로직, 권한별 편집 가능 여부 분기
 - [ ] 관리자용 계정 생성 화면 또는 Firebase 콘솔에서 수동 생성 결정
 - [x] `firebase init hosting:github` 실행해 GitHub Actions 자동 배포 연결
+- [x] `database.rules.json` 변경 시 GitHub Actions로 자동 배포(`firebase-database-rules-deploy.yml`, 기존 Hosting용 서비스 계정에 Realtime Database 관리자 역할 추가 필요)

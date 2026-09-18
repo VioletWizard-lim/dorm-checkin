@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="google-site-verification" content="PskTvPUma23TKR9FEzgMFdyuOPyNKl2Cs_kTToIcHhw" />
+<title>기숙사 외출체크 - 학생 명단 관리</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+
+<div class="check-page">
+
+  <header class="check-header">
+    <div class="check-header__titles">
+      <div class="check-header__title">학생 명단 관리</div>
+      <div class="check-header__subtitle">학년별 명단과 방과후 요일을 등록·수정합니다</div>
+    </div>
+    <div class="check-header__meta">
+      <a href="./check.html" class="back-link">← 체크 화면으로</a>
+    </div>
+  </header>
+
+  <div class="roster-toolbar">
+    <div class="filter-chips" id="gradeTabs"></div>
+    <button type="button" class="btn-add" id="addStudentBtn">+ 학생 추가</button>
+  </div>
+
+  <div class="roster-form-wrap" id="formWrap" hidden>
+    <form class="roster-form" id="studentForm">
+      <input type="hidden" id="editingId" value="">
+      <div class="roster-form__row">
+        <div class="field">
+          <label for="inputName">이름</label>
+          <input id="inputName" type="text" placeholder="예: 홍길동" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="inputSid">학번</label>
+          <input id="inputSid" type="text" placeholder="예: 10305" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="inputCls">반</label>
+          <input id="inputCls" type="text" placeholder="예: 1학년 3반" autocomplete="off">
+        </div>
+      </div>
+      <div class="field">
+        <label>방과후 요일</label>
+        <div class="day-toggle-row" id="dayToggleRow"></div>
+      </div>
+      <div class="roster-form__actions">
+        <button type="button" class="btn-secondary" id="cancelFormBtn">취소</button>
+        <button type="submit" class="btn-add" id="submitFormBtn">저장</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="student-list" id="rosterList"></div>
+
+</div>
+
+<script type="module" src="./js/students.js"></script>
+</body>
+</html>
