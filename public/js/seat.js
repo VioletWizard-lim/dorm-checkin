@@ -11,7 +11,6 @@ import {
 
 const GRADES = ["1", "2", "3"];
 const MIN_SIZE = 1;
-const MAX_SIZE = 12;
 
 const dateEl = document.getElementById("todayDate");
 const roomTabsEl = document.getElementById("roomTabs");
@@ -158,9 +157,7 @@ function renderRoomSettingsPanel(room) {
   rowsValue.textContent = String(rows);
   colsValue.textContent = String(cols);
   rowsMinusBtn.disabled = rows <= MIN_SIZE;
-  rowsPlusBtn.disabled = rows >= MAX_SIZE;
   colsMinusBtn.disabled = cols <= MIN_SIZE;
-  colsPlusBtn.disabled = cols >= MAX_SIZE;
 
   const roomCount = Object.keys(state.rooms).length;
   deleteRoomBtn.disabled = roomCount <= 1;
@@ -227,7 +224,7 @@ function renderGrid(room) {
       const name = student ? student.name || "이름 없음" : "(삭제된 학생)";
       const meta = student ? `학번 ${student.sid || "-"} · ${student.cls || "-"}` : "";
       cells.push(`
-        <div class="seat-cell seat-cell--${status}" title="${escapeHtml(name)}">
+        <div class="seat-cell seat-cell--${status}">
           <div class="seat-cell__name">${escapeHtml(name)}</div>
           ${meta ? `<div class="seat-cell__meta">${escapeHtml(meta)}</div>` : ""}
           ${editable ? `<button type="button" class="seat-cell__unassign" data-unassign-cell="${cellKey}">×</button>` : ""}
@@ -253,7 +250,7 @@ function resizeRoom(dimension, dir) {
   const room = state.rooms[state.activeRoomId];
   if (!room) return;
   const current = Number(room[dimension]) || 1;
-  const next = Math.min(MAX_SIZE, Math.max(MIN_SIZE, current + dir));
+  const next = Math.max(MIN_SIZE, current + dir);
   if (next === current) return;
 
   const rows = dimension === "rows" ? next : Number(room.rows) || 1;

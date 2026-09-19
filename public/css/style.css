@@ -942,9 +942,8 @@ input {
   font-size: 14px;
   font-weight: 700;
   color: var(--color-text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: break-word;
+  word-break: keep-all;
 }
 
 .seat-cell--out .seat-cell__name {
@@ -958,9 +957,8 @@ input {
 .seat-cell__meta {
   font-size: 11px;
   color: var(--color-text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: break-word;
+  word-break: keep-all;
 }
 
 .seat-cell__unassign {
