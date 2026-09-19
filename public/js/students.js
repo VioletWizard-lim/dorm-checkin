@@ -8,11 +8,14 @@ import {
   update,
   remove,
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js";
+import { FAKE_EMAIL_DOMAIN } from "./firebase-config.js";
 
 const ALL_GRADES = ["1", "2", "3"];
 const DAY_LABELS = ["월", "화", "수", "목", "금"];
 
 const logoutBtn = document.getElementById("logoutBtn");
+const currentUserNameEl = document.getElementById("currentUserName");
+const currentUserRoleBadgeEl = document.getElementById("currentUserRoleBadge");
 const gradeTabsEl = document.getElementById("gradeTabs");
 const rosterListEl = document.getElementById("rosterList");
 const addStudentBtn = document.getElementById("addStudentBtn");
@@ -369,6 +372,13 @@ onAuthStateChanged(auth, (user) => {
     (snapshot) => {
       const profile = snapshot.val() || {};
       const role = profile.role;
+
+      if (role === "admin" || role === "gradeManager") {
+        const loginId = (user.email || "").replace(`@${FAKE_EMAIL_DOMAIN}`, "");
+        currentUserNameEl.textContent = profile.name || loginId;
+        currentUserRoleBadgeEl.textContent = role;
+        currentUserRoleBadgeEl.className = `role-badge role-badge--${role}`;
+      }
 
       if (role === "admin") {
         initForGrades(ALL_GRADES);

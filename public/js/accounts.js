@@ -15,6 +15,8 @@ const ID_PATTERN = /^[A-Za-z0-9]+$/;
 const PASSWORD_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
 
 const logoutBtn = document.getElementById("logoutBtn");
+const currentUserNameEl = document.getElementById("currentUserName");
+const currentUserRoleBadgeEl = document.getElementById("currentUserRoleBadge");
 const accountListEl = document.getElementById("accountList");
 const bulkInput = document.getElementById("bulkAccountInput");
 const bulkPreviewEl = document.getElementById("bulkAccountPreview");
@@ -394,6 +396,10 @@ onAuthStateChanged(auth, (user) => {
         window.location.replace("./check.html");
         return;
       }
+      const loginId = (user.email || "").replace(`@${FAKE_EMAIL_DOMAIN}`, "");
+      currentUserNameEl.textContent = profile.name || loginId;
+      currentUserRoleBadgeEl.textContent = "admin";
+      currentUserRoleBadgeEl.className = "role-badge role-badge--admin";
       initAccountsPage();
     },
     { onlyOnce: true }

@@ -1093,6 +1093,18 @@ input {
   color: #FFFFFF;
 }
 
+.current-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.current-user__name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
 .account-edit-card {
   flex-direction: column;
   align-items: stretch;
