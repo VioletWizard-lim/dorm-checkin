@@ -9,7 +9,7 @@
     "students": {
       "$grade": {
         ".read": "auth != null",
-        ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('managedGrades').child($grade).exists()"
+        ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('managedGrades').child($grade).exists() || root.child('users').child(auth.uid).child('managedClasses').child($grade).exists()"
       }
     },
     "rooms": {

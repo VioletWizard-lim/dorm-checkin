@@ -401,25 +401,38 @@ onAuthStateChanged(auth, (user) => {
     (snapshot) => {
       const profile = snapshot.val() || {};
       const role = profile.role;
+      const loginId = (user.email || "").replace(`@${FAKE_EMAIL_DOMAIN}`, "");
 
-      if (role === "admin" || role === "gradeManager") {
-        const loginId = (user.email || "").replace(`@${FAKE_EMAIL_DOMAIN}`, "");
+      function showCurrentUser() {
         currentUserNameEl.textContent = profile.name || loginId;
         currentUserRoleBadgeEl.textContent = role;
         currentUserRoleBadgeEl.className = `role-badge role-badge--${role}`;
       }
 
       if (role === "admin") {
+        showCurrentUser();
         initForGrades(ALL_GRADES);
       } else if (role === "gradeManager") {
+        showCurrentUser();
         const managed = profile.managedGrades || {};
         const allowed = ALL_GRADES.filter((g) => managed[g]);
-        const managedClasses = profile.managedClasses || {};
-        state.allowedClassesByGrade = {};
-        for (const g of Object.keys(managedClasses)) {
-          state.allowedClassesByGrade[g] = Object.keys(managedClasses[g] || {});
-        }
         initForGrades(allowed);
+      } else if (role === "teacher") {
+        // teacher는 담임을 맡은 반(managedClasses)이 있을 때만 그 반의 명단을 관리할 수 있다.
+        const managedClasses = profile.managedClasses || {};
+        const allowedGradesForTeacher = Object.keys(managedClasses).filter(
+          (g) => Object.keys(managedClasses[g] || {}).length > 0
+        );
+        if (allowedGradesForTeacher.length === 0) {
+          window.location.replace("./check.html");
+          return;
+        }
+        showCurrentUser();
+        state.allowedClassesByGrade = {};
+        for (const g of allowedGradesForTeacher) {
+          state.allowedClassesByGrade[g] = Object.keys(managedClasses[g]);
+        }
+        initForGrades(allowedGradesForTeacher.sort());
       } else {
         window.location.replace("./check.html");
       }

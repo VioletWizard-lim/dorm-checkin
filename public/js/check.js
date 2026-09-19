@@ -259,7 +259,10 @@ onAuthStateChanged(auth, (user) => {
     ref(db, `users/${user.uid}`),
     (snapshot) => {
       const profile = snapshot.val() || {};
-      manageLink.hidden = profile.role !== "admin" && profile.role !== "gradeManager";
+      const hasManagedClasses = Object.values(profile.managedClasses || {}).some(
+        (classes) => Object.keys(classes || {}).length > 0
+      );
+      manageLink.hidden = profile.role !== "admin" && profile.role !== "gradeManager" && !hasManagedClasses;
       accountsLink.hidden = profile.role !== "admin";
       currentTeacherName = profile.name || "";
 
