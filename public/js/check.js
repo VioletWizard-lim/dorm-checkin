@@ -121,7 +121,8 @@ function renderList(filtered) {
       const isOut = status === "out";
       const outing = state.outings[s.id];
       const reasonText = isOut && outing && outing.reason ? ` · ${outing.reason}` : "";
-      const sinceText = isOut ? `${formatTime(outing && outing.since)} 외출${reasonText}` : "";
+      const returnText = isOut && outing && outing.expectedReturn ? ` (~${outing.expectedReturn})` : "";
+      const sinceText = isOut ? `${formatTime(outing && outing.since)} 외출${reasonText}${returnText}` : "";
       const initial = (s.name || "?").charAt(0);
       return `
         <div class="student-card">
@@ -165,7 +166,7 @@ function render() {
   renderList(filtered);
 }
 
-function sendOutingEmail(student, reason) {
+function sendOutingEmail(student, reason, expectedReturn) {
   if (!student.email || !window.emailjs) return;
   const now = Date.now();
   window.emailjs
@@ -178,22 +179,24 @@ function sendOutingEmail(student, reason) {
       reason: reason || "사유 미기재",
       out_date: formatDate(now),
       out_time: formatTime(now),
+      return_time: expectedReturn || "미정",
       teacher_id: currentTeacherId || "관리자",
     })
     .catch((err) => console.error("외출증 이메일 발송 실패:", err));
 }
 
-function toggleOuting(studentId, grade, currentStatus, reason) {
+function toggleOuting(studentId, grade, currentStatus, reason, expectedReturn) {
   const nextStatus = currentStatus === "out" ? "in" : "out";
   const outingData = { status: nextStatus, since: serverTimestamp() };
   if (nextStatus === "out") {
     outingData.reason = reason || "";
+    outingData.expectedReturn = expectedReturn || "";
   }
   set(ref(db, `outings/${studentId}`), outingData);
 
   if (nextStatus === "out") {
     const student = (state.studentsByGrade[grade] || {})[studentId];
-    if (student) sendOutingEmail(student, reason);
+    if (student) sendOutingEmail(student, reason, expectedReturn);
   }
 }
 
@@ -209,10 +212,12 @@ listEl.addEventListener("click", (event) => {
   if (!btn) return;
   const currentStatus = btn.dataset.currentStatus;
   let reason = "";
+  let expectedReturn = "";
   if (currentStatus === "in") {
     reason = (window.prompt("외출 사유를 입력해 주세요 (취소해도 외출 체크는 진행됩니다)", "") || "").trim();
+    expectedReturn = (window.prompt("예상 복귀 시각을 입력해 주세요 (예: 17:00, 취소하면 미정으로 표시됩니다)", "") || "").trim();
   }
-  toggleOuting(btn.dataset.toggleId, btn.dataset.grade, currentStatus, reason);
+  toggleOuting(btn.dataset.toggleId, btn.dataset.grade, currentStatus, reason, expectedReturn);
 });
 
 searchInput.addEventListener("input", (event) => {
