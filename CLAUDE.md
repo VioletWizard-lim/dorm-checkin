@@ -141,7 +141,7 @@ outings/
 - [x] 로그인 화면: 아이디→이메일 변환 로직 구현
 - [x] 외출 체크 입력 화면: Realtime DB 연동, 토글 시 `outings/{studentId}` 갱신
 - [x] 학생 명단 관리 화면(`students.html`): 학년별 학생 등록/수정/삭제, gradeManager·admin만 접근 가능
-- [ ] 현황판: `outings`, `students`, `rooms` 구독해서 실시간 렌더링
+- [x] 현황판: `outings`, `students`, `rooms` 구독해서 실시간 렌더링
 - [ ] 좌석 배치판: `rooms` CRUD, 좌석 배정 로직, 권한별 편집 가능 여부 분기
 - [ ] 관리자용 계정 생성 화면 또는 Firebase 콘솔에서 수동 생성 결정
 - [x] EmailJS 가입 및 `public/js/emailjs-config.js` 실제 값 채우기(외출증 이메일 발송에 필요, 위 "외부 서비스 연동" 참고)

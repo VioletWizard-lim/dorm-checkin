@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="google-site-verification" content="PskTvPUma23TKR9FEzgMFdyuOPyNKl2Cs_kTToIcHhw" />
+<title>기숙사 외출체크 - 현황판</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+
+<div class="check-page">
+
+  <header class="check-header">
+    <div class="check-header__titles">
+      <div class="check-header__title">기숙사 현황판</div>
+      <div class="check-header__subtitle">외출·방과후 실시간 현황</div>
+    </div>
+    <div class="check-header__meta">
+      <a href="./check.html" class="back-link">← 체크 화면으로</a>
+      <div class="check-header__date" id="todayDate"></div>
+    </div>
+  </header>
+
+  <div class="check-toolbar">
+    <div class="filter-chips" id="filterChips"></div>
+  </div>
+
+  <div class="display-board">
+    <section class="display-panel display-panel--out">
+      <div class="display-panel__header">
+        <span class="display-panel__title">외출중</span>
+        <span class="display-panel__count" id="outPanelCount">0명</span>
+      </div>
+      <div class="display-panel__list" id="outPanelList"></div>
+    </section>
+    <section class="display-panel display-panel--afterschool">
+      <div class="display-panel__header">
+        <span class="display-panel__title">오늘 방과후</span>
+        <span class="display-panel__count" id="afterschoolPanelCount">0명</span>
+      </div>
+      <div class="display-panel__list" id="afterschoolPanelList"></div>
+    </section>
+  </div>
+
+</div>
+
+<script type="module" src="./js/display.js"></script>
+</body>
+</html>
