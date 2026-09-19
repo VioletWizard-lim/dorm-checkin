@@ -28,7 +28,7 @@
 - 검색창(이름 검색)
 - 학생 카드 리스트: 아바타, 이름, "학번 · 반", 상태 배지(재실/외출중), 토글 버튼(외출 체크 ↔ 복귀 체크)
 - 로그인한 사용자 누구나(teacher 이상) 사용 가능
-- "외출 체크"를 누르면(재실→외출중), 그 학생에게 `email`이 등록되어 있을 경우 EmailJS로 외출증 이메일을 자동 발송(`public/js/emailjs-config.js` 설정 필요, 아래 "외부 서비스 연동" 참고)
+- "외출 체크"를 누르면(재실→외출중) 사유·예상 복귀 시각을 입력받는 프롬프트가 순서대로 뜨고(둘 다 선택 입력, 취소해도 체크 자체는 진행), 그 학생에게 `email`이 등록되어 있을 경우 실제 종이 외출증 서식(학년/반/번, 사유, 외출~복귀 시간대, 담당 교사)을 본뜬 이메일을 EmailJS로 자동 발송(`public/js/emailjs-config.js` 설정 필요, 아래 "외부 서비스 연동" 참고). 담당 교사란은 로그인한 계정의 `users/{uid}.name`이 있으면 그 이름을, 없으면 로그인 아이디를 표시. "복귀 체크" 시에는 발송하지 않음
 
 ### 3. 기숙사 현황판 (`display.html`)
 - 읽기 전용 모니터링 화면 (사감/당직 교사 PC에 띄워둠)
@@ -74,6 +74,7 @@
 users/
   {uid}: {
     role: "teacher" | "gradeManager" | "admin",
+    name?: string,                       // 선택. 있으면 외출증 이메일의 담당 교사란에 아이디 대신 표시
     managedRooms?: { [roomId]: true },   // gradeManager만 사용
     managedGrades?: { [grade]: true }    // gradeManager만 사용
   }
@@ -100,7 +101,9 @@ rooms/
 outings/
   {studentId}: {
     status: "out" | "in",
-    since: timestamp
+    since: timestamp,
+    reason?: string,            // 외출 사유. "외출 체크" 시 프롬프트로 입력(선택, 빈 값 가능)
+    expectedReturn?: string     // 예상 복귀 시각(문자열, 예: "17:00"). 마찬가지로 선택 입력
   }
 ```
 
@@ -125,7 +128,7 @@ outings/
 - 서버(Cloud Functions)나 유료 SMS 계정 없이, 클라이언트에서 바로 이메일을 보낼 수 있는 [EmailJS](https://www.emailjs.com)(무료 월 200통)를 사용
 - 설정 방법:
   1. emailjs.com 가입 → **Email Services**에서 발송용 메일 계정(Gmail 등) 연결 → Service ID 확인
-  2. **Email Templates**에서 외출증 템플릿 작성(변수: `to_email`, `student_name`, `sid`, `cls`, `out_time`) → Template ID 확인
+  2. **Email Templates**에서 외출증 템플릿 작성(변수: `to_email`, `student_name`, `sid`, `cls`, `seat_no`, `reason`, `out_date`, `out_time`, `return_time`, `teacher_id`) → Template ID 확인
   3. **Account** 페이지에서 Public Key 확인
   4. **Account → Security**의 Allowed Origins에 실제 배포 도메인 등록(오남용 방지)
   5. `public/js/emailjs-config.js`의 세 값(`EMAILJS_PUBLIC_KEY`, `EMAILJS_SERVICE_ID`, `EMAILJS_OUTING_TEMPLATE_ID`)을 채워서 커밋
