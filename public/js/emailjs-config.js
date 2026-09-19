@@ -7,6 +7,6 @@
 // 2. Email Templates에서 외출증 템플릿 작성 → Template ID 확인
 // 3. Account 페이지에서 Public Key 확인
 // 4. Account → Security에서 Allowed Origins에 실제 배포 도메인 등록 권장
-export const EMAILJS_PUBLIC_KEY = "K0AXsxVeSRevX-cvF";
+export const EMAILJS_PUBLIC_KEY = "tyYlKwA4UShcAPbfc";
 export const EMAILJS_SERVICE_ID = "service_7m5cjan";
 export const EMAILJS_OUTING_TEMPLATE_ID = "template_6vc57pl";
