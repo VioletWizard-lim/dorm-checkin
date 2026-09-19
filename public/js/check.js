@@ -24,6 +24,8 @@ let currentTeacherName = "";
 const manageLink = document.getElementById("manageLink");
 const accountsLink = document.getElementById("accountsLink");
 const logoutBtn = document.getElementById("logoutBtn");
+const currentUserNameEl = document.getElementById("currentUserName");
+const currentUserRoleBadgeEl = document.getElementById("currentUserRoleBadge");
 const dateEl = document.getElementById("todayDate");
 const outCountEl = document.getElementById("outCountText");
 const searchInput = document.getElementById("search");
@@ -260,6 +262,11 @@ onAuthStateChanged(auth, (user) => {
       manageLink.hidden = profile.role !== "admin" && profile.role !== "gradeManager";
       accountsLink.hidden = profile.role !== "admin";
       currentTeacherName = profile.name || "";
+
+      const role = profile.role || "teacher";
+      currentUserNameEl.textContent = currentTeacherName || currentTeacherId;
+      currentUserRoleBadgeEl.textContent = role;
+      currentUserRoleBadgeEl.className = `role-badge role-badge--${role}`;
     },
     { onlyOnce: true }
   );

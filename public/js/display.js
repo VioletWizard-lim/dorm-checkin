@@ -1,10 +1,13 @@
 import { auth, db } from "./firebase-init.js";
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 import { ref, onValue } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js";
+import { FAKE_EMAIL_DOMAIN } from "./firebase-config.js";
 
 const GRADES = ["1", "2", "3"];
 
 const logoutBtn = document.getElementById("logoutBtn");
+const currentUserNameEl = document.getElementById("currentUserName");
+const currentUserRoleBadgeEl = document.getElementById("currentUserRoleBadge");
 const dateEl = document.getElementById("todayDate");
 const gradeChipsEl = document.getElementById("gradeChips");
 const chipsEl = document.getElementById("filterChips");
@@ -213,6 +216,19 @@ onAuthStateChanged(auth, (user) => {
     state.rooms = snapshot.val() || {};
     render();
   });
+
+  const loginId = (user.email || "").replace(`@${FAKE_EMAIL_DOMAIN}`, "");
+  onValue(
+    ref(db, `users/${user.uid}`),
+    (snapshot) => {
+      const profile = snapshot.val() || {};
+      const role = profile.role || "teacher";
+      currentUserNameEl.textContent = profile.name || loginId;
+      currentUserRoleBadgeEl.textContent = role;
+      currentUserRoleBadgeEl.className = `role-badge role-badge--${role}`;
+    },
+    { onlyOnce: true }
+  );
 });
 
 logoutBtn.addEventListener("click", () => {

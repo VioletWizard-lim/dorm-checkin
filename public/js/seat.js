@@ -8,6 +8,7 @@ import {
   remove,
   push,
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js";
+import { FAKE_EMAIL_DOMAIN } from "./firebase-config.js";
 
 const GRADES = ["1", "2", "3"];
 const MIN_SIZE = 1;
@@ -28,6 +29,8 @@ const colsPlusBtn = document.getElementById("colsPlusBtn");
 const deleteRoomBtn = document.getElementById("deleteRoomBtn");
 const seatGridEl = document.getElementById("seatGrid");
 const logoutBtn = document.getElementById("logoutBtn");
+const currentUserNameEl = document.getElementById("currentUserName");
+const currentUserRoleBadgeEl = document.getElementById("currentUserRoleBadge");
 
 const state = {
   studentsByGrade: { "1": {}, "2": {}, "3": {} },
@@ -408,12 +411,16 @@ onAuthStateChanged(auth, (user) => {
     render();
   });
 
+  const loginId = (user.email || "").replace(`@${FAKE_EMAIL_DOMAIN}`, "");
   onValue(
     ref(db, `users/${user.uid}`),
     (snapshot) => {
       const profile = snapshot.val() || {};
       state.role = profile.role || "teacher";
       state.managedRoomIds = Object.keys(profile.managedRooms || {});
+      currentUserNameEl.textContent = profile.name || loginId;
+      currentUserRoleBadgeEl.textContent = state.role;
+      currentUserRoleBadgeEl.className = `role-badge role-badge--${state.role}`;
       render();
     },
     { onlyOnce: true }
