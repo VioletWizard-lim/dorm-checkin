@@ -668,3 +668,142 @@ input {
   flex-direction: column;
   gap: 4px;
 }
+
+/* Display board screen */
+
+.display-board {
+  flex-grow: 1;
+  overflow: hidden;
+  display: flex;
+  gap: 24px;
+  padding: 4px 40px 32px;
+}
+
+.display-panel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-card-bg);
+  border-radius: var(--radius-card);
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+}
+
+.display-panel__header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.display-panel__title {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.display-panel--out .display-panel__title {
+  color: var(--color-out);
+}
+
+.display-panel--afterschool .display-panel__title {
+  color: var(--color-afterschool);
+}
+
+.display-panel__count {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+}
+
+.display-panel__list {
+  flex-grow: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.display-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 14px;
+}
+
+.display-panel--out .display-card {
+  background: var(--color-out-bg);
+}
+
+.display-panel--afterschool .display-card {
+  background: var(--color-afterschool-bg);
+}
+
+.display-card__avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.display-panel--out .display-card__avatar {
+  background: var(--color-out);
+}
+
+.display-panel--afterschool .display-card__avatar {
+  background: var(--color-afterschool);
+}
+
+.display-card__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex-grow: 1;
+}
+
+.display-card__name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.display-card__meta {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.display-card__extra {
+  font-size: 13px;
+  font-weight: 800;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.display-panel--out .display-card__extra {
+  color: var(--color-out);
+}
+
+.display-panel--afterschool .display-card__extra {
+  color: var(--color-afterschool);
+}
+
+.display-panel__empty {
+  padding: 40px 0;
+  text-align: center;
+  color: var(--color-text-faint);
+  font-size: 14px;
+}
