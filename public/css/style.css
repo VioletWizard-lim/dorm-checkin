@@ -324,6 +324,20 @@ input {
   border-color: var(--color-active);
 }
 
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.filter-group__label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-label);
+  flex-shrink: 0;
+}
+
 .student-list {
   flex-grow: 1;
   overflow-y: auto;
