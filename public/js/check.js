@@ -11,12 +11,14 @@ import {
   EMAILJS_SERVICE_ID,
   EMAILJS_OUTING_TEMPLATE_ID,
 } from "./emailjs-config.js";
+import { FAKE_EMAIL_DOMAIN } from "./firebase-config.js";
 
 if (window.emailjs) {
   window.emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY });
 }
 
 const GRADES = ["1", "2", "3"];
+let currentTeacherId = "";
 
 const manageLink = document.getElementById("manageLink");
 const dateEl = document.getElementById("todayDate");
@@ -54,6 +56,17 @@ function formatTime(ts) {
   const hh = String(d.getHours()).padStart(2, "0");
   const mm = String(d.getMinutes()).padStart(2, "0");
   return `${hh}:${mm}`;
+}
+
+function formatDate(ts) {
+  const d = new Date(ts);
+  return `${d.getMonth() + 1}월 ${d.getDate()}일`;
+}
+
+// 학번 마지막 2자리 = 번호 (예: "10305" -> 5번)
+function deriveSeatNoFromSid(sid) {
+  const match = /^\d{3}(\d{2})$/.exec((sid || "").trim());
+  return match ? String(Number(match[1])) : "";
 }
 
 function getAllStudents() {
@@ -107,7 +120,8 @@ function renderList(filtered) {
       const status = getOutingStatus(s.id);
       const isOut = status === "out";
       const outing = state.outings[s.id];
-      const sinceText = isOut ? `${formatTime(outing && outing.since)} 외출` : "";
+      const reasonText = isOut && outing && outing.reason ? ` · ${outing.reason}` : "";
+      const sinceText = isOut ? `${formatTime(outing && outing.since)} 외출${reasonText}` : "";
       const initial = (s.name || "?").charAt(0);
       return `
         <div class="student-card">
@@ -151,29 +165,35 @@ function render() {
   renderList(filtered);
 }
 
-function sendOutingEmail(student) {
+function sendOutingEmail(student, reason) {
   if (!student.email || !window.emailjs) return;
+  const now = Date.now();
   window.emailjs
     .send(EMAILJS_SERVICE_ID, EMAILJS_OUTING_TEMPLATE_ID, {
       to_email: student.email,
       student_name: student.name || "",
       sid: student.sid || "",
       cls: student.cls || "",
-      out_time: formatTime(Date.now()),
+      seat_no: deriveSeatNoFromSid(student.sid),
+      reason: reason || "사유 미기재",
+      out_date: formatDate(now),
+      out_time: formatTime(now),
+      teacher_id: currentTeacherId || "관리자",
     })
     .catch((err) => console.error("외출증 이메일 발송 실패:", err));
 }
 
-function toggleOuting(studentId, grade, currentStatus) {
+function toggleOuting(studentId, grade, currentStatus, reason) {
   const nextStatus = currentStatus === "out" ? "in" : "out";
-  set(ref(db, `outings/${studentId}`), {
-    status: nextStatus,
-    since: serverTimestamp(),
-  });
+  const outingData = { status: nextStatus, since: serverTimestamp() };
+  if (nextStatus === "out") {
+    outingData.reason = reason || "";
+  }
+  set(ref(db, `outings/${studentId}`), outingData);
 
   if (nextStatus === "out") {
     const student = (state.studentsByGrade[grade] || {})[studentId];
-    if (student) sendOutingEmail(student);
+    if (student) sendOutingEmail(student, reason);
   }
 }
 
@@ -187,7 +207,12 @@ chipsEl.addEventListener("click", (event) => {
 listEl.addEventListener("click", (event) => {
   const btn = event.target.closest("[data-toggle-id]");
   if (!btn) return;
-  toggleOuting(btn.dataset.toggleId, btn.dataset.grade, btn.dataset.currentStatus);
+  const currentStatus = btn.dataset.currentStatus;
+  let reason = "";
+  if (currentStatus === "in") {
+    reason = (window.prompt("외출 사유를 입력해 주세요 (취소해도 외출 체크는 진행됩니다)", "") || "").trim();
+  }
+  toggleOuting(btn.dataset.toggleId, btn.dataset.grade, currentStatus, reason);
 });
 
 searchInput.addEventListener("input", (event) => {
@@ -200,6 +225,8 @@ onAuthStateChanged(auth, (user) => {
     window.location.replace("./login.html");
     return;
   }
+
+  currentTeacherId = (user.email || "").replace(`@${FAKE_EMAIL_DOMAIN}`, "");
 
   for (const grade of GRADES) {
     onValue(ref(db, `students/${grade}`), (snapshot) => {
