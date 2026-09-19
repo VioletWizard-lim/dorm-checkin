@@ -41,9 +41,16 @@ const state = {
   allowedGrades: [],
   activeGrade: null,
   studentsByGrade: {},
+  allowedClassesByGrade: {}, // { [grade]: string[] } — 비어있으면 그 학년 전체 담당
   dayFlags: [false, false, false, false, false],
   clsManuallyEdited: false,
 };
+
+// 해당 학년에 반 단위 제한이 있으면 허용된 반 목록을, 없으면(학년 전체 담당) null을 반환
+function getClassRestriction(grade) {
+  const classes = state.allowedClassesByGrade[grade];
+  return classes && classes.length > 0 ? classes : null;
+}
 
 // 학번 형식: 앞 1자리 학년 + 다음 2자리 반 + 마지막 2자리 번호 (예: "10305" = 1학년 3반 5번)
 function deriveClsFromSid(sid) {
@@ -53,7 +60,7 @@ function deriveClsFromSid(sid) {
   return `${grade}학년 ${Number(cls)}반`;
 }
 
-function parseBulkInput(text) {
+function parseBulkInput(text, classRestriction) {
   const rows = [];
   const errors = [];
   text.split(/\r?\n/).forEach((line, i) => {
@@ -68,7 +75,12 @@ function parseBulkInput(text) {
       errors.push(`${i + 1}번째 줄을 확인해 주세요: "${trimmed}"`);
       return;
     }
-    rows.push({ name, sid, cls: deriveClsFromSid(sid) || "", email: email || "" });
+    const cls = deriveClsFromSid(sid) || "";
+    if (classRestriction && cls && !classRestriction.includes(cls)) {
+      errors.push(`${i + 1}번째 줄: "${name}"(${cls})은(는) 담당 반(${classRestriction.join(", ")})이 아닙니다.`);
+      return;
+    }
+    rows.push({ name, sid, cls, email: email || "" });
   });
   return { rows, errors };
 }
@@ -115,9 +127,12 @@ function renderGradeTabs() {
 function renderRoster() {
   if (!state.activeGrade) return;
   const students = state.studentsByGrade[state.activeGrade] || {};
-  const entries = Object.entries(students).sort((a, b) =>
-    (a[1].sid || "").localeCompare(b[1].sid || "")
-  );
+  const classRestriction = getClassRestriction(state.activeGrade);
+  let entries = Object.entries(students);
+  if (classRestriction) {
+    entries = entries.filter(([, s]) => classRestriction.includes(s.cls));
+  }
+  entries.sort((a, b) => (a[1].sid || "").localeCompare(b[1].sid || ""));
 
   if (entries.length === 0) {
     rosterListEl.innerHTML = `<div class="student-list__empty">등록된 학생이 없습니다.</div>`;
@@ -153,10 +168,18 @@ function openFormForAdd() {
   editingIdInput.value = "";
   inputName.value = "";
   inputSid.value = "";
-  inputCls.value = "";
   inputEmail.value = "";
   state.dayFlags = [false, false, false, false, false];
-  state.clsManuallyEdited = false;
+
+  const classRestriction = getClassRestriction(state.activeGrade);
+  if (classRestriction && classRestriction.length === 1) {
+    inputCls.value = classRestriction[0];
+    state.clsManuallyEdited = true; // 학번 입력으로 자동 덮어쓰기되지 않게
+  } else {
+    inputCls.value = "";
+    state.clsManuallyEdited = false;
+  }
+
   renderDayToggle();
   formWrap.hidden = false;
   inputName.focus();
@@ -197,7 +220,7 @@ function closeBulkForm() {
 }
 
 function renderBulkPreview() {
-  const { rows, errors } = parseBulkInput(bulkInput.value);
+  const { rows, errors } = parseBulkInput(bulkInput.value, getClassRestriction(state.activeGrade));
   bulkPreviewRows = rows;
 
   const parts = [];
@@ -318,6 +341,12 @@ studentForm.addEventListener("submit", (event) => {
     return;
   }
 
+  const classRestriction = getClassRestriction(state.activeGrade);
+  if (classRestriction && !classRestriction.includes(cls)) {
+    alert(`담당 반(${classRestriction.join(", ")})의 학생만 등록·수정할 수 있습니다.`);
+    return;
+  }
+
   const data = {
     name,
     sid,
@@ -385,6 +414,11 @@ onAuthStateChanged(auth, (user) => {
       } else if (role === "gradeManager") {
         const managed = profile.managedGrades || {};
         const allowed = ALL_GRADES.filter((g) => managed[g]);
+        const managedClasses = profile.managedClasses || {};
+        state.allowedClassesByGrade = {};
+        for (const g of Object.keys(managedClasses)) {
+          state.allowedClassesByGrade[g] = Object.keys(managedClasses[g] || {});
+        }
         initForGrades(allowed);
       } else {
         window.location.replace("./check.html");

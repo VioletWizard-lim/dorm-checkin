@@ -27,13 +27,23 @@ const resultListEl = document.getElementById("resultList");
 const state = {
   users: {},
   rooms: {},
+  studentsByGrade: { "1": {}, "2": {}, "3": {} },
   currentUid: "",
   editingUid: null,
   editName: "",
   editRole: "teacher",
   editGrades: [],
   editRooms: [],
+  editClasses: {}, // { [grade]: string[] } — 비어있으면 그 학년 전체 담당
 };
+
+function getClassesInGrade(grade) {
+  const set = new Set();
+  for (const student of Object.values(state.studentsByGrade[grade] || {})) {
+    if (student && student.cls) set.add(student.cls);
+  }
+  return Array.from(set).sort();
+}
 let bulkPreviewRows = [];
 
 function escapeHtml(value) {
@@ -219,10 +229,14 @@ function renderAccountRow(uid, u) {
 
   let assignments = "";
   if (role === "gradeManager") {
+    const managedClasses = u.managedClasses || {};
     const gradeText =
       Object.keys(u.managedGrades || {})
         .sort()
-        .map((g) => `${g}학년`)
+        .map((g) => {
+          const classes = Object.keys(managedClasses[g] || {});
+          return classes.length > 0 ? `${g}학년(${classes.join(", ")})` : `${g}학년`;
+        })
         .join(", ") || "담당 학년 없음";
     const roomText =
       Object.entries(state.rooms)
@@ -273,9 +287,31 @@ function renderEditRow(uid, u) {
             .join("")
         : `<span class="field-hint">등록된 실이 없습니다.</span>`;
 
+    const classSectionsHtml = [...state.editGrades]
+      .sort()
+      .map((g) => {
+        const classesInGrade = getClassesInGrade(g);
+        const selected = state.editClasses[g] || [];
+        const classesHtml =
+          classesInGrade.length > 0
+            ? classesInGrade
+                .map((c) => {
+                  const active = selected.includes(c);
+                  return `<button type="button" class="grade-toggle${active ? " is-active" : ""}" data-edit-class="${g}" data-edit-class-value="${escapeHtml(c)}">${escapeHtml(c)}</button>`;
+                })
+                .join("")
+            : `<span class="field-hint">등록된 학생이 없어 반 목록을 표시할 수 없습니다.</span>`;
+        return `
+          <div class="field-hint">${g}학년 — 담당 반 (비워두면 ${g}학년 전체 담당)</div>
+          <div class="grade-toggle-row">${classesHtml}</div>
+        `;
+      })
+      .join("");
+
     extraFieldsHtml = `
       <div class="field-hint">담당 학년</div>
       <div class="grade-toggle-row">${gradesHtml}</div>
+      ${classSectionsHtml}
       <div class="field-hint">담당 실</div>
       <div class="grade-toggle-row">${roomsHtml}</div>
     `;
@@ -312,11 +348,16 @@ accountListEl.addEventListener("click", (event) => {
   if (editBtn) {
     const uid = editBtn.dataset.editRole;
     const u = state.users[uid] || {};
+    const managedClasses = u.managedClasses || {};
     state.editingUid = uid;
     state.editName = u.name || "";
     state.editRole = u.role || "teacher";
     state.editGrades = Object.keys(u.managedGrades || {});
     state.editRooms = Object.keys(u.managedRooms || {});
+    state.editClasses = {};
+    for (const g of Object.keys(managedClasses)) {
+      state.editClasses[g] = Object.keys(managedClasses[g] || {});
+    }
     renderAccountList();
     return;
   }
@@ -338,9 +379,22 @@ accountListEl.addEventListener("click", (event) => {
   const gradeBtn = event.target.closest("[data-edit-grade]");
   if (gradeBtn) {
     const g = gradeBtn.dataset.editGrade;
-    state.editGrades = state.editGrades.includes(g)
-      ? state.editGrades.filter((x) => x !== g)
-      : [...state.editGrades, g];
+    if (state.editGrades.includes(g)) {
+      state.editGrades = state.editGrades.filter((x) => x !== g);
+      delete state.editClasses[g];
+    } else {
+      state.editGrades = [...state.editGrades, g];
+    }
+    renderAccountList();
+    return;
+  }
+
+  const classBtn = event.target.closest("[data-edit-class]");
+  if (classBtn) {
+    const g = classBtn.dataset.editClass;
+    const c = classBtn.dataset.editClassValue;
+    const current = state.editClasses[g] || [];
+    state.editClasses[g] = current.includes(c) ? current.filter((x) => x !== c) : [...current, c];
     renderAccountList();
     return;
   }
@@ -374,6 +428,16 @@ async function saveRole(uid, saveBtn) {
   if (state.editRole === "gradeManager") {
     data.managedGrades = Object.fromEntries(state.editGrades.map((g) => [g, true]));
     data.managedRooms = Object.fromEntries(state.editRooms.map((r) => [r, true]));
+    const managedClasses = {};
+    for (const g of state.editGrades) {
+      const classes = state.editClasses[g] || [];
+      if (classes.length > 0) {
+        managedClasses[g] = Object.fromEntries(classes.map((c) => [c, true]));
+      }
+    }
+    if (Object.keys(managedClasses).length > 0) {
+      data.managedClasses = managedClasses;
+    }
   }
 
   saveBtn.disabled = true;
@@ -403,6 +467,13 @@ function initAccountsPage() {
     state.rooms = snapshot.val() || {};
     renderAccountList();
   });
+
+  for (const grade of GRADES) {
+    onValue(ref(db, `students/${grade}`), (snapshot) => {
+      state.studentsByGrade[grade] = snapshot.val() || {};
+      if (state.editingUid) renderAccountList();
+    });
+  }
 }
 
 onAuthStateChanged(auth, (user) => {
