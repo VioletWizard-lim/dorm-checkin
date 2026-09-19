@@ -29,6 +29,7 @@ const state = {
   rooms: {},
   currentUid: "",
   editingUid: null,
+  editName: "",
   editRole: "teacher",
   editGrades: [],
   editRooms: [],
@@ -242,7 +243,7 @@ function renderAccountRow(uid, u) {
       ${
         isSelf
           ? `<div class="since-text ml-auto">본인 계정</div>`
-          : `<button type="button" class="btn-secondary btn-small ml-auto" data-edit-role="${escapeHtml(uid)}">역할 변경</button>`
+          : `<button type="button" class="btn-secondary btn-small ml-auto" data-edit-role="${escapeHtml(uid)}">정보 수정</button>`
       }
     </div>
   `;
@@ -284,9 +285,12 @@ function renderEditRow(uid, u) {
     <div class="student-card account-edit-card">
       <div class="student-info">
         <div class="student-name">${escapeHtml(u.id || uid)}</div>
-        <div class="student-meta">${escapeHtml(u.name || "이름 미등록")}</div>
       </div>
       <div class="account-edit-fields">
+        <div class="field">
+          <label>이름</label>
+          <input type="text" data-edit-name value="${escapeHtml(state.editName)}" placeholder="이름 입력" autocomplete="off">
+        </div>
         <div class="field-hint">역할</div>
         <div class="grade-toggle-row">${roleToggleHtml}</div>
         ${extraFieldsHtml}
@@ -309,6 +313,7 @@ accountListEl.addEventListener("click", (event) => {
     const uid = editBtn.dataset.editRole;
     const u = state.users[uid] || {};
     state.editingUid = uid;
+    state.editName = u.name || "";
     state.editRole = u.role || "teacher";
     state.editGrades = Object.keys(u.managedGrades || {});
     state.editRooms = Object.keys(u.managedRooms || {});
@@ -352,18 +357,37 @@ accountListEl.addEventListener("click", (event) => {
 
   const saveBtn = event.target.closest("[data-save-role]");
   if (saveBtn) {
-    const uid = saveBtn.dataset.saveRole;
-    const existing = state.users[uid] || {};
-    const data = { id: existing.id || "", name: existing.name || "", role: state.editRole };
-    if (state.editRole === "gradeManager") {
-      data.managedGrades = Object.fromEntries(state.editGrades.map((g) => [g, true]));
-      data.managedRooms = Object.fromEntries(state.editRooms.map((r) => [r, true]));
-    }
-    set(ref(db, `users/${uid}`), data);
-    state.editingUid = null;
-    renderAccountList();
+    saveRole(saveBtn.dataset.saveRole, saveBtn);
   }
 });
+
+accountListEl.addEventListener("input", (event) => {
+  const nameInput = event.target.closest("[data-edit-name]");
+  if (nameInput) {
+    state.editName = nameInput.value;
+  }
+});
+
+async function saveRole(uid, saveBtn) {
+  const existing = state.users[uid] || {};
+  const data = { id: existing.id || "", name: state.editName.trim(), role: state.editRole };
+  if (state.editRole === "gradeManager") {
+    data.managedGrades = Object.fromEntries(state.editGrades.map((g) => [g, true]));
+    data.managedRooms = Object.fromEntries(state.editRooms.map((r) => [r, true]));
+  }
+
+  saveBtn.disabled = true;
+  saveBtn.textContent = "저장 중...";
+  try {
+    await set(ref(db, `users/${uid}`), data);
+    state.editingUid = null;
+    renderAccountList();
+  } catch (err) {
+    alert(`저장에 실패했습니다: ${err.message || err.code || "알 수 없는 오류"}`);
+    saveBtn.disabled = false;
+    saveBtn.textContent = "저장";
+  }
+}
 
 logoutBtn.addEventListener("click", () => {
   signOut(auth).then(() => window.location.replace("./login.html"));
