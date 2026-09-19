@@ -144,6 +144,6 @@ outings/
 - [ ] 현황판: `outings`, `students`, `rooms` 구독해서 실시간 렌더링
 - [ ] 좌석 배치판: `rooms` CRUD, 좌석 배정 로직, 권한별 편집 가능 여부 분기
 - [ ] 관리자용 계정 생성 화면 또는 Firebase 콘솔에서 수동 생성 결정
-- [ ] EmailJS 가입 및 `public/js/emailjs-config.js` 실제 값 채우기(외출증 이메일 발송에 필요, 위 "외부 서비스 연동" 참고)
+- [x] EmailJS 가입 및 `public/js/emailjs-config.js` 실제 값 채우기(외출증 이메일 발송에 필요, 위 "외부 서비스 연동" 참고)
 - [x] `firebase init hosting:github` 실행해 GitHub Actions 자동 배포 연결
 - [x] `database.rules.json` 변경 시 GitHub Actions로 자동 배포(`firebase-database-rules-deploy.yml`, 기존 Hosting용 서비스 계정에 Realtime Database 관리자 역할 추가 필요)
