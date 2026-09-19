@@ -2,7 +2,9 @@
   "rules": {
     "users": {
       ".read": "auth != null",
-      ".write": false
+      "$uid": {
+        ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin'"
+      }
     },
     "students": {
       "$grade": {

@@ -1,5 +1,5 @@
 import { auth, db } from "./firebase-init.js";
-import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 import {
   ref,
   onValue,
@@ -12,6 +12,7 @@ import {
 const ALL_GRADES = ["1", "2", "3"];
 const DAY_LABELS = ["월", "화", "수", "목", "금"];
 
+const logoutBtn = document.getElementById("logoutBtn");
 const gradeTabsEl = document.getElementById("gradeTabs");
 const rosterListEl = document.getElementById("rosterList");
 const addStudentBtn = document.getElementById("addStudentBtn");
@@ -366,6 +367,10 @@ onAuthStateChanged(auth, (user) => {
     },
     { onlyOnce: true }
   );
+});
+
+logoutBtn.addEventListener("click", () => {
+  signOut(auth).then(() => window.location.replace("./login.html"));
 });
 
 renderDayToggle();

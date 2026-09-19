@@ -1,9 +1,10 @@
 import { auth, db } from "./firebase-init.js";
-import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 import { ref, onValue } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js";
 
 const GRADES = ["1", "2", "3"];
 
+const logoutBtn = document.getElementById("logoutBtn");
 const dateEl = document.getElementById("todayDate");
 const gradeChipsEl = document.getElementById("gradeChips");
 const chipsEl = document.getElementById("filterChips");
@@ -212,6 +213,10 @@ onAuthStateChanged(auth, (user) => {
     state.rooms = snapshot.val() || {};
     render();
   });
+});
+
+logoutBtn.addEventListener("click", () => {
+  signOut(auth).then(() => window.location.replace("./login.html"));
 });
 
 render();

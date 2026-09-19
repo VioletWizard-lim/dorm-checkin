@@ -21,6 +21,7 @@
       <a href="./check.html" class="back-link">← 체크 화면으로</a>
       <a href="./display.html" class="back-link">현황판 보기</a>
       <div class="check-header__date" id="todayDate"></div>
+      <button type="button" class="back-link" id="logoutBtn">로그아웃</button>
     </div>
   </header>
 
@@ -64,6 +65,13 @@
         <button type="button" class="btn-danger" id="deleteRoomBtn">이 실 삭제</button>
       </div>
     </div>
+  </div>
+
+  <div class="seat-legend">
+    <span class="seat-legend__item"><span class="seat-legend__swatch seat-legend__swatch--out"></span>외출중</span>
+    <span class="seat-legend__item"><span class="seat-legend__swatch seat-legend__swatch--afterschool"></span>오늘 방과후</span>
+    <span class="seat-legend__item"><span class="seat-legend__swatch seat-legend__swatch--in"></span>재실</span>
+    <span class="seat-legend__item"><span class="seat-legend__swatch seat-legend__swatch--empty"></span>빈자리</span>
   </div>
 
   <div class="seat-board">
