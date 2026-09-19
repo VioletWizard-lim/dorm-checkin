@@ -222,7 +222,7 @@ function renderGrid(room) {
       const student = studentsById[studentId];
       const status = getStudentStatus(studentId, studentsById);
       const name = student ? student.name || "이름 없음" : "(삭제된 학생)";
-      const meta = student ? `학번 ${student.sid || "-"} · ${student.cls || "-"}` : "";
+      const meta = student ? `학번 ${student.sid || "-"}` : "";
       cells.push(`
         <div class="seat-cell seat-cell--${status}">
           <div class="seat-cell__name">${escapeHtml(name)}</div>
