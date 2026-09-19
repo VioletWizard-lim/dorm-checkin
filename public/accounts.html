@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="google-site-verification" content="PskTvPUma23TKR9FEzgMFdyuOPyNKl2Cs_kTToIcHhw" />
+<title>기숙사 외출체크 - 계정 관리</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+
+<div class="check-page">
+
+  <header class="check-header">
+    <div class="check-header__titles">
+      <div class="check-header__title">계정 관리</div>
+      <div class="check-header__subtitle">교사 계정 생성과 역할 지정 (관리자 전용)</div>
+    </div>
+    <div class="check-header__meta">
+      <a href="./check.html" class="back-link">← 체크 화면으로</a>
+      <button type="button" class="back-link" id="logoutBtn">로그아웃</button>
+    </div>
+  </header>
+
+  <div class="section-heading">등록된 계정</div>
+  <div class="student-list" id="accountList"><div class="student-list__empty">불러오는 중...</div></div>
+
+  <div class="section-heading">교사 계정 일괄 생성</div>
+  <div class="section-subtext">
+    한 줄에 한 명씩 "아이디[탭]이름" 또는 "아이디[탭]이름[탭]비밀번호" 형식으로 붙여넣으세요.
+    비밀번호를 생략하면 자동으로 생성됩니다(직접 입력 시 6자 이상). 아이디는 영문+숫자만 가능합니다.
+    생성된 계정은 모두 teacher 권한으로 만들어지며, 역할 변경은 위 목록에서 할 수 있습니다.
+  </div>
+
+  <div class="roster-form-wrap">
+    <div class="roster-form">
+      <div class="field">
+        <label for="bulkAccountInput">여러 명 붙여넣기</label>
+        <textarea id="bulkAccountInput" rows="6" placeholder="teacher01	김선생
+teacher02	이선생	mypassword123"></textarea>
+      </div>
+      <div class="bulk-preview" id="bulkAccountPreview"></div>
+      <div class="roster-form__actions">
+        <button type="button" class="btn-add" id="bulkCreateBtn" disabled>계정 생성 (0명)</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="roster-form-wrap" id="resultWrap" hidden>
+    <div class="roster-form">
+      <div class="alert alert-notice">비밀번호는 이 화면에서만 확인할 수 있고 나중에 다시 볼 수 없습니다. 지금 복사해서 각 교사에게 전달해 주세요.</div>
+      <div id="resultList"></div>
+    </div>
+  </div>
+
+</div>
+
+<script type="module" src="./js/accounts.js"></script>
+</body>
+</html>

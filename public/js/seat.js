@@ -1,5 +1,5 @@
 import { auth, db } from "./firebase-init.js";
-import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 import {
   ref,
   onValue,
@@ -27,6 +27,7 @@ const colsMinusBtn = document.getElementById("colsMinusBtn");
 const colsPlusBtn = document.getElementById("colsPlusBtn");
 const deleteRoomBtn = document.getElementById("deleteRoomBtn");
 const seatGridEl = document.getElementById("seatGrid");
+const logoutBtn = document.getElementById("logoutBtn");
 
 const state = {
   studentsByGrade: { "1": {}, "2": {}, "3": {} },
@@ -417,6 +418,10 @@ onAuthStateChanged(auth, (user) => {
     },
     { onlyOnce: true }
   );
+});
+
+logoutBtn.addEventListener("click", () => {
+  signOut(auth).then(() => window.location.replace("./login.html"));
 });
 
 render();

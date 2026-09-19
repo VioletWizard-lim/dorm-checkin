@@ -1,5 +1,5 @@
 import { auth, db } from "./firebase-init.js";
-import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 import {
   ref,
   onValue,
@@ -22,6 +22,8 @@ let currentTeacherId = "";
 let currentTeacherName = "";
 
 const manageLink = document.getElementById("manageLink");
+const accountsLink = document.getElementById("accountsLink");
+const logoutBtn = document.getElementById("logoutBtn");
 const dateEl = document.getElementById("todayDate");
 const outCountEl = document.getElementById("outCountText");
 const searchInput = document.getElementById("search");
@@ -256,10 +258,15 @@ onAuthStateChanged(auth, (user) => {
     (snapshot) => {
       const profile = snapshot.val() || {};
       manageLink.hidden = profile.role !== "admin" && profile.role !== "gradeManager";
+      accountsLink.hidden = profile.role !== "admin";
       currentTeacherName = profile.name || "";
     },
     { onlyOnce: true }
   );
+});
+
+logoutBtn.addEventListener("click", () => {
+  signOut(auth).then(() => window.location.replace("./login.html"));
 });
 
 render();
