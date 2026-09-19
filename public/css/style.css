@@ -883,6 +883,47 @@ input {
   flex: none;
 }
 
+.seat-legend {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 4px 40px 16px;
+  flex-wrap: wrap;
+}
+
+.seat-legend__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-label);
+}
+
+.seat-legend__swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+  flex-shrink: 0;
+}
+
+.seat-legend__swatch--out {
+  background: var(--color-out);
+}
+
+.seat-legend__swatch--afterschool {
+  background: var(--color-afterschool);
+}
+
+.seat-legend__swatch--in {
+  background: #B7BCC6;
+}
+
+.seat-legend__swatch--empty {
+  background: #FFFFFF;
+  border: 1.5px dashed var(--color-text-faint);
+}
+
 .seat-board {
   flex-grow: 1;
   overflow: auto;
