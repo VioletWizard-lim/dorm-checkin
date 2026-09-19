@@ -19,6 +19,7 @@ if (window.emailjs) {
 
 const GRADES = ["1", "2", "3"];
 let currentTeacherId = "";
+let currentTeacherName = "";
 
 const manageLink = document.getElementById("manageLink");
 const dateEl = document.getElementById("todayDate");
@@ -180,7 +181,7 @@ function sendOutingEmail(student, reason, expectedReturn) {
       out_date: formatDate(now),
       out_time: formatTime(now),
       return_time: expectedReturn || "미정",
-      teacher_id: currentTeacherId || "관리자",
+      teacher_id: currentTeacherName || currentTeacherId || "관리자",
     })
     .catch((err) => console.error("외출증 이메일 발송 실패:", err));
 }
@@ -253,8 +254,9 @@ onAuthStateChanged(auth, (user) => {
   onValue(
     ref(db, `users/${user.uid}`),
     (snapshot) => {
-      const role = (snapshot.val() || {}).role;
-      manageLink.hidden = role !== "admin" && role !== "gradeManager";
+      const profile = snapshot.val() || {};
+      manageLink.hidden = profile.role !== "admin" && profile.role !== "gradeManager";
+      currentTeacherName = profile.name || "";
     },
     { onlyOnce: true }
   );
