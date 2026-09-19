@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="google-site-verification" content="PskTvPUma23TKR9FEzgMFdyuOPyNKl2Cs_kTToIcHhw" />
+<title>기숙사 외출체크 - 좌석 배치판</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+
+<div class="check-page">
+
+  <header class="check-header">
+    <div class="check-header__titles">
+      <div class="check-header__title">좌석 배치판</div>
+      <div class="check-header__subtitle">실별 좌석 배치 보기·편집</div>
+    </div>
+    <div class="check-header__meta">
+      <a href="./check.html" class="back-link">← 체크 화면으로</a>
+      <a href="./display.html" class="back-link">현황판 보기</a>
+      <div class="check-header__date" id="todayDate"></div>
+    </div>
+  </header>
+
+  <div class="check-toolbar">
+    <div class="filter-chips" id="roomTabs"></div>
+    <button type="button" class="btn-add" id="addRoomBtn" hidden>+ 실 추가</button>
+    <div class="roster-toolbar__actions ml-auto">
+      <button type="button" class="btn-secondary" id="editModeToggle" hidden>편집 모드</button>
+    </div>
+  </div>
+
+  <div class="roster-form-wrap room-settings-panel" id="roomSettingsPanel" hidden>
+    <div class="roster-form">
+      <div class="roster-form__row">
+        <div class="field">
+          <label for="roomNameInput">실 이름</label>
+          <input id="roomNameInput" type="text" placeholder="예: 1·2학년실" autocomplete="off">
+        </div>
+        <div class="field">
+          <label>대상 학년</label>
+          <div class="grade-toggle-row" id="roomGradeToggleRow"></div>
+        </div>
+        <div class="field">
+          <label>행 (rows)</label>
+          <div class="stepper">
+            <button type="button" class="stepper__btn" id="rowsMinusBtn">−</button>
+            <span class="stepper__value" id="rowsValue">0</span>
+            <button type="button" class="stepper__btn" id="rowsPlusBtn">+</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>열 (cols)</label>
+          <div class="stepper">
+            <button type="button" class="stepper__btn" id="colsMinusBtn">−</button>
+            <span class="stepper__value" id="colsValue">0</span>
+            <button type="button" class="stepper__btn" id="colsPlusBtn">+</button>
+          </div>
+        </div>
+      </div>
+      <div class="roster-form__actions">
+        <button type="button" class="btn-danger" id="deleteRoomBtn">이 실 삭제</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="seat-board">
+    <div class="seat-grid" id="seatGrid"></div>
+  </div>
+
+</div>
+
+<script type="module" src="./js/seat.js"></script>
+</body>
+</html>
