@@ -461,7 +461,7 @@ onAuthStateChanged(auth, (user) => {
         currentUserRoleBadgeEl.className = `role-badge role-badge--${role}`;
       }
 
-      if (role === "admin") {
+      if (role === "admin" || role === "dormStaff") {
         showCurrentUser();
         initForGrades(ALL_GRADES);
       } else if (role === "gradeManager") {

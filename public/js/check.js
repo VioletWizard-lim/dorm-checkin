@@ -179,12 +179,7 @@ function renderList(filtered) {
 
       let actionsHtml;
       if (status === "in") {
-        actionsHtml = `
-          <div class="status-actions">
-            <button type="button" class="toggle-btn toggle-btn--mark-out" data-toggle-id="${escapeHtml(s.id)}" data-grade="${escapeHtml(s.grade)}" data-current-status="in">외출 체크</button>
-            <button type="button" class="btn-secondary btn-small" data-mark-away-id="${escapeHtml(s.id)}">자리 없음으로 표시</button>
-          </div>
-        `;
+        actionsHtml = `<button type="button" class="toggle-btn toggle-btn--mark-out" data-toggle-id="${escapeHtml(s.id)}" data-grade="${escapeHtml(s.grade)}" data-current-status="in">외출 체크</button>`;
       } else if (status === "out") {
         actionsHtml = `<button type="button" class="toggle-btn toggle-btn--mark-in" data-toggle-id="${escapeHtml(s.id)}" data-grade="${escapeHtml(s.grade)}" data-current-status="out">복귀 체크</button>`;
       } else if (status === "leave") {
@@ -277,10 +272,6 @@ function toggleOuting(studentId, grade, currentStatus, reason, expectedReturn) {
   }
 }
 
-function markStatus(studentId, status) {
-  set(ref(db, `outings/${state.selectedDate}/${studentId}`), { status, since: serverTimestamp() });
-}
-
 function restoreToIn(studentId) {
   set(ref(db, `outings/${state.selectedDate}/${studentId}`), { status: "in", since: serverTimestamp() });
 }
@@ -296,14 +287,6 @@ listEl.addEventListener("click", (event) => {
   const restoreBtn = event.target.closest("[data-restore-id]");
   if (restoreBtn) {
     restoreToIn(restoreBtn.dataset.restoreId);
-    return;
-  }
-
-  const markAwayBtn = event.target.closest("[data-mark-away-id]");
-  if (markAwayBtn) {
-    if (window.confirm("이 학생을 '자리 없음'으로 표시할까요?")) {
-      markStatus(markAwayBtn.dataset.markAwayId, "away");
-    }
     return;
   }
 
@@ -375,7 +358,9 @@ onAuthStateChanged(auth, (user) => {
         (classes) => Object.keys(classes || {}).length > 0
       );
       navLoadingHint.hidden = true;
-      manageLink.hidden = profile.role !== "admin" && profile.role !== "gradeManager" && !hasManagedClasses;
+      // 기숙사부는 계정 관리만 빼고 admin과 동일한 권한을 가진다.
+      manageLink.hidden =
+        profile.role !== "admin" && profile.role !== "gradeManager" && profile.role !== "dormStaff" && !hasManagedClasses;
       accountsLink.hidden = profile.role !== "admin";
       // 자습 감독 계정은 외출 체크 화면만 쓸 수 있게 다른 화면 링크를 모두 숨긴다.
       const isStudyHallSupervisor = profile.role === "studyHallSupervisor";

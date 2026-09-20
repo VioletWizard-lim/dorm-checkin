@@ -9,7 +9,7 @@ import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/12.
 import { ref, onValue, set } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js";
 import { firebaseConfig, FAKE_EMAIL_DOMAIN } from "./firebase-config.js";
 
-const ROLES = ["teacher", "gradeManager", "admin", "studyHallSupervisor"];
+const ROLES = ["teacher", "gradeManager", "admin", "studyHallSupervisor", "dormStaff"];
 const GRADES = ["1", "2", "3"];
 const ID_PATTERN = /^[A-Za-z0-9]+$/;
 const PASSWORD_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
