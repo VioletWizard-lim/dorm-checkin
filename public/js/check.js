@@ -23,6 +23,7 @@ let currentTeacherName = "";
 
 const manageLink = document.getElementById("manageLink");
 const accountsLink = document.getElementById("accountsLink");
+const navLoadingHint = document.getElementById("navLoadingHint");
 const logoutBtn = document.getElementById("logoutBtn");
 const currentUserNameEl = document.getElementById("currentUserName");
 const currentUserRoleBadgeEl = document.getElementById("currentUserRoleBadge");
@@ -262,6 +263,7 @@ onAuthStateChanged(auth, (user) => {
       const hasManagedClasses = Object.values(profile.managedClasses || {}).some(
         (classes) => Object.keys(classes || {}).length > 0
       );
+      navLoadingHint.hidden = true;
       manageLink.hidden = profile.role !== "admin" && profile.role !== "gradeManager" && !hasManagedClasses;
       accountsLink.hidden = profile.role !== "admin";
       currentTeacherName = profile.name || "";

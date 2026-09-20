@@ -17,6 +17,7 @@ const dateEl = document.getElementById("todayDate");
 const roomTabsEl = document.getElementById("roomTabs");
 const addRoomBtn = document.getElementById("addRoomBtn");
 const editModeToggle = document.getElementById("editModeToggle");
+const editControlsLoadingHint = document.getElementById("editControlsLoadingHint");
 const roomSettingsPanel = document.getElementById("roomSettingsPanel");
 const roomNameInput = document.getElementById("roomNameInput");
 const roomGradeToggleRow = document.getElementById("roomGradeToggleRow");
@@ -39,6 +40,7 @@ const state = {
   activeRoomId: null,
   editMode: false,
   role: "teacher",
+  roleResolved: false,
   managedRoomIds: [],
   editingCellKey: null,
 };
@@ -135,6 +137,7 @@ function renderRoomTabs() {
 }
 
 function renderEditToggle() {
+  editControlsLoadingHint.hidden = state.roleResolved;
   const showToggle = state.role === "admin" || state.role === "gradeManager";
   editModeToggle.hidden = !showToggle;
   editModeToggle.textContent = state.editMode ? "보기 모드로 전환" : "편집 모드";
@@ -417,6 +420,7 @@ onAuthStateChanged(auth, (user) => {
     (snapshot) => {
       const profile = snapshot.val() || {};
       state.role = profile.role || "teacher";
+      state.roleResolved = true;
       state.managedRoomIds = Object.keys(profile.managedRooms || {});
       currentUserNameEl.textContent = profile.name || loginId;
       currentUserRoleBadgeEl.textContent = state.role;
