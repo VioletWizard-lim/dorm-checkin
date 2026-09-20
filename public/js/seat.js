@@ -132,13 +132,13 @@ function getRawOutingStatus(studentId) {
 
 function canEditRoom(roomId) {
   if (!state.editMode || !roomId) return false;
-  if (state.role === "admin") return true;
+  if (state.role === "admin" || state.role === "dormStaff") return true;
   if (state.role === "gradeManager") return state.managedRoomIds.includes(roomId);
   return false;
 }
 
 function canManageRoomsGlobally() {
-  return state.editMode && state.role === "admin";
+  return state.editMode && (state.role === "admin" || state.role === "dormStaff");
 }
 
 function ensureActiveRoom() {
@@ -169,7 +169,7 @@ function renderRoomTabs() {
 
 function renderEditToggle() {
   editControlsLoadingHint.hidden = state.roleResolved;
-  const showToggle = state.role === "admin" || state.role === "gradeManager";
+  const showToggle = state.role === "admin" || state.role === "gradeManager" || state.role === "dormStaff";
   editModeToggle.hidden = !showToggle;
   editModeToggle.textContent = state.editMode ? "보기 모드로 전환" : "편집 모드";
   addRoomBtn.hidden = !canManageRoomsGlobally();
