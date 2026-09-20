@@ -5,14 +5,36 @@ import { FAKE_EMAIL_DOMAIN } from "./firebase-config.js";
 
 const GRADES = ["1", "2", "3"];
 
+// outings는 outings/{날짜}/{학번}으로 저장된다(check.js 참고). 현황판은 항상 "오늘"만 보여준다.
+function getDateKey(date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+const TODAY_KEY = getDateKey();
+
+// "명령퇴사"(기간제 상태)는 students.html에서 설정하며 무단외출·자리비움보다 우선한다.
+function isOnLeave(student, dateKey) {
+  const leave = student && student.leaveOfAbsence;
+  if (!leave || !leave.from || !leave.to) return false;
+  return dateKey >= leave.from && dateKey <= leave.to;
+}
+
 const logoutBtn = document.getElementById("logoutBtn");
 const currentUserNameEl = document.getElementById("currentUserName");
 const currentUserRoleBadgeEl = document.getElementById("currentUserRoleBadge");
 const dateEl = document.getElementById("todayDate");
 const gradeChipsEl = document.getElementById("gradeChips");
 const chipsEl = document.getElementById("filterChips");
+const unauthorizedListEl = document.getElementById("unauthorizedPanelList");
+const unauthorizedCountEl = document.getElementById("unauthorizedPanelCount");
 const outListEl = document.getElementById("outPanelList");
 const outCountEl = document.getElementById("outPanelCount");
+const awayListEl = document.getElementById("awayPanelList");
+const awayCountEl = document.getElementById("awayPanelCount");
+const leaveListEl = document.getElementById("leavePanelList");
+const leaveCountEl = document.getElementById("leavePanelCount");
 const afterschoolListEl = document.getElementById("afterschoolPanelList");
 const afterschoolCountEl = document.getElementById("afterschoolPanelCount");
 
@@ -99,19 +121,19 @@ function renderRoomChips() {
   chipsEl.innerHTML = chips.join("");
 }
 
-function renderOutPanel(students) {
-  const outStudents = students
-    .filter((s) => state.outings[s.id] && state.outings[s.id].status === "out")
+function renderOutingPanel(students, status, listEl, countEl, extraLabel, emptyText) {
+  const matched = students
+    .filter((s) => state.outings[s.id] && state.outings[s.id].status === status)
     .sort((a, b) => (state.outings[a.id]?.since || 0) - (state.outings[b.id]?.since || 0));
 
-  outCountEl.textContent = `${outStudents.length}명`;
+  countEl.textContent = `${matched.length}명`;
 
-  if (outStudents.length === 0) {
-    outListEl.innerHTML = `<div class="display-panel__empty">외출중인 학생이 없습니다.</div>`;
+  if (matched.length === 0) {
+    listEl.innerHTML = `<div class="display-panel__empty">${emptyText}</div>`;
     return;
   }
 
-  outListEl.innerHTML = outStudents
+  listEl.innerHTML = matched
     .map((s) => {
       const outing = state.outings[s.id];
       return `
@@ -121,7 +143,7 @@ function renderOutPanel(students) {
             <div class="display-card__name">${escapeHtml(s.name || "이름 없음")}</div>
             <div class="display-card__meta">학번 ${escapeHtml(s.sid || "-")} · ${escapeHtml(s.cls || "-")}</div>
           </div>
-          <div class="display-card__extra">${escapeHtml(formatTime(outing && outing.since))} 외출</div>
+          <div class="display-card__extra">${escapeHtml(formatTime(outing && outing.since))} ${extraLabel}</div>
         </div>
       `;
     })
@@ -160,6 +182,33 @@ function renderAfterschoolPanel(students) {
     .join("");
 }
 
+function renderLeavePanel(leaveStudents) {
+  leaveStudents = leaveStudents.slice().sort((a, b) => (a.sid || "").localeCompare(b.sid || ""));
+
+  leaveCountEl.textContent = `${leaveStudents.length}명`;
+
+  if (leaveStudents.length === 0) {
+    leaveListEl.innerHTML = `<div class="display-panel__empty">명령퇴사 중인 학생이 없습니다.</div>`;
+    return;
+  }
+
+  leaveListEl.innerHTML = leaveStudents
+    .map((s) => {
+      const leave = s.leaveOfAbsence || {};
+      return `
+        <div class="display-card">
+          <div class="display-card__avatar">${escapeHtml((s.name || "?").charAt(0))}</div>
+          <div class="display-card__info">
+            <div class="display-card__name">${escapeHtml(s.name || "이름 없음")}</div>
+            <div class="display-card__meta">학번 ${escapeHtml(s.sid || "-")} · ${escapeHtml(s.cls || "-")}</div>
+          </div>
+          <div class="display-card__extra">~${escapeHtml(leave.to || "")}</div>
+        </div>
+      `;
+    })
+    .join("");
+}
+
 function render() {
   dateEl.textContent = formatToday();
   renderGradeChips();
@@ -176,8 +225,15 @@ function render() {
     filtered = filtered.filter((s) => roomIdByStudent[s.id] === state.activeRoomFilter);
   }
 
-  renderOutPanel(filtered);
-  renderAfterschoolPanel(filtered);
+  // 명령퇴사 중인 학생은 그 기간 동안 무단외출·자리비움·외출·방과후 판정에서 제외하고 별도 패널에만 표시한다.
+  const onLeave = filtered.filter((s) => isOnLeave(s, TODAY_KEY));
+  const notOnLeave = filtered.filter((s) => !isOnLeave(s, TODAY_KEY));
+
+  renderOutingPanel(notOnLeave, "unauthorized", unauthorizedListEl, unauthorizedCountEl, "무단외출", "무단외출로 표시된 학생이 없습니다.");
+  renderOutingPanel(notOnLeave, "out", outListEl, outCountEl, "외출", "외출중인 학생이 없습니다.");
+  renderOutingPanel(notOnLeave, "away", awayListEl, awayCountEl, "자리비움", "자리비움으로 표시된 학생이 없습니다.");
+  renderLeavePanel(onLeave);
+  renderAfterschoolPanel(notOnLeave);
 }
 
 gradeChipsEl.addEventListener("click", (event) => {
@@ -207,7 +263,7 @@ onAuthStateChanged(auth, (user) => {
     });
   }
 
-  onValue(ref(db, "outings"), (snapshot) => {
+  onValue(ref(db, `outings/${TODAY_KEY}`), (snapshot) => {
     state.outings = snapshot.val() || {};
     render();
   });
@@ -224,6 +280,11 @@ onAuthStateChanged(auth, (user) => {
       const profile = snapshot.val() || {};
       if (profile.disabled) {
         signOut(auth).then(() => window.location.replace("./login.html?disabled=1"));
+        return;
+      }
+      // 자습 감독 계정은 외출 체크 화면만 쓸 수 있다.
+      if (profile.role === "studyHallSupervisor") {
+        window.location.replace("./check.html");
         return;
       }
       const role = profile.role || "teacher";

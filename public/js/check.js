@@ -23,6 +23,8 @@ let currentTeacherName = "";
 
 const manageLink = document.getElementById("manageLink");
 const accountsLink = document.getElementById("accountsLink");
+const displayLink = document.getElementById("displayLink");
+const seatLink = document.getElementById("seatLink");
 const navLoadingHint = document.getElementById("navLoadingHint");
 const logoutBtn = document.getElementById("logoutBtn");
 const currentUserNameEl = document.getElementById("currentUserName");
@@ -32,6 +34,27 @@ const outCountEl = document.getElementById("outCountText");
 const searchInput = document.getElementById("search");
 const chipsEl = document.getElementById("filterChips");
 const listEl = document.getElementById("studentList");
+const dateSelectEl = document.getElementById("dateSelect");
+const pastDateNoticeEl = document.getElementById("pastDateNotice");
+
+// outings는 하루가 지나도 기록이 남도록 outings/{날짜}/{학번}으로 저장한다.
+// "조회 날짜"를 오늘이 아닌 값으로 바꾸면 그 날짜의 기록을 보고 고칠 수 있다(지난 기록 수정).
+function getDateKey(date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+const TODAY_KEY = getDateKey();
+
+// "명령퇴사"는 students.html에서 설정하는 시작~종료일이 있는 기간제 상태다. 그 기간 동안은
+// 무단외출·자리비움 판정에서 제외하고 조회 중인 날짜 기준으로 판단한다(지난 기록을 볼 때도 그 날짜 기준).
+function isOnLeave(student, dateKey) {
+  const leave = student && student.leaveOfAbsence;
+  if (!leave || !leave.from || !leave.to) return false;
+  return dateKey >= leave.from && dateKey <= leave.to;
+}
 
 const state = {
   studentsByGrade: { "1": {}, "2": {}, "3": {} },
@@ -39,7 +62,10 @@ const state = {
   rooms: {},
   searchTerm: "",
   activeFilter: "all",
+  selectedDate: TODAY_KEY,
 };
+
+let unsubscribeOutings = null;
 
 function escapeHtml(value) {
   return String(value)
@@ -97,9 +123,21 @@ function getRoomIdByStudentId() {
   return map;
 }
 
-function getOutingStatus(studentId) {
-  const outing = state.outings[studentId];
-  return outing && outing.status === "out" ? "out" : "in";
+const STATUS_META = {
+  in: { badge: "재실", badgeClass: "status-badge--in", avatarClass: "student-avatar--in" },
+  out: { badge: "외출중", badgeClass: "status-badge--out", avatarClass: "student-avatar--out" },
+  unauthorized: { badge: "무단외출", badgeClass: "status-badge--unauthorized", avatarClass: "student-avatar--unauthorized" },
+  away: { badge: "자리비움", badgeClass: "status-badge--away", avatarClass: "student-avatar--away" },
+  leave: { badge: "명령퇴사", badgeClass: "status-badge--leave", avatarClass: "student-avatar--leave" },
+};
+
+// "무단외출"/"자리비움"은 자동 판단 없이 순회하는 교사가 직접 표시하는 수동 상태다(재실에서만 진입, 재실로만 복귀).
+// "명령퇴사"(기간제 상태)는 무엇보다 우선한다 — students.html에서 설정하며 여기서는 표시만 한다.
+function getOutingStatus(student) {
+  if (isOnLeave(student, state.selectedDate)) return "leave";
+  const outing = state.outings[student.id];
+  const status = outing && outing.status;
+  return status === "out" || status === "unauthorized" || status === "away" ? status : "in";
 }
 
 function renderChips() {
@@ -123,25 +161,57 @@ function renderList(filtered) {
 
   listEl.innerHTML = filtered
     .map((s) => {
-      const status = getOutingStatus(s.id);
+      const status = getOutingStatus(s);
       const isOut = status === "out";
+      const meta = STATUS_META[status];
       const outing = state.outings[s.id];
       const reasonText = isOut && outing && outing.reason ? ` · ${outing.reason}` : "";
       const returnText = isOut && outing && outing.expectedReturn ? ` (~${outing.expectedReturn})` : "";
-      const sinceText = isOut ? `${formatTime(outing && outing.since)} 외출${reasonText}${returnText}` : "";
+      let sinceText = "";
+      if (status === "leave") {
+        const leave = s.leaveOfAbsence || {};
+        sinceText = `${leave.from} ~ ${leave.to}${leave.reason ? ` · ${leave.reason}` : ""}`;
+      } else if (status !== "in") {
+        sinceText = `${formatTime(outing && outing.since)} ${meta.badge}${reasonText}${returnText}`;
+      }
       const initial = (s.name || "?").charAt(0);
+
+      let actionsHtml;
+      if (status === "in") {
+        actionsHtml = `
+          <div class="status-actions">
+            <button type="button" class="toggle-btn toggle-btn--mark-out" data-toggle-id="${escapeHtml(s.id)}" data-grade="${escapeHtml(s.grade)}" data-current-status="in">외출 체크</button>
+            <select class="status-select" data-mark-id="${escapeHtml(s.id)}">
+              <option value="">상태 표시...</option>
+              <option value="unauthorized">무단외출로 표시</option>
+              <option value="away">자리비움으로 표시</option>
+            </select>
+          </div>
+        `;
+      } else if (status === "out") {
+        actionsHtml = `<button type="button" class="toggle-btn toggle-btn--mark-in" data-toggle-id="${escapeHtml(s.id)}" data-grade="${escapeHtml(s.grade)}" data-current-status="out">복귀 체크</button>`;
+      } else if (status === "leave") {
+        actionsHtml = `<div class="since-text ml-auto">학생 명단 관리에서 설정</div>`;
+      } else {
+        actionsHtml = `
+          <div class="roster-actions">
+            <button type="button" class="btn-secondary btn-small" data-restore-id="${escapeHtml(s.id)}">재실로 되돌리기</button>
+          </div>
+        `;
+      }
+
       return `
         <div class="student-card">
-          <div class="student-avatar ${isOut ? "student-avatar--out" : "student-avatar--in"}">${escapeHtml(initial)}</div>
+          <div class="student-avatar ${meta.avatarClass}">${escapeHtml(initial)}</div>
           <div class="student-info">
             <div class="student-name">${escapeHtml(s.name || "이름 없음")}</div>
             <div class="student-meta">학번 ${escapeHtml(s.sid || "-")} · ${escapeHtml(s.cls || "-")}</div>
           </div>
           <div class="student-status">
-            <div class="status-badge ${isOut ? "status-badge--out" : "status-badge--in"}">${isOut ? "외출중" : "재실"}</div>
+            <div class="status-badge ${meta.badgeClass}">${meta.badge}</div>
             <div class="since-text">${escapeHtml(sinceText)}</div>
           </div>
-          <button type="button" class="toggle-btn ${isOut ? "toggle-btn--mark-in" : "toggle-btn--mark-out"}" data-toggle-id="${escapeHtml(s.id)}" data-grade="${escapeHtml(s.grade)}" data-current-status="${status}">${isOut ? "복귀 체크" : "외출 체크"}</button>
+          ${actionsHtml}
         </div>
       `;
     })
@@ -151,11 +221,14 @@ function renderList(filtered) {
 function render() {
   dateEl.textContent = formatToday();
 
+  const isToday = state.selectedDate === TODAY_KEY;
+  pastDateNoticeEl.hidden = isToday;
+
   const allStudents = getAllStudents();
   const roomIdByStudent = getRoomIdByStudentId();
 
-  const outCount = allStudents.filter((s) => getOutingStatus(s.id) === "out").length;
-  outCountEl.textContent = `외출중 ${outCount}명`;
+  const outCount = allStudents.filter((s) => getOutingStatus(s) === "out").length;
+  outCountEl.textContent = isToday ? `외출중 ${outCount}명` : `그 날 외출 기록 ${outCount}명`;
 
   renderChips();
 
@@ -198,12 +271,21 @@ function toggleOuting(studentId, grade, currentStatus, reason, expectedReturn) {
     outingData.reason = reason || "";
     outingData.expectedReturn = expectedReturn || "";
   }
-  set(ref(db, `outings/${studentId}`), outingData);
+  set(ref(db, `outings/${state.selectedDate}/${studentId}`), outingData);
 
-  if (nextStatus === "out") {
+  // 지난 날짜 기록을 고치는 중이면(오늘이 아니면) 외출증 이메일을 보내지 않는다 — 실시간 외출이 아니라 사후 정정이기 때문.
+  if (nextStatus === "out" && state.selectedDate === TODAY_KEY) {
     const student = (state.studentsByGrade[grade] || {})[studentId];
     if (student) sendOutingEmail(student, reason, expectedReturn);
   }
+}
+
+function markStatus(studentId, status) {
+  set(ref(db, `outings/${state.selectedDate}/${studentId}`), { status, since: serverTimestamp() });
+}
+
+function restoreToIn(studentId) {
+  set(ref(db, `outings/${state.selectedDate}/${studentId}`), { status: "in", since: serverTimestamp() });
 }
 
 chipsEl.addEventListener("click", (event) => {
@@ -214,6 +296,12 @@ chipsEl.addEventListener("click", (event) => {
 });
 
 listEl.addEventListener("click", (event) => {
+  const restoreBtn = event.target.closest("[data-restore-id]");
+  if (restoreBtn) {
+    restoreToIn(restoreBtn.dataset.restoreId);
+    return;
+  }
+
   const btn = event.target.closest("[data-toggle-id]");
   if (!btn) return;
   const currentStatus = btn.dataset.currentStatus;
@@ -226,8 +314,35 @@ listEl.addEventListener("click", (event) => {
   toggleOuting(btn.dataset.toggleId, btn.dataset.grade, currentStatus, reason, expectedReturn);
 });
 
+listEl.addEventListener("change", (event) => {
+  const select = event.target.closest("[data-mark-id]");
+  if (!select) return;
+  const status = select.value;
+  if (!status) return;
+  const label = status === "unauthorized" ? "무단외출" : "자리비움";
+  if (window.confirm(`이 학생을 '${label}'(으)로 표시할까요?`)) {
+    markStatus(select.dataset.markId, status);
+  } else {
+    select.value = "";
+  }
+});
+
 searchInput.addEventListener("input", (event) => {
   state.searchTerm = event.target.value;
+  render();
+});
+
+function subscribeOutingsForSelectedDate() {
+  if (unsubscribeOutings) unsubscribeOutings();
+  unsubscribeOutings = onValue(ref(db, `outings/${state.selectedDate}`), (snapshot) => {
+    state.outings = snapshot.val() || {};
+    render();
+  });
+}
+
+dateSelectEl.addEventListener("change", () => {
+  state.selectedDate = dateSelectEl.value || TODAY_KEY;
+  subscribeOutingsForSelectedDate();
   render();
 });
 
@@ -239,6 +354,9 @@ onAuthStateChanged(auth, (user) => {
 
   currentTeacherId = (user.email || "").replace(`@${FAKE_EMAIL_DOMAIN}`, "");
 
+  dateSelectEl.max = TODAY_KEY;
+  dateSelectEl.value = state.selectedDate;
+
   for (const grade of GRADES) {
     onValue(ref(db, `students/${grade}`), (snapshot) => {
       state.studentsByGrade[grade] = snapshot.val() || {};
@@ -246,10 +364,7 @@ onAuthStateChanged(auth, (user) => {
     });
   }
 
-  onValue(ref(db, "outings"), (snapshot) => {
-    state.outings = snapshot.val() || {};
-    render();
-  });
+  subscribeOutingsForSelectedDate();
 
   onValue(ref(db, "rooms"), (snapshot) => {
     state.rooms = snapshot.val() || {};
@@ -270,6 +385,10 @@ onAuthStateChanged(auth, (user) => {
       navLoadingHint.hidden = true;
       manageLink.hidden = profile.role !== "admin" && profile.role !== "gradeManager" && !hasManagedClasses;
       accountsLink.hidden = profile.role !== "admin";
+      // 자습 감독 계정은 외출 체크 화면만 쓸 수 있게 다른 화면 링크를 모두 숨긴다.
+      const isStudyHallSupervisor = profile.role === "studyHallSupervisor";
+      displayLink.hidden = isStudyHallSupervisor;
+      seatLink.hidden = isStudyHallSupervisor;
       currentTeacherName = profile.name || "";
 
       const role = profile.role || "teacher";

@@ -27,7 +27,26 @@ const inputSid = document.getElementById("inputSid");
 const inputCls = document.getElementById("inputCls");
 const inputEmail = document.getElementById("inputEmail");
 const dayToggleRow = document.getElementById("dayToggleRow");
+const inputLeaveFrom = document.getElementById("inputLeaveFrom");
+const inputLeaveTo = document.getElementById("inputLeaveTo");
+const inputLeaveReason = document.getElementById("inputLeaveReason");
 const cancelFormBtn = document.getElementById("cancelFormBtn");
+
+function getDateKey(date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+const TODAY_KEY = getDateKey();
+
+// "명령퇴사"는 시작~종료일이 있는 기간제 상태다(예: 장기 결석). 그 기간 동안은
+// 무단외출·자리비움 판정에서 제외하고 현황판 등에 별도로 표시한다(check.js/display.js/seat.js도 동일 로직 사용).
+function isOnLeave(student, dateKey) {
+  const leave = student && student.leaveOfAbsence;
+  if (!leave || !leave.from || !leave.to) return false;
+  return dateKey >= leave.from && dateKey <= leave.to;
+}
 
 const bulkAddBtn = document.getElementById("bulkAddBtn");
 const bulkFormWrap = document.getElementById("bulkFormWrap");
@@ -145,15 +164,23 @@ function renderRoster() {
       const days = flags
         .map((on, i) => `<span class="day-pill${on ? " is-active" : ""}">${DAY_LABELS[i]}</span>`)
         .join("");
+      const onLeave = isOnLeave(s, TODAY_KEY);
+      const leave = s.leaveOfAbsence;
+      const leaveBadge = onLeave
+        ? `<div class="status-badge status-badge--leave">명령퇴사 중 (~${escapeHtml(leave.to)})</div>`
+        : leave && leave.from && leave.to
+          ? `<div class="since-text">명령퇴사 예정: ${escapeHtml(leave.from)} ~ ${escapeHtml(leave.to)}</div>`
+          : "";
       return `
         <div class="student-card">
-          <div class="student-avatar student-avatar--in">${escapeHtml((s.name || "?").charAt(0))}</div>
+          <div class="student-avatar ${onLeave ? "student-avatar--leave" : "student-avatar--in"}">${escapeHtml((s.name || "?").charAt(0))}</div>
           <div class="student-info">
             <div class="student-name">${escapeHtml(s.name || "이름 없음")}</div>
             <div class="student-meta">학번 ${escapeHtml(s.sid || "-")} · ${escapeHtml(s.cls || "-")}</div>
             ${s.email ? `<div class="student-meta">${escapeHtml(s.email)}</div>` : ""}
           </div>
           <div class="day-pill-row">${days}</div>
+          ${leaveBadge}
           <div class="roster-actions">
             <button type="button" class="btn-secondary btn-small" data-edit-id="${escapeHtml(id)}">수정</button>
             <button type="button" class="btn-danger btn-small" data-delete-id="${escapeHtml(id)}">삭제</button>
@@ -169,6 +196,9 @@ function openFormForAdd() {
   inputName.value = "";
   inputSid.value = "";
   inputEmail.value = "";
+  inputLeaveFrom.value = "";
+  inputLeaveTo.value = "";
+  inputLeaveReason.value = "";
   state.dayFlags = [false, false, false, false, false];
 
   const classRestriction = getClassRestriction(state.activeGrade);
@@ -194,6 +224,10 @@ function openFormForEdit(id) {
   inputSid.value = s.sid || "";
   inputCls.value = s.cls || "";
   inputEmail.value = s.email || "";
+  const leave = s.leaveOfAbsence || {};
+  inputLeaveFrom.value = leave.from || "";
+  inputLeaveTo.value = leave.to || "";
+  inputLeaveReason.value = leave.reason || "";
   state.dayFlags = (s.afterschoolDays || [false, false, false, false, false]).slice();
   // 기존 학생은 이미 반이 저장되어 있으니, 학번을 고치더라도 자동으로 덮어쓰지 않는다.
   state.clsManuallyEdited = true;
@@ -347,6 +381,17 @@ studentForm.addEventListener("submit", (event) => {
     return;
   }
 
+  const leaveFrom = inputLeaveFrom.value;
+  const leaveTo = inputLeaveTo.value;
+  if ((leaveFrom && !leaveTo) || (!leaveFrom && leaveTo)) {
+    alert("명령퇴사 기간은 시작일과 종료일을 모두 입력해 주세요.");
+    return;
+  }
+  if (leaveFrom && leaveTo && leaveFrom > leaveTo) {
+    alert("명령퇴사 종료일은 시작일보다 빠를 수 없습니다.");
+    return;
+  }
+
   const data = {
     name,
     sid,
@@ -354,6 +399,9 @@ studentForm.addEventListener("submit", (event) => {
     email,
     afterschoolDays: state.dayFlags.slice(),
   };
+  if (leaveFrom && leaveTo) {
+    data.leaveOfAbsence = { from: leaveFrom, to: leaveTo, reason: inputLeaveReason.value.trim() };
+  }
 
   const editingId = editingIdInput.value;
   if (editingId) {

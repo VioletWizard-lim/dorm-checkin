@@ -18,8 +18,8 @@
       <div class="check-header__subtitle">사감·당직 교사용 입력 화면</div>
     </div>
     <div class="check-header__meta">
-      <a href="./display.html" class="back-link">현황판 보기</a>
-      <a href="./seat.html" class="back-link">좌석 배치판 보기</a>
+      <a href="./display.html" class="back-link" id="displayLink">현황판 보기</a>
+      <a href="./seat.html" class="back-link" id="seatLink">좌석 배치판 보기</a>
       <span class="loading-hint" id="navLoadingHint">메뉴 확인 중...</span>
       <a href="./students.html" class="back-link" id="manageLink" hidden>학생 명단 관리</a>
       <a href="./accounts.html" class="back-link" id="accountsLink" hidden>계정 관리</a>
@@ -42,7 +42,16 @@
       <input id="search" type="text" placeholder="학생 이름 검색" autocomplete="off">
     </div>
     <div class="check-toolbar__divider"></div>
+    <div class="date-picker-group">
+      <label for="dateSelect" class="field-hint">조회 날짜</label>
+      <input type="date" id="dateSelect" class="date-input">
+    </div>
+    <div class="check-toolbar__divider"></div>
     <div class="filter-chips" id="filterChips"></div>
+  </div>
+
+  <div class="alert alert-notice past-date-notice" id="pastDateNotice" hidden>
+    지난 기록을 보는 중입니다 — 여기서 수정해도 이메일은 발송되지 않습니다.
   </div>
 
   <div class="student-list" id="studentList"></div>
