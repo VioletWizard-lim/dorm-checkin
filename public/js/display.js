@@ -222,6 +222,10 @@ onAuthStateChanged(auth, (user) => {
     ref(db, `users/${user.uid}`),
     (snapshot) => {
       const profile = snapshot.val() || {};
+      if (profile.disabled) {
+        signOut(auth).then(() => window.location.replace("./login.html?disabled=1"));
+        return;
+      }
       const role = profile.role || "teacher";
       currentUserNameEl.textContent = profile.name || loginId;
       currentUserRoleBadgeEl.textContent = role;

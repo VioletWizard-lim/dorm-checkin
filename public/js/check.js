@@ -260,6 +260,10 @@ onAuthStateChanged(auth, (user) => {
     ref(db, `users/${user.uid}`),
     (snapshot) => {
       const profile = snapshot.val() || {};
+      if (profile.disabled) {
+        signOut(auth).then(() => window.location.replace("./login.html?disabled=1"));
+        return;
+      }
       const hasManagedClasses = Object.values(profile.managedClasses || {}).some(
         (classes) => Object.keys(classes || {}).length > 0
       );

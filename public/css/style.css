@@ -1093,6 +1093,16 @@ input {
   color: #FFFFFF;
 }
 
+.role-badge--disabled {
+  background: #F3F4F7;
+  color: var(--color-text-faint);
+  border: 1px dashed var(--color-border);
+}
+
+.student-card--disabled {
+  opacity: 0.6;
+}
+
 .current-user {
   display: flex;
   align-items: center;

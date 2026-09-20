@@ -224,8 +224,21 @@ function renderAccountList() {
 }
 
 function renderAccountRow(uid, u) {
-  const role = u.role || "teacher";
   const isSelf = uid === state.currentUid;
+
+  if (u.disabled) {
+    return `
+      <div class="student-card student-card--disabled">
+        <div class="student-info">
+          <div class="student-name">${escapeHtml(u.id || uid)}</div>
+          <div class="student-meta">${escapeHtml(u.name || "이름 미등록")}</div>
+        </div>
+        <div class="role-badge role-badge--disabled">삭제됨</div>
+      </div>
+    `;
+  }
+
+  const role = u.role || "teacher";
 
   let assignments = "";
   if (role === "gradeManager") {
@@ -260,7 +273,10 @@ function renderAccountRow(uid, u) {
       ${
         isSelf
           ? `<div class="since-text ml-auto">본인 계정</div>`
-          : `<button type="button" class="btn-secondary btn-small ml-auto" data-edit-role="${escapeHtml(uid)}">정보 수정</button>`
+          : `<div class="roster-actions">
+               <button type="button" class="btn-secondary btn-small" data-edit-role="${escapeHtml(uid)}">정보 수정</button>
+               <button type="button" class="btn-danger btn-small" data-delete-account="${escapeHtml(uid)}">삭제</button>
+             </div>`
       }
     </div>
   `;
@@ -348,6 +364,12 @@ bulkInput.addEventListener("keydown", insertTabOnKeydown);
 bulkCreateBtn.addEventListener("click", runBulkCreate);
 
 accountListEl.addEventListener("click", (event) => {
+  const deleteBtn = event.target.closest("[data-delete-account]");
+  if (deleteBtn) {
+    deleteAccount(deleteBtn.dataset.deleteAccount, deleteBtn);
+    return;
+  }
+
   const editBtn = event.target.closest("[data-edit-role]");
   if (editBtn) {
     const uid = editBtn.dataset.editRole;
@@ -455,6 +477,27 @@ async function saveRole(uid, saveBtn) {
   }
 }
 
+async function deleteAccount(uid, btn) {
+  const u = state.users[uid] || {};
+  const label = u.name ? `${u.id || uid} (${u.name})` : u.id || uid;
+  const confirmed = window.confirm(
+    `${label} 계정을 삭제할까요?\n\n` +
+      "이 시스템의 모든 화면에서 즉시 로그아웃되고 다시 들어올 수 없게 됩니다.\n" +
+      "단, Firebase 로그인 자체(아이디/비밀번호)는 남아있어 완전히 없애려면 Firebase 콘솔에서 별도로 삭제해야 합니다."
+  );
+  if (!confirmed) return;
+
+  btn.disabled = true;
+  btn.textContent = "삭제 중...";
+  try {
+    await set(ref(db, `users/${uid}`), { id: u.id || "", name: u.name || "", disabled: true });
+  } catch (err) {
+    alert(`삭제에 실패했습니다: ${err.message || err.code || "알 수 없는 오류"}`);
+    btn.disabled = false;
+    btn.textContent = "삭제";
+  }
+}
+
 logoutBtn.addEventListener("click", () => {
   signOut(auth).then(() => window.location.replace("./login.html"));
 });
@@ -489,6 +532,10 @@ onAuthStateChanged(auth, (user) => {
     ref(db, `users/${user.uid}`),
     (snapshot) => {
       const profile = snapshot.val() || {};
+      if (profile.disabled) {
+        signOut(auth).then(() => window.location.replace("./login.html?disabled=1"));
+        return;
+      }
       if (profile.role !== "admin") {
         window.location.replace("./check.html");
         return;

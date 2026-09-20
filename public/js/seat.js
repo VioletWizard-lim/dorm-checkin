@@ -419,6 +419,10 @@ onAuthStateChanged(auth, (user) => {
     ref(db, `users/${user.uid}`),
     (snapshot) => {
       const profile = snapshot.val() || {};
+      if (profile.disabled) {
+        signOut(auth).then(() => window.location.replace("./login.html?disabled=1"));
+        return;
+      }
       state.role = profile.role || "teacher";
       state.roleResolved = true;
       state.managedRoomIds = Object.keys(profile.managedRooms || {});
