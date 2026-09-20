@@ -13,6 +13,22 @@ import { FAKE_EMAIL_DOMAIN } from "./firebase-config.js";
 const GRADES = ["1", "2", "3"];
 const MIN_SIZE = 1;
 
+// outings는 outings/{날짜}/{학번}으로 저장된다(check.js 참고). 좌석 배치판은 항상 "오늘"만 보여준다.
+function getDateKey(date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+const TODAY_KEY = getDateKey();
+
+// "명령퇴사"(기간제 상태)는 students.html에서 설정하며 무단외출·자리비움보다 우선한다.
+function isOnLeave(student, dateKey) {
+  const leave = student && student.leaveOfAbsence;
+  if (!leave || !leave.from || !leave.to) return false;
+  return dateKey >= leave.from && dateKey <= leave.to;
+}
+
 const dateEl = document.getElementById("todayDate");
 const roomTabsEl = document.getElementById("roomTabs");
 const addRoomBtn = document.getElementById("addRoomBtn");
@@ -89,9 +105,13 @@ function getSeatedRoomNameByStudentId() {
 }
 
 function getStudentStatus(studentId, studentsById) {
-  const outing = state.outings[studentId];
-  if (outing && outing.status === "out") return "out";
   const student = studentsById[studentId];
+  // 우선순위: 명령퇴사 > 무단외출 > 외출중 > 자리비움 > 오늘 방과후 > 재실
+  if (isOnLeave(student, TODAY_KEY)) return "leave";
+  const outing = state.outings[studentId];
+  if (outing && outing.status === "unauthorized") return "unauthorized";
+  if (outing && outing.status === "out") return "out";
+  if (outing && outing.status === "away") return "away";
   const todayIdx = todayWeekdayIndex();
   if (student && todayIdx !== null && Array.isArray(student.afterschoolDays) && student.afterschoolDays[todayIdx]) {
     return "afterschool";
@@ -404,7 +424,7 @@ onAuthStateChanged(auth, (user) => {
     });
   }
 
-  onValue(ref(db, "outings"), (snapshot) => {
+  onValue(ref(db, `outings/${TODAY_KEY}`), (snapshot) => {
     state.outings = snapshot.val() || {};
     render();
   });
@@ -421,6 +441,11 @@ onAuthStateChanged(auth, (user) => {
       const profile = snapshot.val() || {};
       if (profile.disabled) {
         signOut(auth).then(() => window.location.replace("./login.html?disabled=1"));
+        return;
+      }
+      // 자습 감독 계정은 외출 체크 화면만 쓸 수 있다.
+      if (profile.role === "studyHallSupervisor") {
+        window.location.replace("./check.html");
         return;
       }
       state.role = profile.role || "teacher";

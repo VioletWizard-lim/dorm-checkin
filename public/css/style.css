@@ -12,6 +12,12 @@
 
   --color-out: #C0392B;
   --color-out-bg: #FDECEA;
+  --color-unauthorized: #D35400;
+  --color-unauthorized-bg: #FDEBD8;
+  --color-away: #A6740A;
+  --color-away-bg: #FCF3CF;
+  --color-leave: #6B5B95;
+  --color-leave-bg: #EEEAF6;
   --color-afterschool: #2B6CB0;
   --color-afterschool-bg: #EAF1FB;
   --color-active: #1C2230;
@@ -301,6 +307,30 @@ input {
   background: var(--color-border);
 }
 
+.date-picker-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.date-input {
+  padding: 10px 12px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--color-input-border);
+  background: var(--color-card-bg);
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--color-text);
+}
+
+.date-input:focus {
+  border-color: var(--color-active);
+}
+
+.past-date-notice {
+  margin: 0 40px 16px;
+}
+
 .filter-chips {
   display: flex;
   align-items: center;
@@ -374,6 +404,18 @@ input {
   background: var(--color-out);
 }
 
+.student-avatar--unauthorized {
+  background: var(--color-unauthorized);
+}
+
+.student-avatar--away {
+  background: var(--color-away);
+}
+
+.student-avatar--leave {
+  background: var(--color-leave);
+}
+
 .student-avatar--in {
   background: #8B93A1;
 }
@@ -421,6 +463,21 @@ input {
   color: var(--color-out);
 }
 
+.status-badge--unauthorized {
+  background: var(--color-unauthorized-bg);
+  color: var(--color-unauthorized);
+}
+
+.status-badge--away {
+  background: var(--color-away-bg);
+  color: var(--color-away);
+}
+
+.status-badge--leave {
+  background: var(--color-leave-bg);
+  color: var(--color-leave);
+}
+
 .status-badge--in {
   background: #E9F6EC;
   color: #1E8449;
@@ -448,6 +505,27 @@ input {
 
 .toggle-btn--mark-in {
   background: #2F6F4F;
+}
+
+.status-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.status-actions .toggle-btn {
+  margin-left: 0;
+}
+
+.status-select {
+  padding: 8px 10px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--color-input-border);
+  background: var(--color-card-bg);
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--color-label);
 }
 
 .student-list__empty {
@@ -690,15 +768,16 @@ input {
 
 .display-board {
   flex-grow: 1;
-  overflow: hidden;
+  overflow: auto;
   display: flex;
+  flex-wrap: wrap;
   gap: 24px;
   padding: 4px 40px 32px;
 }
 
 .display-panel {
   flex: 1;
-  min-width: 0;
+  min-width: 260px;
   display: flex;
   flex-direction: column;
   background: var(--color-card-bg);
@@ -723,6 +802,18 @@ input {
 
 .display-panel--out .display-panel__title {
   color: var(--color-out);
+}
+
+.display-panel--unauthorized .display-panel__title {
+  color: var(--color-unauthorized);
+}
+
+.display-panel--away .display-panel__title {
+  color: var(--color-away);
+}
+
+.display-panel--leave .display-panel__title {
+  color: var(--color-leave);
 }
 
 .display-panel--afterschool .display-panel__title {
@@ -756,6 +847,18 @@ input {
   background: var(--color-out-bg);
 }
 
+.display-panel--unauthorized .display-card {
+  background: var(--color-unauthorized-bg);
+}
+
+.display-panel--away .display-card {
+  background: var(--color-away-bg);
+}
+
+.display-panel--leave .display-card {
+  background: var(--color-leave-bg);
+}
+
 .display-panel--afterschool .display-card {
   background: var(--color-afterschool-bg);
 }
@@ -775,6 +878,18 @@ input {
 
 .display-panel--out .display-card__avatar {
   background: var(--color-out);
+}
+
+.display-panel--unauthorized .display-card__avatar {
+  background: var(--color-unauthorized);
+}
+
+.display-panel--away .display-card__avatar {
+  background: var(--color-away);
+}
+
+.display-panel--leave .display-card__avatar {
+  background: var(--color-leave);
 }
 
 .display-panel--afterschool .display-card__avatar {
@@ -812,6 +927,18 @@ input {
 
 .display-panel--out .display-card__extra {
   color: var(--color-out);
+}
+
+.display-panel--unauthorized .display-card__extra {
+  color: var(--color-unauthorized);
+}
+
+.display-panel--away .display-card__extra {
+  color: var(--color-away);
+}
+
+.display-panel--leave .display-card__extra {
+  color: var(--color-leave);
 }
 
 .display-panel--afterschool .display-card__extra {
@@ -914,6 +1041,18 @@ input {
   background: var(--color-out);
 }
 
+.seat-legend__swatch--unauthorized {
+  background: var(--color-unauthorized);
+}
+
+.seat-legend__swatch--away {
+  background: var(--color-away);
+}
+
+.seat-legend__swatch--leave {
+  background: var(--color-leave);
+}
+
 .seat-legend__swatch--afterschool {
   background: var(--color-afterschool);
 }
@@ -978,6 +1117,18 @@ input {
   background: var(--color-out-bg);
 }
 
+.seat-cell--unauthorized {
+  background: var(--color-unauthorized-bg);
+}
+
+.seat-cell--away {
+  background: var(--color-away-bg);
+}
+
+.seat-cell--leave {
+  background: var(--color-leave-bg);
+}
+
 .seat-cell--afterschool {
   background: var(--color-afterschool-bg);
 }
@@ -991,6 +1142,18 @@ input {
 
 .seat-cell--out .seat-cell__name {
   color: var(--color-out);
+}
+
+.seat-cell--unauthorized .seat-cell__name {
+  color: var(--color-unauthorized);
+}
+
+.seat-cell--away .seat-cell__name {
+  color: var(--color-away);
+}
+
+.seat-cell--leave .seat-cell__name {
+  color: var(--color-leave);
 }
 
 .seat-cell--afterschool .seat-cell__name {
@@ -1091,6 +1254,11 @@ input {
 .role-badge--admin {
   background: var(--color-active);
   color: #FFFFFF;
+}
+
+.role-badge--studyHallSupervisor {
+  background: var(--color-leave-bg);
+  color: var(--color-leave);
 }
 
 .role-badge--disabled {
