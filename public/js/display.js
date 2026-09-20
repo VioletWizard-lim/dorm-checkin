@@ -24,6 +24,9 @@ function isOnLeave(student, dateKey) {
 const logoutBtn = document.getElementById("logoutBtn");
 const currentUserNameEl = document.getElementById("currentUserName");
 const currentUserRoleBadgeEl = document.getElementById("currentUserRoleBadge");
+const manageLink = document.getElementById("manageLink");
+const accountsLink = document.getElementById("accountsLink");
+const navLoadingHint = document.getElementById("navLoadingHint");
 const dateEl = document.getElementById("todayDate");
 const gradeChipsEl = document.getElementById("gradeChips");
 const chipsEl = document.getElementById("filterChips");
@@ -290,6 +293,12 @@ onAuthStateChanged(auth, (user) => {
       currentUserNameEl.textContent = profile.name || loginId;
       currentUserRoleBadgeEl.textContent = role;
       currentUserRoleBadgeEl.className = `role-badge role-badge--${role}`;
+      const hasManagedClasses = Object.values(profile.managedClasses || {}).some(
+        (classes) => Object.keys(classes || {}).length > 0
+      );
+      navLoadingHint.hidden = true;
+      manageLink.hidden = role !== "admin" && role !== "gradeManager" && role !== "dormStaff" && !hasManagedClasses;
+      accountsLink.hidden = role !== "admin";
     },
     { onlyOnce: true }
   );
