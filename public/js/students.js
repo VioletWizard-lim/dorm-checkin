@@ -41,7 +41,7 @@ function getDateKey(date = new Date()) {
 const TODAY_KEY = getDateKey();
 
 // "명령퇴사"는 시작~종료일이 있는 기간제 상태다(예: 장기 결석). 그 기간 동안은
-// 무단외출·자리비움 판정에서 제외하고 현황판 등에 별도로 표시한다(check.js/display.js/seat.js도 동일 로직 사용).
+// "자리 없음" 판정에서 제외하고 현황판 등에 별도로 표시한다(check.js/display.js/seat.js도 동일 로직 사용).
 function isOnLeave(student, dateKey) {
   const leave = student && student.leaveOfAbsence;
   if (!leave || !leave.from || !leave.to) return false;

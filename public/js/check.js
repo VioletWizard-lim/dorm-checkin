@@ -49,7 +49,7 @@ function getDateKey(date = new Date()) {
 const TODAY_KEY = getDateKey();
 
 // "명령퇴사"는 students.html에서 설정하는 시작~종료일이 있는 기간제 상태다. 그 기간 동안은
-// 무단외출·자리비움 판정에서 제외하고 조회 중인 날짜 기준으로 판단한다(지난 기록을 볼 때도 그 날짜 기준).
+// "자리 없음" 판정에서 제외하고 조회 중인 날짜 기준으로 판단한다(지난 기록을 볼 때도 그 날짜 기준).
 function isOnLeave(student, dateKey) {
   const leave = student && student.leaveOfAbsence;
   if (!leave || !leave.from || !leave.to) return false;
@@ -126,18 +126,19 @@ function getRoomIdByStudentId() {
 const STATUS_META = {
   in: { badge: "재실", badgeClass: "status-badge--in", avatarClass: "student-avatar--in" },
   out: { badge: "외출중", badgeClass: "status-badge--out", avatarClass: "student-avatar--out" },
-  unauthorized: { badge: "무단외출", badgeClass: "status-badge--unauthorized", avatarClass: "student-avatar--unauthorized" },
-  away: { badge: "자리비움", badgeClass: "status-badge--away", avatarClass: "student-avatar--away" },
+  away: { badge: "자리 없음", badgeClass: "status-badge--away", avatarClass: "student-avatar--away" },
   leave: { badge: "명령퇴사", badgeClass: "status-badge--leave", avatarClass: "student-avatar--leave" },
 };
 
-// "무단외출"/"자리비움"은 자동 판단 없이 순회하는 교사가 직접 표시하는 수동 상태다(재실에서만 진입, 재실로만 복귀).
+// "자리 없음"은 자동 판단 없이 순회하는 교사가 직접 표시하는 수동 상태다(재실에서만 진입, 재실로만 복귀).
+// 예전에 무단외출/자리비움 두 상태로 나눠뒀던 걸 하나로 합침 — 기존에 저장된 "unauthorized" 값도 같은 걸로 취급한다.
 // "명령퇴사"(기간제 상태)는 무엇보다 우선한다 — students.html에서 설정하며 여기서는 표시만 한다.
 function getOutingStatus(student) {
   if (isOnLeave(student, state.selectedDate)) return "leave";
   const outing = state.outings[student.id];
   const status = outing && outing.status;
-  return status === "out" || status === "unauthorized" || status === "away" ? status : "in";
+  if (status === "away" || status === "unauthorized") return "away";
+  return status === "out" ? "out" : "in";
 }
 
 function renderChips() {
@@ -181,11 +182,7 @@ function renderList(filtered) {
         actionsHtml = `
           <div class="status-actions">
             <button type="button" class="toggle-btn toggle-btn--mark-out" data-toggle-id="${escapeHtml(s.id)}" data-grade="${escapeHtml(s.grade)}" data-current-status="in">외출 체크</button>
-            <select class="status-select" data-mark-id="${escapeHtml(s.id)}">
-              <option value="">상태 표시...</option>
-              <option value="unauthorized">무단외출로 표시</option>
-              <option value="away">자리비움으로 표시</option>
-            </select>
+            <button type="button" class="btn-secondary btn-small" data-mark-away-id="${escapeHtml(s.id)}">자리 없음으로 표시</button>
           </div>
         `;
       } else if (status === "out") {
@@ -302,6 +299,14 @@ listEl.addEventListener("click", (event) => {
     return;
   }
 
+  const markAwayBtn = event.target.closest("[data-mark-away-id]");
+  if (markAwayBtn) {
+    if (window.confirm("이 학생을 '자리 없음'으로 표시할까요?")) {
+      markStatus(markAwayBtn.dataset.markAwayId, "away");
+    }
+    return;
+  }
+
   const btn = event.target.closest("[data-toggle-id]");
   if (!btn) return;
   const currentStatus = btn.dataset.currentStatus;
@@ -312,19 +317,6 @@ listEl.addEventListener("click", (event) => {
     expectedReturn = (window.prompt("예상 복귀 시각을 입력해 주세요 (예: 17:00, 취소하면 미정으로 표시됩니다)", "") || "").trim();
   }
   toggleOuting(btn.dataset.toggleId, btn.dataset.grade, currentStatus, reason, expectedReturn);
-});
-
-listEl.addEventListener("change", (event) => {
-  const select = event.target.closest("[data-mark-id]");
-  if (!select) return;
-  const status = select.value;
-  if (!status) return;
-  const label = status === "unauthorized" ? "무단외출" : "자리비움";
-  if (window.confirm(`이 학생을 '${label}'(으)로 표시할까요?`)) {
-    markStatus(select.dataset.markId, status);
-  } else {
-    select.value = "";
-  }
 });
 
 searchInput.addEventListener("input", (event) => {
