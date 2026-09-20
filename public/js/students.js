@@ -400,6 +400,10 @@ onAuthStateChanged(auth, (user) => {
     ref(db, `users/${user.uid}`),
     (snapshot) => {
       const profile = snapshot.val() || {};
+      if (profile.disabled) {
+        signOut(auth).then(() => window.location.replace("./login.html?disabled=1"));
+        return;
+      }
       const role = profile.role;
       const loginId = (user.email || "").replace(`@${FAKE_EMAIL_DOMAIN}`, "");
 

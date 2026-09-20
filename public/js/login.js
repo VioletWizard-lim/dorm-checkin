@@ -69,6 +69,10 @@ if (savedId) {
   rememberCheckbox.checked = true;
 }
 
+if (new URLSearchParams(window.location.search).get("disabled") === "1") {
+  showError("삭제(비활성화)된 계정입니다. 관리자에게 문의해 주세요.");
+}
+
 onAuthStateChanged(auth, (user) => {
   if (user) {
     window.location.replace(REDIRECT_TARGET);
