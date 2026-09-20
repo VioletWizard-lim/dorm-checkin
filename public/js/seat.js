@@ -9,20 +9,10 @@ import {
   push,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js";
-import {
-  EMAILJS_PUBLIC_KEY,
-  EMAILJS_SERVICE_ID,
-  EMAILJS_OUTING_TEMPLATE_ID,
-} from "./emailjs-config.js";
 import { FAKE_EMAIL_DOMAIN } from "./firebase-config.js";
-
-if (window.emailjs) {
-  window.emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY });
-}
 
 const GRADES = ["1", "2", "3"];
 const MIN_SIZE = 1;
-let currentLoginId = "";
 let currentTeacherName = "";
 
 // outings는 outings/{날짜}/{학번}으로 저장된다(check.js 참고). 좌석 배치판은 항상 "오늘"만 보여준다.
@@ -87,25 +77,6 @@ function formatToday() {
   const days = ["일", "월", "화", "수", "목", "금", "토"];
   const now = new Date();
   return `${now.getFullYear()}년 ${now.getMonth() + 1}월 ${now.getDate()}일 (${days[now.getDay()]})`;
-}
-
-function formatTime(ts) {
-  if (!ts) return "";
-  const d = new Date(ts);
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  return `${hh}:${mm}`;
-}
-
-function formatDate(ts) {
-  const d = new Date(ts);
-  return `${d.getMonth() + 1}월 ${d.getDate()}일`;
-}
-
-// 학번 마지막 2자리 = 번호 (예: "10305" -> 5번)
-function deriveSeatNoFromSid(sid) {
-  const match = /^\d{3}(\d{2})$/.exec((sid || "").trim());
-  return match ? String(Number(match[1])) : "";
 }
 
 // 월=0 ... 금=4 로 매핑, 토·일이면 null (afterschoolDays는 월~금 5칸)
@@ -299,12 +270,10 @@ function renderGrid(room) {
         const rawStatus = getRawOutingStatus(studentId);
         let actionButtonsHtml;
         if (rawStatus === "in") {
-          actionButtonsHtml = `
-            <button type="button" class="seat-cell__action-btn" data-seat-mark-out="${escapeHtml(studentId)}" data-grade="${escapeHtml(student.grade)}">외출</button>
-            <button type="button" class="seat-cell__action-btn" data-seat-mark-away="${escapeHtml(studentId)}">자리없음</button>
-          `;
+          // "외출"(재실 -> 외출중)은 여기서 할 수 없다 — check.html에서만.
+          actionButtonsHtml = `<button type="button" class="seat-cell__action-btn" data-seat-mark-away="${escapeHtml(studentId)}">자리없음</button>`;
         } else if (rawStatus === "out") {
-          actionButtonsHtml = `<button type="button" class="seat-cell__action-btn" data-seat-mark-in="${escapeHtml(studentId)}" data-grade="${escapeHtml(student.grade)}">복귀</button>`;
+          actionButtonsHtml = `<button type="button" class="seat-cell__action-btn" data-seat-restore="${escapeHtml(studentId)}">복귀</button>`;
         } else {
           actionButtonsHtml = `<button type="button" class="seat-cell__action-btn" data-seat-restore="${escapeHtml(studentId)}">재실로</button>`;
         }
@@ -393,43 +362,9 @@ function unassignSeat(cellKey) {
   set(ref(db, `rooms/${state.activeRoomId}/seatMap/${cellKey}`), null);
 }
 
-// check.js의 외출 체크와 동일하게 동작한다(사유/예상 복귀 프롬프트, 외출증 이메일 발송) —
-// 좌석 배치도에서도 출석 체크 자체는 할 수 있어야 하기 때문. 좌석 배치도는 항상 오늘 기준이라
-// check.js처럼 "지난 날짜면 발송 안 함" 분기는 필요 없다.
-function sendOutingEmail(student, reason, expectedReturn) {
-  if (!student.email || !window.emailjs) return;
-  const now = Date.now();
-  window.emailjs
-    .send(EMAILJS_SERVICE_ID, EMAILJS_OUTING_TEMPLATE_ID, {
-      to_email: student.email,
-      student_name: student.name || "",
-      sid: student.sid || "",
-      cls: student.cls || "",
-      seat_no: deriveSeatNoFromSid(student.sid),
-      reason: reason || "사유 미기재",
-      out_date: formatDate(now),
-      out_time: formatTime(now),
-      return_time: expectedReturn || "미정",
-      teacher_id: currentTeacherName || currentLoginId || "관리자",
-    })
-    .catch((err) => console.error("외출증 이메일 발송 실패:", err));
-}
-
-function toggleOuting(studentId, grade, currentStatus, reason, expectedReturn) {
-  const nextStatus = currentStatus === "out" ? "in" : "out";
-  const outingData = { status: nextStatus, since: serverTimestamp() };
-  if (nextStatus === "out") {
-    outingData.reason = reason || "";
-    outingData.expectedReturn = expectedReturn || "";
-  }
-  set(ref(db, `outings/${TODAY_KEY}/${studentId}`), outingData);
-
-  if (nextStatus === "out") {
-    const student = (state.studentsByGrade[grade] || {})[studentId];
-    if (student) sendOutingEmail(student, reason, expectedReturn);
-  }
-}
-
+// 좌석 배치도에서는 "외출"(재실 -> 외출중)은 할 수 없다 — 그건 사유·이메일까지 딸린 공식적인
+// 절차라 check.html에서만 하도록 함. 여기서는 순회하며 바로 처리할 만한 것만: 자리없음 표시/해제,
+// 이미 나간 학생의 복귀 체크(둘 다 그냥 "재실"로 되돌리는 동작이라 restoreToIn 하나로 처리).
 function markAway(studentId) {
   set(ref(db, `outings/${TODAY_KEY}/${studentId}`), { status: "away", since: serverTimestamp() });
 }
@@ -504,26 +439,6 @@ seatGridEl.addEventListener("click", (event) => {
 
   const cancelActionBtn = event.target.closest("[data-seat-cancel-action]");
   if (cancelActionBtn) {
-    state.actionCellKey = null;
-    render();
-    return;
-  }
-
-  const markOutBtn = event.target.closest("[data-seat-mark-out]");
-  if (markOutBtn) {
-    const reason = (window.prompt("외출 사유를 입력해 주세요 (취소해도 외출 체크는 진행됩니다)", "") || "").trim();
-    const expectedReturn = (
-      window.prompt("예상 복귀 시각을 입력해 주세요 (예: 17:00, 취소하면 미정으로 표시됩니다)", "") || ""
-    ).trim();
-    toggleOuting(markOutBtn.dataset.seatMarkOut, markOutBtn.dataset.grade, "in", reason, expectedReturn);
-    state.actionCellKey = null;
-    render();
-    return;
-  }
-
-  const markInBtn = event.target.closest("[data-seat-mark-in]");
-  if (markInBtn) {
-    toggleOuting(markInBtn.dataset.seatMarkIn, markInBtn.dataset.grade, "out", "", "");
     state.actionCellKey = null;
     render();
     return;
@@ -605,7 +520,6 @@ onAuthStateChanged(auth, (user) => {
   });
 
   const loginId = (user.email || "").replace(`@${FAKE_EMAIL_DOMAIN}`, "");
-  currentLoginId = loginId;
   onValue(
     ref(db, `users/${user.uid}`),
     (snapshot) => {
