@@ -7,11 +7,23 @@ import {
   update,
   remove,
   push,
+  serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js";
+import {
+  EMAILJS_PUBLIC_KEY,
+  EMAILJS_SERVICE_ID,
+  EMAILJS_OUTING_TEMPLATE_ID,
+} from "./emailjs-config.js";
 import { FAKE_EMAIL_DOMAIN } from "./firebase-config.js";
+
+if (window.emailjs) {
+  window.emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY });
+}
 
 const GRADES = ["1", "2", "3"];
 const MIN_SIZE = 1;
+let currentLoginId = "";
+let currentTeacherName = "";
 
 // outings는 outings/{날짜}/{학번}으로 저장된다(check.js 참고). 좌석 배치판은 항상 "오늘"만 보여준다.
 function getDateKey(date = new Date()) {
@@ -22,7 +34,7 @@ function getDateKey(date = new Date()) {
 }
 const TODAY_KEY = getDateKey();
 
-// "명령퇴사"(기간제 상태)는 students.html에서 설정하며 무단외출·자리비움보다 우선한다.
+// "명령퇴사"(기간제 상태)는 students.html에서 설정하며 "자리 없음"보다 우선한다.
 function isOnLeave(student, dateKey) {
   const leave = student && student.leaveOfAbsence;
   if (!leave || !leave.from || !leave.to) return false;
@@ -59,6 +71,7 @@ const state = {
   roleResolved: false,
   managedRoomIds: [],
   editingCellKey: null,
+  actionCellKey: null, // 보기 모드에서 좌석을 눌러 출석 상태를 바꿀 때 쓰는, editingCellKey와 별개인 상태
 };
 
 function escapeHtml(value) {
@@ -74,6 +87,25 @@ function formatToday() {
   const days = ["일", "월", "화", "수", "목", "금", "토"];
   const now = new Date();
   return `${now.getFullYear()}년 ${now.getMonth() + 1}월 ${now.getDate()}일 (${days[now.getDay()]})`;
+}
+
+function formatTime(ts) {
+  if (!ts) return "";
+  const d = new Date(ts);
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
+function formatDate(ts) {
+  const d = new Date(ts);
+  return `${d.getMonth() + 1}월 ${d.getDate()}일`;
+}
+
+// 학번 마지막 2자리 = 번호 (예: "10305" -> 5번)
+function deriveSeatNoFromSid(sid) {
+  const match = /^\d{3}(\d{2})$/.exec((sid || "").trim());
+  return match ? String(Number(match[1])) : "";
 }
 
 // 월=0 ... 금=4 로 매핑, 토·일이면 null (afterschoolDays는 월~금 5칸)
@@ -106,17 +138,25 @@ function getSeatedRoomNameByStudentId() {
 
 function getStudentStatus(studentId, studentsById) {
   const student = studentsById[studentId];
-  // 우선순위: 명령퇴사 > 무단외출 > 외출중 > 자리비움 > 오늘 방과후 > 재실
+  // 우선순위: 명령퇴사 > 자리 없음 > 외출중 > 오늘 방과후 > 재실
   if (isOnLeave(student, TODAY_KEY)) return "leave";
   const outing = state.outings[studentId];
-  if (outing && outing.status === "unauthorized") return "unauthorized";
+  // "unauthorized"는 예전 상태 이름(자리비움과 합쳐지기 전) — 기존 데이터 호환용으로 계속 away 취급
+  if (outing && (outing.status === "away" || outing.status === "unauthorized")) return "away";
   if (outing && outing.status === "out") return "out";
-  if (outing && outing.status === "away") return "away";
   const todayIdx = todayWeekdayIndex();
   if (student && todayIdx !== null && Array.isArray(student.afterschoolDays) && student.afterschoolDays[todayIdx]) {
     return "afterschool";
   }
   return "in";
+}
+
+// 출석 상태 조작 버튼을 어떤 걸 보여줄지 결정할 때 쓰는, 방과후 색칠은 빼고 outings만 본 "실제" 상태.
+function getRawOutingStatus(studentId) {
+  const outing = state.outings[studentId];
+  const status = outing && outing.status;
+  if (status === "away" || status === "unauthorized") return "away";
+  return status === "out" ? "out" : "in";
 }
 
 function canEditRoom(roomId) {
@@ -250,8 +290,38 @@ function renderGrid(room) {
       const status = getStudentStatus(studentId, studentsById);
       const name = student ? student.name || "이름 없음" : "(삭제된 학생)";
       const meta = student ? `학번 ${student.sid || "-"}` : "";
+      // 보기 모드에서는(편집 모드가 아니고, 학생 데이터가 남아있고, 명령퇴사 중이 아니면)
+      // 좌석을 눌러 바로 출석 상태를 바꿀 수 있다 — 명령퇴사는 students.html에서만 설정.
+      const onLeave = isOnLeave(student, TODAY_KEY);
+      const canAct = !state.editMode && !!student && !onLeave;
+
+      if (state.actionCellKey === cellKey && canAct) {
+        const rawStatus = getRawOutingStatus(studentId);
+        let actionButtonsHtml;
+        if (rawStatus === "in") {
+          actionButtonsHtml = `
+            <button type="button" class="seat-cell__action-btn" data-seat-mark-out="${escapeHtml(studentId)}" data-grade="${escapeHtml(student.grade)}">외출</button>
+            <button type="button" class="seat-cell__action-btn" data-seat-mark-away="${escapeHtml(studentId)}">자리없음</button>
+          `;
+        } else if (rawStatus === "out") {
+          actionButtonsHtml = `<button type="button" class="seat-cell__action-btn" data-seat-mark-in="${escapeHtml(studentId)}" data-grade="${escapeHtml(student.grade)}">복귀</button>`;
+        } else {
+          actionButtonsHtml = `<button type="button" class="seat-cell__action-btn" data-seat-restore="${escapeHtml(studentId)}">재실로</button>`;
+        }
+        cells.push(`
+          <div class="seat-cell seat-cell--${status} seat-cell--action">
+            <div class="seat-cell__name">${escapeHtml(name)}</div>
+            <div class="seat-cell__actions">
+              ${actionButtonsHtml}
+              <button type="button" class="seat-cell__action-btn seat-cell__action-btn--cancel" data-seat-cancel-action>취소</button>
+            </div>
+          </div>
+        `);
+        continue;
+      }
+
       cells.push(`
-        <div class="seat-cell seat-cell--${status}">
+        <div class="seat-cell seat-cell--${status}${canAct ? " seat-cell--clickable" : ""}" ${canAct ? `data-attendance-cell="${cellKey}"` : ""}>
           <div class="seat-cell__name">${escapeHtml(name)}</div>
           ${meta ? `<div class="seat-cell__meta">${escapeHtml(meta)}</div>` : ""}
           ${editable ? `<button type="button" class="seat-cell__unassign" data-unassign-cell="${cellKey}">×</button>` : ""}
@@ -323,17 +393,64 @@ function unassignSeat(cellKey) {
   set(ref(db, `rooms/${state.activeRoomId}/seatMap/${cellKey}`), null);
 }
 
+// check.js의 외출 체크와 동일하게 동작한다(사유/예상 복귀 프롬프트, 외출증 이메일 발송) —
+// 좌석 배치도에서도 출석 체크 자체는 할 수 있어야 하기 때문. 좌석 배치도는 항상 오늘 기준이라
+// check.js처럼 "지난 날짜면 발송 안 함" 분기는 필요 없다.
+function sendOutingEmail(student, reason, expectedReturn) {
+  if (!student.email || !window.emailjs) return;
+  const now = Date.now();
+  window.emailjs
+    .send(EMAILJS_SERVICE_ID, EMAILJS_OUTING_TEMPLATE_ID, {
+      to_email: student.email,
+      student_name: student.name || "",
+      sid: student.sid || "",
+      cls: student.cls || "",
+      seat_no: deriveSeatNoFromSid(student.sid),
+      reason: reason || "사유 미기재",
+      out_date: formatDate(now),
+      out_time: formatTime(now),
+      return_time: expectedReturn || "미정",
+      teacher_id: currentTeacherName || currentLoginId || "관리자",
+    })
+    .catch((err) => console.error("외출증 이메일 발송 실패:", err));
+}
+
+function toggleOuting(studentId, grade, currentStatus, reason, expectedReturn) {
+  const nextStatus = currentStatus === "out" ? "in" : "out";
+  const outingData = { status: nextStatus, since: serverTimestamp() };
+  if (nextStatus === "out") {
+    outingData.reason = reason || "";
+    outingData.expectedReturn = expectedReturn || "";
+  }
+  set(ref(db, `outings/${TODAY_KEY}/${studentId}`), outingData);
+
+  if (nextStatus === "out") {
+    const student = (state.studentsByGrade[grade] || {})[studentId];
+    if (student) sendOutingEmail(student, reason, expectedReturn);
+  }
+}
+
+function markAway(studentId) {
+  set(ref(db, `outings/${TODAY_KEY}/${studentId}`), { status: "away", since: serverTimestamp() });
+}
+
+function restoreToIn(studentId) {
+  set(ref(db, `outings/${TODAY_KEY}/${studentId}`), { status: "in", since: serverTimestamp() });
+}
+
 roomTabsEl.addEventListener("click", (event) => {
   const btn = event.target.closest("[data-room-id]");
   if (!btn) return;
   state.activeRoomId = btn.dataset.roomId;
   state.editingCellKey = null;
+  state.actionCellKey = null;
   render();
 });
 
 editModeToggle.addEventListener("click", () => {
   state.editMode = !state.editMode;
   state.editingCellKey = null;
+  state.actionCellKey = null;
   render();
 });
 
@@ -384,6 +501,59 @@ seatGridEl.addEventListener("click", (event) => {
     render();
     return;
   }
+
+  const cancelActionBtn = event.target.closest("[data-seat-cancel-action]");
+  if (cancelActionBtn) {
+    state.actionCellKey = null;
+    render();
+    return;
+  }
+
+  const markOutBtn = event.target.closest("[data-seat-mark-out]");
+  if (markOutBtn) {
+    const reason = (window.prompt("외출 사유를 입력해 주세요 (취소해도 외출 체크는 진행됩니다)", "") || "").trim();
+    const expectedReturn = (
+      window.prompt("예상 복귀 시각을 입력해 주세요 (예: 17:00, 취소하면 미정으로 표시됩니다)", "") || ""
+    ).trim();
+    toggleOuting(markOutBtn.dataset.seatMarkOut, markOutBtn.dataset.grade, "in", reason, expectedReturn);
+    state.actionCellKey = null;
+    render();
+    return;
+  }
+
+  const markInBtn = event.target.closest("[data-seat-mark-in]");
+  if (markInBtn) {
+    toggleOuting(markInBtn.dataset.seatMarkIn, markInBtn.dataset.grade, "out", "", "");
+    state.actionCellKey = null;
+    render();
+    return;
+  }
+
+  const markAwayBtn = event.target.closest("[data-seat-mark-away]");
+  if (markAwayBtn) {
+    if (window.confirm("이 학생을 '자리 없음'으로 표시할까요?")) {
+      markAway(markAwayBtn.dataset.seatMarkAway);
+    }
+    state.actionCellKey = null;
+    render();
+    return;
+  }
+
+  const restoreBtn = event.target.closest("[data-seat-restore]");
+  if (restoreBtn) {
+    restoreToIn(restoreBtn.dataset.seatRestore);
+    state.actionCellKey = null;
+    render();
+    return;
+  }
+
+  const attendanceCell = event.target.closest("[data-attendance-cell]");
+  if (attendanceCell) {
+    state.actionCellKey = attendanceCell.dataset.attendanceCell;
+    render();
+    return;
+  }
+
   const emptyCell = event.target.closest("[data-empty-cell]");
   if (emptyCell) {
     if (!canEditRoom(state.activeRoomId)) return;
@@ -435,6 +605,7 @@ onAuthStateChanged(auth, (user) => {
   });
 
   const loginId = (user.email || "").replace(`@${FAKE_EMAIL_DOMAIN}`, "");
+  currentLoginId = loginId;
   onValue(
     ref(db, `users/${user.uid}`),
     (snapshot) => {
@@ -451,7 +622,8 @@ onAuthStateChanged(auth, (user) => {
       state.role = profile.role || "teacher";
       state.roleResolved = true;
       state.managedRoomIds = Object.keys(profile.managedRooms || {});
-      currentUserNameEl.textContent = profile.name || loginId;
+      currentTeacherName = profile.name || "";
+      currentUserNameEl.textContent = currentTeacherName || loginId;
       currentUserRoleBadgeEl.textContent = state.role;
       currentUserRoleBadgeEl.className = `role-badge role-badge--${state.role}`;
       render();

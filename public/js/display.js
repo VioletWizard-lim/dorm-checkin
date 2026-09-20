@@ -14,7 +14,7 @@ function getDateKey(date = new Date()) {
 }
 const TODAY_KEY = getDateKey();
 
-// "명령퇴사"(기간제 상태)는 students.html에서 설정하며 무단외출·자리비움보다 우선한다.
+// "명령퇴사"(기간제 상태)는 students.html에서 설정하며 "자리 없음"보다 우선한다.
 function isOnLeave(student, dateKey) {
   const leave = student && student.leaveOfAbsence;
   if (!leave || !leave.from || !leave.to) return false;
@@ -27,8 +27,6 @@ const currentUserRoleBadgeEl = document.getElementById("currentUserRoleBadge");
 const dateEl = document.getElementById("todayDate");
 const gradeChipsEl = document.getElementById("gradeChips");
 const chipsEl = document.getElementById("filterChips");
-const unauthorizedListEl = document.getElementById("unauthorizedPanelList");
-const unauthorizedCountEl = document.getElementById("unauthorizedPanelCount");
 const outListEl = document.getElementById("outPanelList");
 const outCountEl = document.getElementById("outPanelCount");
 const awayListEl = document.getElementById("awayPanelList");
@@ -121,9 +119,10 @@ function renderRoomChips() {
   chipsEl.innerHTML = chips.join("");
 }
 
-function renderOutingPanel(students, status, listEl, countEl, extraLabel, emptyText) {
+function renderOutingPanel(students, statuses, listEl, countEl, extraLabel, emptyText) {
+  const statusList = Array.isArray(statuses) ? statuses : [statuses];
   const matched = students
-    .filter((s) => state.outings[s.id] && state.outings[s.id].status === status)
+    .filter((s) => state.outings[s.id] && statusList.includes(state.outings[s.id].status))
     .sort((a, b) => (state.outings[a.id]?.since || 0) - (state.outings[b.id]?.since || 0));
 
   countEl.textContent = `${matched.length}명`;
@@ -225,13 +224,13 @@ function render() {
     filtered = filtered.filter((s) => roomIdByStudent[s.id] === state.activeRoomFilter);
   }
 
-  // 명령퇴사 중인 학생은 그 기간 동안 무단외출·자리비움·외출·방과후 판정에서 제외하고 별도 패널에만 표시한다.
+  // 명령퇴사 중인 학생은 그 기간 동안 자리 없음·외출·방과후 판정에서 제외하고 별도 패널에만 표시한다.
   const onLeave = filtered.filter((s) => isOnLeave(s, TODAY_KEY));
   const notOnLeave = filtered.filter((s) => !isOnLeave(s, TODAY_KEY));
 
-  renderOutingPanel(notOnLeave, "unauthorized", unauthorizedListEl, unauthorizedCountEl, "무단외출", "무단외출로 표시된 학생이 없습니다.");
+  // "unauthorized"는 예전 상태 이름(자리비움과 합쳐지기 전) — 기존 데이터 호환용으로 계속 같이 조회
+  renderOutingPanel(notOnLeave, ["away", "unauthorized"], awayListEl, awayCountEl, "자리 없음", "자리 없음으로 표시된 학생이 없습니다.");
   renderOutingPanel(notOnLeave, "out", outListEl, outCountEl, "외출", "외출중인 학생이 없습니다.");
-  renderOutingPanel(notOnLeave, "away", awayListEl, awayCountEl, "자리비움", "자리비움으로 표시된 학생이 없습니다.");
   renderLeavePanel(onLeave);
   renderAfterschoolPanel(notOnLeave);
 }

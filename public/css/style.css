@@ -12,8 +12,6 @@
 
   --color-out: #C0392B;
   --color-out-bg: #FDECEA;
-  --color-unauthorized: #D35400;
-  --color-unauthorized-bg: #FDEBD8;
   --color-away: #A6740A;
   --color-away-bg: #FCF3CF;
   --color-leave: #6B5B95;
@@ -404,10 +402,6 @@ input {
   background: var(--color-out);
 }
 
-.student-avatar--unauthorized {
-  background: var(--color-unauthorized);
-}
-
 .student-avatar--away {
   background: var(--color-away);
 }
@@ -463,11 +457,6 @@ input {
   color: var(--color-out);
 }
 
-.status-badge--unauthorized {
-  background: var(--color-unauthorized-bg);
-  color: var(--color-unauthorized);
-}
-
 .status-badge--away {
   background: var(--color-away-bg);
   color: var(--color-away);
@@ -518,15 +507,6 @@ input {
   margin-left: 0;
 }
 
-.status-select {
-  padding: 8px 10px;
-  border-radius: var(--radius-control);
-  border: 1px solid var(--color-input-border);
-  background: var(--color-card-bg);
-  font-family: inherit;
-  font-size: 13px;
-  color: var(--color-label);
-}
 
 .student-list__empty {
   padding: 40px 0;
@@ -804,10 +784,6 @@ input {
   color: var(--color-out);
 }
 
-.display-panel--unauthorized .display-panel__title {
-  color: var(--color-unauthorized);
-}
-
 .display-panel--away .display-panel__title {
   color: var(--color-away);
 }
@@ -847,10 +823,6 @@ input {
   background: var(--color-out-bg);
 }
 
-.display-panel--unauthorized .display-card {
-  background: var(--color-unauthorized-bg);
-}
-
 .display-panel--away .display-card {
   background: var(--color-away-bg);
 }
@@ -878,10 +850,6 @@ input {
 
 .display-panel--out .display-card__avatar {
   background: var(--color-out);
-}
-
-.display-panel--unauthorized .display-card__avatar {
-  background: var(--color-unauthorized);
 }
 
 .display-panel--away .display-card__avatar {
@@ -927,10 +895,6 @@ input {
 
 .display-panel--out .display-card__extra {
   color: var(--color-out);
-}
-
-.display-panel--unauthorized .display-card__extra {
-  color: var(--color-unauthorized);
 }
 
 .display-panel--away .display-card__extra {
@@ -1041,10 +1005,6 @@ input {
   background: var(--color-out);
 }
 
-.seat-legend__swatch--unauthorized {
-  background: var(--color-unauthorized);
-}
-
 .seat-legend__swatch--away {
   background: var(--color-away);
 }
@@ -1117,10 +1077,6 @@ input {
   background: var(--color-out-bg);
 }
 
-.seat-cell--unauthorized {
-  background: var(--color-unauthorized-bg);
-}
-
 .seat-cell--away {
   background: var(--color-away-bg);
 }
@@ -1142,10 +1098,6 @@ input {
 
 .seat-cell--out .seat-cell__name {
   color: var(--color-out);
-}
-
-.seat-cell--unauthorized .seat-cell__name {
-  color: var(--color-unauthorized);
 }
 
 .seat-cell--away .seat-cell__name {
@@ -1216,6 +1168,35 @@ input {
   color: var(--color-text);
   font-size: 13px;
   line-height: 1;
+}
+
+.seat-cell--action {
+  align-items: stretch;
+  border: 1.5px solid var(--color-active);
+}
+
+.seat-cell__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.seat-cell__action-btn {
+  flex: 1;
+  min-width: 56px;
+  padding: 6px 4px;
+  border-radius: 8px;
+  border: 1px solid var(--color-input-border);
+  background: var(--color-card-bg);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-label);
+}
+
+.seat-cell__action-btn--cancel {
+  color: var(--color-text-faint);
 }
 
 /* Account management screen */
