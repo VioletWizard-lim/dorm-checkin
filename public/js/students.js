@@ -16,6 +16,8 @@ const DAY_LABELS = ["월", "화", "수", "목", "금"];
 const logoutBtn = document.getElementById("logoutBtn");
 const currentUserNameEl = document.getElementById("currentUserName");
 const currentUserRoleBadgeEl = document.getElementById("currentUserRoleBadge");
+const accountsLink = document.getElementById("accountsLink");
+const navLoadingHint = document.getElementById("navLoadingHint");
 const gradeTabsEl = document.getElementById("gradeTabs");
 const rosterListEl = document.getElementById("rosterList");
 const addStudentBtn = document.getElementById("addStudentBtn");
@@ -454,6 +456,8 @@ onAuthStateChanged(auth, (user) => {
       }
       const role = profile.role;
       const loginId = (user.email || "").replace(`@${FAKE_EMAIL_DOMAIN}`, "");
+      navLoadingHint.hidden = true;
+      accountsLink.hidden = role !== "admin";
 
       function showCurrentUser() {
         currentUserNameEl.textContent = profile.name || loginId;

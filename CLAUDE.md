@@ -16,6 +16,7 @@
 
 ## 화면 구성 (6개)
 로그인 화면을 제외한 모든 화면의 헤더에는 로그아웃 버튼이 있음(`signOut` 후 `login.html`로 이동).
+로그인 화면을 제외한 모든 화면의 헤더에는 그 계정이 접근 가능한 **다른 화면으로 가는 링크가 전부** 노출됨(자기 자신 화면으로의 링크는 제외, 대신 check.html이 아닌 화면에는 "← 체크 화면으로" 링크가 있음) — 권한이 없는 화면의 링크는 숨겨짐(판단 로직은 화면마다 독립적으로 구현되어 있지만 기준은 모두 동일). 예: teacher가 담당 반이 없으면 어느 화면에서도 "학생 명단 관리" 링크가 안 보이고, admin이 아니면 어느 화면에서도 "계정 관리" 링크가 안 보임.
 
 ### 1. 로그인 (`login.html`)
 - 이메일이 아닌 **아이디**로 로그인 (화면에는 아이디만 노출)
@@ -71,10 +72,10 @@
 - "여러 명 한번에 추가" → 엑셀에서 복사한 "이름[탭]학번" 줄들을 붙여넣으면 실시간 미리보기 후 일괄 저장. teacher가 담당 반으로 제한된 경우, 학번으로 계산된 반이 담당 반이 아닌 줄은 미리보기에서 오류로 표시되고 저장 대상에서 제외됨
 - 명단 카드의 "수정"/"삭제"로 기존 학생 정보 수정·삭제 (`students/{grade}/{studentId}` set/remove)
 - 학생별 **명령퇴사 기간**(선택) 설정: "+ 학생 추가"/"수정" 폼에 시작일·종료일·사유 입력란이 있음. 시작일·종료일은 하나만 입력하면 alert로 막고(둘 다 입력하거나 둘 다 비워야 함), 종료일이 시작일보다 빠르면 저장을 막음. 저장하면 `students/{grade}/{studentId}.leaveOfAbsence`에 반영되고, 그 기간 동안 check.html·display.html·seat.html에서 "명령퇴사"로 표시되며 "자리 없음" 판정에서 제외됨(둘 다 비우고 저장하면 해제)
-- `check.html` 상단에 이 화면으로 가는 "학생 명단 관리" 링크가 admin·gradeManager·dormStaff·(담당 반이 있는)teacher에게만 노출됨
+- 다른 화면들(자기 자신인 students.html 제외) 상단에 이 화면으로 가는 "학생 명단 관리" 링크가 admin·gradeManager·dormStaff·(담당 반이 있는)teacher에게만 노출됨
 
 ### 6. 계정 관리 (`accounts.html`)
-- admin 전용(admin이 아니면 `check.html`로 리다이렉트 — dormStaff도 예외 없이 포함). `check.html` 상단에 이 화면으로 가는 "계정 관리" 링크가 admin에게만 노출됨
+- admin 전용(admin이 아니면 `check.html`로 리다이렉트 — dormStaff도 예외 없이 포함). 다른 화면들(자기 자신인 accounts.html 제외) 상단에 이 화면으로 가는 "계정 관리" 링크가 admin에게만 노출됨
 - 상단: 등록된 계정 목록 — 아이디·이름·역할 배지(teacher/gradeManager/admin/studyHallSupervisor/dormStaff), gradeManager는 담당 학년·담당 실을, teacher는 담당 반(있는 경우만)을 함께 표시
   - 본인 계정 행에는 "정보 수정" 버튼이 없음(관리자가 실수로 자기 자신을 강등해 잠기는 것을 방지)
   - "정보 수정" 클릭 시 그 계정 행이 인라인 편집 폼으로 바뀜: 이름 입력란, 역할 토글(teacher/gradeManager/admin/studyHallSupervisor/dormStaff) → 저장 시 `users/{uid}` set. 이름은 매년 같은 아이디를 다른 담당자가 이어받는 경우(예: "1학년부장" 계정)를 대비해 언제든 바꿀 수 있게 함
@@ -196,3 +197,4 @@ outings/
 - [x] 좌석 배치판에서도 좌석을 클릭해 출석 상태(복귀/자리 없음)를 바로 바꿀 수 있게 추가 — "외출"(새로 나가는 것)은 제외, check.html 전용으로 유지
 - [x] check.html에서 "자리 없음으로 표시" 버튼 제거 — 자리 없음 표시/해제는 seat.html 전용으로 통합(check.html은 해제만 가능)
 - [x] "기숙사부"(dormStaff) 역할 추가 — 계정 관리(accounts.html)를 제외한 모든 화면에서 admin과 동일한 권한
+- [x] 모든 화면 헤더에 권한별 전체 메뉴 링크 통일(기존엔 check.html에만 있었음) — display.html·seat.html·students.html·accounts.html에도 접근 가능한 다른 화면 링크를 전부 노출(자기 자신 제외)
