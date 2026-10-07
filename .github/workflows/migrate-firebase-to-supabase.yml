@@ -1,0 +1,39 @@
+name: Migrate Firebase → Supabase (manual)
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Supabase의 학생·실·외출 데이터를 Firebase 기준으로 지우고 다시 채웁니다(교직원 계정은 없으면 만들고 정보만 갱신). 계속하려면 MIGRATE 를 입력하세요."
+        required: true
+        default: ""
+
+concurrency:
+  group: migrate-firebase-to-supabase
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    if: inputs.confirm == 'MIGRATE'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: scripts/migrate
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: scripts/migrate/package-lock.json
+      - run: npm ci
+      - run: npm test
+      # 저장소가 공개라 로그가 누구에게나 보인다 — 스크립트는 건수만 출력한다.
+      - run: node migrate.mjs
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_DORM_CHECKIN_647D6 }}
+          FIREBASE_DATABASE_URL: https://dorm-checkin-647d6-default-rtdb.firebaseio.com
+          SUPABASE_URL: https://${{ secrets.SUPABASE_PROJECT_REF }}.supabase.co
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
