@@ -33,8 +33,18 @@
         <input id="reasonInput" type="text" maxlength="200" placeholder="예: 병원 진료" autocomplete="off">
       </div>
       <div class="field">
-        <label for="returnInput">예상 복귀 시각 (선택)</label>
-        <input id="returnInput" type="time">
+        <label for="startHour">외출 시각</label>
+        <div class="time-select">
+          <select id="startHour" aria-label="외출 시"></select>
+          <select id="startMinute" aria-label="외출 분"></select>
+        </div>
+      </div>
+      <div class="field">
+        <label for="returnHour">예상 복귀 시각 (선택)</label>
+        <div class="time-select">
+          <select id="returnHour" aria-label="복귀 시"></select>
+          <select id="returnMinute" aria-label="복귀 분"></select>
+        </div>
       </div>
       <button type="submit" class="btn-primary" id="requestBtn" disabled>외출 신청</button>
       <div class="field-hint" id="requestHint"></div>

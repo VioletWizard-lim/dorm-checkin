@@ -209,7 +209,8 @@ select tests.expect_error(format($$insert into public.outings (date, student_id,
 select tests.expect_error(format($$insert into public.outing_requests (date, student_id, requested_by, reason) values (current_date, %L, %L, 'x')$$, :st1, :s1),
   'student cannot insert requests directly', '%permission denied%');
 select tests.expect_error($$select public.create_outing_request('   ')$$, 'empty reason is rejected', '%사유%');
-select public.create_outing_request('병원 진료', '17:00');
+select tests.expect_error($$select public.create_outing_request('병원', '17:00', '25:00')$$, 'bad start time is rejected', '%외출 시각%');
+select public.create_outing_request('병원 진료', '17:00', '15:30');
 select tests.expect_count('select * from public.outing_requests', 1, 'student sees own request');
 select tests.expect_error($$select public.create_outing_request('또 나가요')$$, 'second pending request is rejected', '%기다리는%');
 select tests.expect_error(format($$select public.assign_seat(%L, 'r0c0', %L)$$, :room1, :st1), 'student cannot assign seats', '%권한%');
@@ -248,7 +249,7 @@ reset role;
 
 select tests.logout();
 select tests.expect_true(format($$exists (select 1 from public.outings o where o.student_id = %L and o.date = public.today_kst()
-  and o.status = 'out' and o.reason = '병원 진료' and o.expected_return = '17:00' and o.checked_by = %L
+  and o.status = 'out' and o.reason = '병원 진료' and o.start_time = '15:30' and o.expected_return = '17:00' and o.checked_by = %L
   and o.checked_by_name = '김담임' and o.request_id = %L)$$, :st1, :t13, :'req1'),
   'approval writes the outing with approver as 담당 교사');
 select tests.expect_true(format($$(select status = 'approved' and decided_by = %L and decided_by_name = '김담임'
@@ -259,6 +260,16 @@ set role authenticated;
 select tests.expect_error($$select public.create_outing_request('또 나가요')$$, 'student already out cannot request', '%외출 중%');
 select tests.expect_count('select * from public.outings', 1, 'student sees own outing');
 reset role;
+
+-- 복귀 체크하면 외출 시각·사유·예상 복귀가 함께 비워진다
+select tests.login(:t13);
+set role authenticated;
+select tests.expect_affected(format($$update public.outings set status = 'in' where student_id = %L and date = public.today_kst()$$, :st1), 1, 'teacher marks return');
+select tests.expect_true(format($$(select start_time is null and reason is null and expected_return is null and request_id is null
+  from public.outings where student_id = %L and date = public.today_kst())$$, :st1), 'return clears start time and request fields');
+select tests.expect_affected(format($$update public.outings set status = 'out' where student_id = %L and date = public.today_kst()$$, :st1), 1, 'teacher marks out again');
+reset role;
+select tests.logout();
 
 -- ─────────────────────────── 반려 · 취소 ───────────────────────────
 select tests.login(:s2);

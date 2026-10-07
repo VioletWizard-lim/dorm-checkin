@@ -71,7 +71,8 @@ export function roomsById(rows) {
   return rooms;
 }
 
-// { [studentId]: { status, since(ms), reason, expectedReturn } }
+// { [studentId]: { status, since(ms), reason, startTime, expectedReturn } }
+// startTime = 학생이 신청한 외출 시각("19:00", 승인한 외출만). 교사가 직접 체크한 외출은 ""(since를 씀)
 export function outingsByStudent(rows) {
   const outings = {};
   for (const row of rows) {
@@ -79,6 +80,7 @@ export function outingsByStudent(rows) {
       status: row.status,
       since: Date.parse(row.since) || 0,
       reason: row.reason || "",
+      startTime: row.start_time || "",
       expectedReturn: row.expected_return || "",
     };
   }

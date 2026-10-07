@@ -25,15 +25,28 @@ test.describe("학생 화면", () => {
     await expect(page.locator("#statusBox .status-badge")).toHaveText("재실");
     await expect(page.locator("#requestList")).toContainText("오늘 신청한 외출이 없습니다.");
 
+    // 시·분은 끝에서 멈추는 목록(0~23시, 00~59분). 외출 시각 기본값은 지금, 복귀는 비어 있음
+    await expect(page.locator("#startHour option")).toHaveCount(24);
+    await expect(page.locator("#startMinute option")).toHaveCount(60);
+    await expect(page.locator("#startMinute option").first()).toHaveText("00분");
+    await expect(page.locator("#startMinute option").last()).toHaveText("59분");
+    await expect(page.locator("#startHour")).toHaveValue(/^([01]\d|2[0-3])$/);
+    await expect(page.locator("#returnHour")).toHaveValue("");
+
     await page.fill("#reasonInput", "병원 진료");
-    await page.fill("#returnInput", "17:30");
+    await page.selectOption("#startHour", "15");
+    await page.selectOption("#startMinute", "05");
+    await page.selectOption("#returnHour", "17");
+    await expect(page.locator("#returnMinute")).toHaveValue("00"); // 시만 고르면 분은 00
+    await page.selectOption("#returnMinute", "30");
     await page.click("#requestBtn");
     await expect(page.locator("#requestList .request-chip")).toHaveText(["승인 대기"]);
     await expect(page.locator("#requestList")).toContainText("병원 진료");
+    await expect(page.locator("#requestList")).toContainText("외출 15:05 · 예상 복귀 17:30");
     await expect(page.locator("#requestBtn")).toBeDisabled();
     await expect(page.locator("#requestHint")).toContainText("승인을 기다리는 신청이 있습니다");
     expect(await requestsOf(env, STUDENT.hong)).toMatchObject([
-      { status: "pending", reason: "병원 진료", expected_return: "17:30", date: todayKst() },
+      { status: "pending", reason: "병원 진료", start_time: "15:05", expected_return: "17:30", date: todayKst() },
     ]);
 
     await page.getByRole("button", { name: "신청 취소" }).click();
@@ -53,6 +66,13 @@ test.describe("학생 화면", () => {
     await expect(page.locator("#requestBtn")).toBeEnabled();
     await page.click("#requestBtn");
     await expect.poll(() => alerts).toEqual(["외출 사유를 입력해 주세요."]);
+
+    await page.fill("#reasonInput", "편의점");
+    await page.selectOption("#startHour", "18");
+    await page.selectOption("#startMinute", "00");
+    await page.selectOption("#returnHour", "17");
+    await page.click("#requestBtn");
+    await expect.poll(() => alerts.at(-1)).toBe("예상 복귀 시각은 외출 시각보다 늦어야 합니다.");
     expect(await requestsOf(env, STUDENT.hong)).toEqual([]);
 
     await env.createStudentAccount(STUDENT.jihun, "jihun_p");
@@ -95,33 +115,40 @@ test.describe("외출 신청 승인", () => {
     await env.createStudentAccount(STUDENT.hong, "hong123");
     const studentPage = await openOtherAs("hong123", "/student.html");
     await studentPage.fill("#reasonInput", "치과");
+    await studentPage.selectOption("#startHour", "19");
+    await studentPage.selectOption("#startMinute", "00");
+    await studentPage.selectOption("#returnHour", "21");
     await studentPage.click("#requestBtn");
     await expect(studentPage.locator("#requestList .request-chip")).toHaveText(["승인 대기"]);
 
     await openAs("homeroom01", "/check.html");
     await expect(page.locator("#requestPanel")).toBeVisible();
     await expect(page.locator("#requestCount")).toHaveText("1건");
-    await expect(requestRow(page, "홍길동")).toContainText("치과");
+    await expect(requestRow(page, "홍길동")).toContainText("치과 (19:00~21:00)");
     await expect(page.locator(".student-card", { hasText: "홍길동" }).locator(".pending-chip")).toHaveText("외출 신청 대기");
 
     await requestRow(page, "홍길동").getByRole("button", { name: "승인" }).click();
     await expect(page.locator("#requestPanel")).toBeHidden();
     await expect(page.locator(".student-card", { hasText: "홍길동" }).locator(".status-badge")).toHaveText("외출중");
+    await expect(page.locator(".student-card", { hasText: "홍길동" })).toContainText("19:00 외출중 · 치과 (~21:00)");
 
     const [request] = await requestsOf(env, STUDENT.hong);
     expect(request).toMatchObject({ status: "approved", decided_by_name: "김담임" });
     expect(await outingOf(env, STUDENT.hong)).toMatchObject({
       status: "out",
       reason: "치과",
+      start_time: "19:00",
+      expected_return: "21:00",
       request_id: request.id,
       checked_by_name: "김담임",
     });
     const sends = await page.evaluate(() => window.__emailjsSends);
-    expect(sends.map((s) => s.params)).toMatchObject([{ student_name: "홍길동", reason: "치과", teacher_id: "김담임" }]);
+    expect(sends.map((s) => s.params)).toMatchObject([{ student_name: "홍길동", reason: "치과", out_time: "19:00", return_time: "21:00", teacher_id: "김담임" }]);
 
     await expect(studentPage.locator("#requestList .request-chip")).toHaveText(["승인됨"]);
     await expect(studentPage.locator("#requestList")).toContainText("김담임 선생님 승인");
     await expect(studentPage.locator("#statusBox .status-badge")).toHaveText("외출중");
+    await expect(studentPage.locator("#statusBox")).toContainText("19:00부터 외출 중");
     await expect(studentPage.locator("#requestHint")).toContainText("이미 외출 중입니다");
   });
 

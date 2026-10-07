@@ -18,7 +18,11 @@ const todayDateEl = document.getElementById("todayDate");
 const statusBox = document.getElementById("statusBox");
 const requestForm = document.getElementById("requestForm");
 const reasonInput = document.getElementById("reasonInput");
-const returnInput = document.getElementById("returnInput");
+const startHour = document.getElementById("startHour");
+const startMinute = document.getElementById("startMinute");
+const returnHour = document.getElementById("returnHour");
+const returnMinute = document.getElementById("returnMinute");
+const timeSelects = [startHour, startMinute, returnHour, returnMinute];
 const requestBtn = document.getElementById("requestBtn");
 const requestHint = document.getElementById("requestHint");
 const requestListEl = document.getElementById("requestList");
@@ -63,6 +67,52 @@ function formatTime(value) {
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
+// 시·분 선택 칸. 목록이 끝에서 멈추도록 <select>를 쓴다(브라우저 시간 선택기는 분이 계속 돌아감).
+function fillTimeSelect(select, count, unit, blankLabel) {
+  const options = blankLabel ? [`<option value="">${blankLabel}</option>`] : [];
+  for (let i = 0; i < count; i += 1) {
+    const value = String(i).padStart(2, "0");
+    options.push(`<option value="${value}">${value}${unit}</option>`);
+  }
+  select.innerHTML = options.join("");
+}
+fillTimeSelect(startHour, 24, "시");
+fillTimeSelect(startMinute, 60, "분");
+fillTimeSelect(returnHour, 24, "시", "-- 시");
+fillTimeSelect(returnMinute, 60, "분", "-- 분");
+
+// 외출 시각 기본값 = 지금
+function resetTimeSelects() {
+  const now = new Date();
+  startHour.value = String(now.getHours()).padStart(2, "0");
+  startMinute.value = String(now.getMinutes()).padStart(2, "0");
+  returnHour.value = "";
+  returnMinute.value = "";
+}
+resetTimeSelects();
+
+// 화면을 오래 켜 두었다가 다시 보면 외출 시각 기본값을 지금으로 다시 맞춘다(직접 고친 뒤에는 그대로).
+let startTouched = false;
+startHour.addEventListener("change", () => (startTouched = true));
+startMinute.addEventListener("change", () => (startTouched = true));
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && !startTouched && !state.submitting) {
+    const keepReturn = [returnHour.value, returnMinute.value];
+    resetTimeSelects();
+    [returnHour.value, returnMinute.value] = keepReturn;
+  }
+});
+
+// 복귀 시각은 시만 골라도 되게(분은 00), 시를 비우면 분도 비운다.
+returnHour.addEventListener("change", () => {
+  if (!returnHour.value) returnMinute.value = "";
+  else if (!returnMinute.value) returnMinute.value = "00";
+});
+returnMinute.addEventListener("change", () => {
+  if (returnMinute.value && !returnHour.value) returnHour.value = startHour.value;
+  if (!returnMinute.value) returnHour.value = "";
+});
+
 function formatToday() {
   const days = ["일", "월", "화", "수", "목", "금", "토"];
   const now = new Date();
@@ -91,7 +141,7 @@ function renderStatus() {
     detail = `${leave.from} ~ ${leave.to} 명령퇴사 기간입니다.${leave.reason ? ` (${leave.reason})` : ""}`;
   } else if (status === "out") {
     const o = state.outing;
-    const parts = [`${formatTime(o.since)}부터 외출 중`];
+    const parts = [`${o.start_time || formatTime(o.since)}부터 외출 중`];
     if (o.reason) parts.push(`사유: ${o.reason}`);
     if (o.expected_return) parts.push(`예상 복귀 ${o.expected_return}`);
     if (o.checked_by_name) parts.push(`${o.checked_by_name} 선생님 확인`);
@@ -120,7 +170,7 @@ function renderForm() {
   const blocked = blockedReason();
   const ready = state.requestsLoaded && !state.submitting;
   reasonInput.disabled = Boolean(blocked);
-  returnInput.disabled = Boolean(blocked);
+  for (const select of timeSelects) select.disabled = Boolean(blocked);
   requestBtn.disabled = !ready || Boolean(blocked);
   requestBtn.textContent = state.submitting ? "신청 중..." : "외출 신청";
   requestHint.textContent = blocked || "담임 선생님(또는 학년부장·기숙사부 선생님)이 승인하면 바로 외출로 처리됩니다.";
@@ -136,7 +186,10 @@ function renderRequests() {
   requestListEl.innerHTML = requests
     .map((r) => {
       const meta = REQUEST_META[r.status] || REQUEST_META.pending;
-      const lines = [`신청 ${formatTime(r.created_at)}${r.expected_return ? ` · 예상 복귀 ${r.expected_return}` : ""}`];
+      const times = [];
+      if (r.start_time) times.push(`외출 ${r.start_time}`);
+      if (r.expected_return) times.push(`예상 복귀 ${r.expected_return}`);
+      const lines = [[`신청 ${formatTime(r.created_at)}`, ...times].join(" · ")];
       if (r.status === "approved") lines.push(`${formatTime(r.decided_at)} ${r.decided_by_name || ""} 선생님 승인`);
       if (r.status === "rejected") {
         lines.push(`${formatTime(r.decided_at)} ${r.decided_by_name || ""} 선생님 반려${r.reject_reason ? ` · 사유: ${r.reject_reason}` : ""}`);
@@ -174,11 +227,19 @@ requestForm.addEventListener("submit", async (event) => {
     reasonInput.focus();
     return;
   }
+  const startTime = `${startHour.value}:${startMinute.value}`;
+  const expectedReturn = returnHour.value ? `${returnHour.value}:${returnMinute.value || "00"}` : "";
+  if (expectedReturn && expectedReturn <= startTime) {
+    alert("예상 복귀 시각은 외출 시각보다 늦어야 합니다.");
+    returnHour.focus();
+    return;
+  }
   state.submitting = true;
   renderForm();
   const { error } = await supabase.rpc("create_outing_request", {
     p_reason: reason,
-    p_expected_return: returnInput.value || null,
+    p_start_time: startTime,
+    p_expected_return: expectedReturn || null,
   });
   if (error) {
     state.submitting = false;
@@ -187,7 +248,8 @@ requestForm.addEventListener("submit", async (event) => {
     return;
   }
   reasonInput.value = "";
-  returnInput.value = "";
+  resetTimeSelects();
+  startTouched = false;
   if (requestsLive) await requestsLive.refresh();
   state.submitting = false;
   render();

@@ -99,6 +99,12 @@ function deriveClsFromSid(sid) {
 // 엑셀에서 복사한 줄: 이름 · 학번 · ID · 학생 연락처 · 학부모 연락처 · 이메일(학번 뒤는 선택, 빈 칸 가능).
 // 예전 형식("이름 학번 이메일")도 세 번째 칸에 @가 있으면 이메일로 읽는다.
 // 지금 학년에 같은 학번이 있으면 새로 추가하지 않고 그 학생의 정보를 갱신한다(existingId).
+// 학번 마지막 2자리 = 번호 (예: "10305" → 5)
+function deriveNumberFromSid(sid) {
+  const match = /^\d{3}(\d{2})$/.exec((sid || "").trim());
+  return match ? String(Number(match[1])) : "";
+}
+
 function parseBulkInput(text, classRestriction, studentsInGrade) {
   const rows = [];
   const errors = [];
@@ -225,12 +231,8 @@ function renderRoster() {
         : leave && leave.from && leave.to
           ? `<div class="since-text">명령퇴사 예정: ${escapeHtml(leave.from)} ~ ${escapeHtml(leave.to)}</div>`
           : "";
-      const contacts = [
-        s.loginId ? `ID ${s.loginId}` : "",
-        s.phone ? `학생 ${formatPhone(s.phone)}` : "",
-        s.parentPhone ? `학부모 ${formatPhone(s.parentPhone)}` : "",
-        s.email,
-      ].filter(Boolean);
+      // 목록에는 학번·이름·반·번호만 보여준다(ID·연락처·이메일은 "수정"을 눌러야 보임).
+      const seatNo = deriveNumberFromSid(s.sid);
       const hasAccount = Boolean(state.accounts[id]);
       const accountChip = hasAccount
         ? `<span class="account-chip account-chip--active">계정 있음</span>`
@@ -246,8 +248,7 @@ function renderRoster() {
           <div class="student-avatar ${onLeave ? "student-avatar--leave" : "student-avatar--in"}">${escapeHtml((s.name || "?").charAt(0))}</div>
           <div class="student-info">
             <div class="student-name">${escapeHtml(s.name || "이름 없음")}</div>
-            <div class="student-meta">학번 ${escapeHtml(s.sid || "-")} · ${escapeHtml(s.cls || "-")}</div>
-            ${contacts.length > 0 ? `<div class="student-meta">${escapeHtml(contacts.join(" · "))}</div>` : ""}
+            <div class="student-meta">학번 ${escapeHtml(s.sid || "-")} · ${escapeHtml(s.cls || "-")}${seatNo ? ` ${seatNo}번` : ""}</div>
           </div>
           <div class="day-pill-row">${days}</div>
           ${leaveBadge}

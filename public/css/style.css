@@ -1413,6 +1413,28 @@ input {
   outline: none;
 }
 
+.time-select {
+  display: flex;
+  gap: 8px;
+}
+
+/* 시·분 목록(0~23, 0~59)은 끝에서 멈춘다 — 브라우저 시간 선택기는 분이 계속 돌아서 대신 씀 */
+.student-form .time-select select {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--color-input-border);
+  font-size: 16px; /* iOS 확대 방지 */
+  color: var(--color-text);
+  background: var(--color-card-bg);
+  outline: none;
+}
+
+.student-form .time-select select:focus {
+  border-color: var(--color-active);
+}
+
 .student-form .field input:focus {
   border-color: var(--color-active);
 }
