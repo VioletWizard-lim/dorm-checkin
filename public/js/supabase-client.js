@@ -10,7 +10,7 @@ export function staffEmail(loginId) {
   return `${String(loginId).trim().toLowerCase()}@${STAFF_EMAIL_DOMAIN}`;
 }
 
-// 학생은 리로스쿨 ID로 로그인한다.
+// 학생은 학생 명단에 등록된 ID로 로그인한다.
 export function studentEmail(loginId) {
   return `${String(loginId).trim().toLowerCase()}@${STUDENT_EMAIL_DOMAIN}`;
 }

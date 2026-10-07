@@ -117,7 +117,7 @@ Deno.test("issue reports missing ids, other classes, existing accounts and unkno
     deps,
   ) as { results: unknown[] };
   assertEquals(result.results, [
-    { studentId: "s-noid", ok: false, error: "리로스쿨 ID가 등록되지 않았습니다." },
+    { studentId: "s-noid", ok: false, error: "ID가 등록되지 않았습니다." },
     { studentId: "s-other", ok: false, error: "이 학생의 계정을 관리할 권한이 없습니다." },
     { studentId: "s-done", ok: false, error: "이미 계정이 있습니다." },
     { studentId: "s-missing", ok: false, error: "학생을 찾을 수 없습니다." },

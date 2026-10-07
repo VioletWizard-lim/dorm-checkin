@@ -2,7 +2,7 @@ import { supabase, staffEmail, studentEmail } from "./supabase-client.js";
 
 const MODE_STORAGE_KEY = "dormcheckin.loginMode";
 
-// 교사/학생 탭별 설정. 학생 아이디는 리로스쿨 ID(영문·숫자와 . _ -).
+// 교사/학생 탭별 설정. 학생 아이디는 영문·숫자와 . _ -
 const MODES = {
   staff: {
     idStorageKey: "dormcheckin.savedUserId",
@@ -18,10 +18,10 @@ const MODES = {
   student: {
     idStorageKey: "dormcheckin.savedStudentId",
     idPattern: /^[A-Za-z0-9._-]+$/,
-    idPatternMessage: "리로스쿨 아이디는 영문·숫자와 . _ - 만 사용할 수 있습니다.",
-    idLabel: "리로스쿨 아이디",
-    idPlaceholder: "리로스쿨 아이디 입력",
-    subtitle: "리로스쿨 아이디로 로그인해 주세요",
+    idPatternMessage: "아이디는 영문·숫자와 . _ - 만 사용할 수 있습니다.",
+    idLabel: "아이디",
+    idPlaceholder: "아이디 입력",
+    subtitle: "학생 계정으로 로그인해 주세요",
     footer: "계정이 없거나 비밀번호를 잊었으면 담임 선생님께 말씀해 주세요.",
     toEmail: studentEmail,
     target: "./student.html",

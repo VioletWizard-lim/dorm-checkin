@@ -1,5 +1,5 @@
 // 학생 계정 관리 — 그 학생의 명단을 관리할 수 있는 교직원만(관리자·기숙사부 전체, 학년부장 담당 학년, 담임 담당 반).
-//   issue          : 계정 발급(여러 명). 아이디 = 학생 명단의 리로스쿨 ID, 초기 비밀번호 = 6자리 숫자(응답으로 한 번만 돌려줌)
+//   issue          : 계정 발급(여러 명). 아이디 = 학생 명단의 ID, 초기 비밀번호 = 6자리 숫자(응답으로 한 번만 돌려줌)
 //   reset-password : 새 6자리 비밀번호 발급(응답으로 한 번만 돌려줌)
 //   delete         : 계정 삭제(로그인 정보 + 프로필). withStudent가 true면 학생 명단에서도 지운다
 // 외부 호출(Auth Admin API, 테이블)은 deps로 받아서 테스트에서 가짜로 바꿀 수 있게 한다.
@@ -91,7 +91,7 @@ async function issueAccounts(raw: unknown, deps: StudentAccountsDeps): Promise<I
     }
     const loginId = normalizeStudentId(student.login_id);
     if (!loginId) {
-      results.push({ studentId, ok: false, error: "리로스쿨 ID가 등록되지 않았습니다." });
+      results.push({ studentId, ok: false, error: "ID가 등록되지 않았습니다." });
       continue;
     }
 

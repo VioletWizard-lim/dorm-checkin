@@ -96,7 +96,7 @@ function deriveClsFromSid(sid) {
   return `${grade}학년 ${Number(cls)}반`;
 }
 
-// 엑셀에서 복사한 줄: 이름 · 학번 · 리로스쿨 ID · 학생 연락처 · 학부모 연락처 · 이메일(학번 뒤는 선택, 빈 칸 가능).
+// 엑셀에서 복사한 줄: 이름 · 학번 · ID · 학생 연락처 · 학부모 연락처 · 이메일(학번 뒤는 선택, 빈 칸 가능).
 // 예전 형식("이름 학번 이메일")도 세 번째 칸에 @가 있으면 이메일로 읽는다.
 // 지금 학년에 같은 학번이 있으면 새로 추가하지 않고 그 학생의 정보를 갱신한다(existingId).
 function parseBulkInput(text, classRestriction, studentsInGrade) {
@@ -125,7 +125,7 @@ function parseBulkInput(text, classRestriction, studentsInGrade) {
     const phone = normalizePhone(rawPhone);
     const parentPhone = normalizePhone(rawParentPhone);
     if (loginId === null) {
-      errors.push(`${label}: 리로스쿨 ID는 영문·숫자와 . _ - 만 쓸 수 있습니다 ("${rawLoginId}").`);
+      errors.push(`${label}: ID는 영문·숫자와 . _ - 만 쓸 수 있습니다 ("${rawLoginId}").`);
       return;
     }
     if (phone === null || parentPhone === null) {
@@ -133,7 +133,7 @@ function parseBulkInput(text, classRestriction, studentsInGrade) {
       return;
     }
     if (loginId && seenLoginIds.has(loginId)) {
-      errors.push(`${label}: 리로스쿨 ID ${loginId}이(가) 위에 이미 있습니다.`);
+      errors.push(`${label}: ID ${loginId}이(가) 위에 이미 있습니다.`);
       return;
     }
     const existing = existingBySid.get(sid) || null;
@@ -380,10 +380,10 @@ function renderBulkPreview() {
   bulkSaveBtn.textContent = `일괄 저장 (${rows.length}명)`;
 }
 
-// 같은 리로스쿨 ID가 이미 다른 학생에게 있을 때(unique 제약) 알아보기 쉬운 문장으로
+// 같은 ID가 이미 다른 학생에게 있을 때(unique 제약) 알아보기 쉬운 문장으로
 function describeStudentSaveError(error) {
   if (error && error.code === "23505" && /login_id/.test(String(error.message || error.details || ""))) {
-    return "이미 다른 학생이 쓰는 리로스쿨 ID입니다.";
+    return "이미 다른 학생이 쓰는 ID입니다.";
   }
   return describeError(error);
 }
@@ -599,7 +599,7 @@ async function deleteAccount(studentId, btn) {
   }
 }
 
-// 지금 보이는 학년(담임은 담당 반)에서 리로스쿨 ID가 있고 계정이 아직 없는 학생
+// 지금 보이는 학년(담임은 담당 반)에서 ID가 있고 계정이 아직 없는 학생
 function getIssuableStudentIds() {
   const classRestriction = getClassRestriction(state.activeGrade);
   return Object.entries(state.studentsByGrade[state.activeGrade] || {})
@@ -617,7 +617,7 @@ function renderBulkIssueButton() {
 bulkIssueBtn.addEventListener("click", async () => {
   const ids = getIssuableStudentIds();
   if (ids.length === 0) return;
-  if (!confirm(`리로스쿨 ID가 등록되어 있고 계정이 없는 ${ids.length}명의 계정을 발급할까요?`)) return;
+  if (!confirm(`ID가 등록되어 있고 계정이 없는 ${ids.length}명의 계정을 발급할까요?`)) return;
   await issueAccounts(ids, bulkIssueBtn);
   renderBulkIssueButton();
 });
@@ -696,7 +696,7 @@ studentForm.addEventListener("submit", async (event) => {
 
   const loginId = normalizeLoginId(inputLoginId.value);
   if (loginId === null) {
-    alert("리로스쿨 ID는 영문·숫자와 . _ - 만 쓸 수 있습니다(64자 이하).");
+    alert("ID는 영문·숫자와 . _ - 만 쓸 수 있습니다(64자 이하).");
     return;
   }
   const phone = normalizePhone(inputPhone.value);

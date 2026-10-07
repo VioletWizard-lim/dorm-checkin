@@ -14,7 +14,7 @@ export function studentFromRow(row) {
     sid: row.sid || "",
     cls: row.cls || "",
     email: row.email || "",
-    loginId: row.login_id || "", // 리로스쿨 ID(학생 로그인 아이디)
+    loginId: row.login_id || "", // ID(학생 로그인 아이디)
     phone: row.phone || "",
     parentPhone: row.parent_phone || "",
     afterschoolDays: EMPTY_DAYS.map((_, i) => days[i] === true),
@@ -130,7 +130,7 @@ export function formatPhone(digits) {
     : `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
 }
 
-// 리로스쿨 ID: 소문자로 바꿔 영문·숫자·. _ - 64자 이하면 그 값, 비어 있으면 "", 형식이 틀리면 null
+// ID: 소문자로 바꿔 영문·숫자·. _ - 64자 이하면 그 값, 비어 있으면 "", 형식이 틀리면 null
 // (supabase/functions/_shared/accounts.ts의 normalizeStudentId, DB 제약과 같은 규칙)
 export function normalizeLoginId(raw) {
   const value = String(raw || "").trim().toLowerCase();

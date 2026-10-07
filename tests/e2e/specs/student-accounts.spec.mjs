@@ -61,7 +61,7 @@ test.describe("학생 계정 관리(학생 명단 화면)", () => {
     await expect(page.locator("#bulkIssueBtn")).toHaveText("계정 일괄 발급 (1명)");
   });
 
-  test("계정이 있으면 리로스쿨 ID를 바꿀 수 없고, 형식·중복은 저장 전에 막는다", async ({ env, openAs, page }) => {
+  test("계정이 있으면 ID를 바꿀 수 없고, 형식·중복은 저장 전에 막는다", async ({ env, openAs, page }) => {
     const alerts = collectAlerts(page);
     await env.createStudentAccount(STUDENT.hong, "hong123");
     await openAs("dorm01", "/students.html");
@@ -74,7 +74,7 @@ test.describe("학생 계정 관리(학생 명단 화면)", () => {
     await expect(page.locator("#inputLoginId")).toBeEnabled();
     await page.fill("#inputLoginId", "최하늘");
     await page.click("#submitFormBtn");
-    await expect.poll(() => alerts.at(-1)).toContain("리로스쿨 ID는 영문·숫자와 . _ - 만");
+    await expect.poll(() => alerts.at(-1)).toContain("ID는 영문·숫자와 . _ - 만");
     await page.fill("#inputLoginId", "Haneul.C");
     await page.fill("#inputPhone", "02-123-4567");
     await page.click("#submitFormBtn");
@@ -88,7 +88,7 @@ test.describe("학생 계정 관리(학생 명단 화면)", () => {
     await rosterCard(page, "김민준").getByRole("button", { name: "수정" }).click();
     await page.fill("#inputLoginId", "haneul.c");
     await page.click("#submitFormBtn");
-    await expect.poll(() => alerts.at(-1)).toBe("저장하지 못했습니다: 이미 다른 학생이 쓰는 리로스쿨 ID입니다.");
+    await expect.poll(() => alerts.at(-1)).toBe("저장하지 못했습니다: 이미 다른 학생이 쓰는 ID입니다.");
     expect((await studentRow(env, STUDENT.minjun)).login_id).toBeNull();
   });
 
@@ -138,7 +138,7 @@ test("학생 탭: 마지막으로 고른 탭과 아이디를 기억하고, 교�
   await env.createStudentAccount(STUDENT.hong, "hong123");
   await page.goto("/login.html");
   await page.click("[data-login-mode='student']");
-  await expect(page.locator("#userIdLabel")).toHaveText("리로스쿨 아이디");
+  await expect(page.locator("#loginSubtitle")).toHaveText("학생 계정으로 로그인해 주세요");
   await page.fill("#userId", "teacher01");
   await page.fill("#password", PASSWORD);
   await page.click("#submitBtn");
