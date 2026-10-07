@@ -14,6 +14,9 @@ export function studentFromRow(row) {
     sid: row.sid || "",
     cls: row.cls || "",
     email: row.email || "",
+    loginId: row.login_id || "", // 리로스쿨 ID(학생 로그인 아이디)
+    phone: row.phone || "",
+    parentPhone: row.parent_phone || "",
     afterschoolDays: EMPTY_DAYS.map((_, i) => days[i] === true),
   };
   if (row.leave_from && row.leave_to) {
@@ -41,6 +44,9 @@ export function studentToRow(grade, data) {
     sid: data.sid,
     cls: data.cls,
     email: data.email || null,
+    login_id: data.loginId || null,
+    phone: data.phone || null,
+    parent_phone: data.parentPhone || null,
     afterschool_days: EMPTY_DAYS.map((_, i) => Boolean((data.afterschoolDays || [])[i])),
     leave_from: leave ? leave.from : null,
     leave_to: leave ? leave.to : null,
@@ -108,4 +114,26 @@ export function managedClassesToRows(classesByGrade) {
     for (const cls of classesByGrade[grade] || []) rows.push({ grade: Number(grade), cls });
   }
   return rows;
+}
+
+// 휴대폰 번호: 숫자만 남겨 01로 시작하는 10~11자리면 그 값, 비어 있으면 "", 형식이 틀리면 null
+export function normalizePhone(raw) {
+  const digits = String(raw || "").replace(/[^0-9]/g, "");
+  if (!digits) return "";
+  return /^01[0-9]{8,9}$/.test(digits) ? digits : null;
+}
+
+export function formatPhone(digits) {
+  if (!digits) return "";
+  return digits.length === 11
+    ? `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`
+    : `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
+// 리로스쿨 ID: 소문자로 바꿔 영문·숫자·. _ - 64자 이하면 그 값, 비어 있으면 "", 형식이 틀리면 null
+// (supabase/functions/_shared/accounts.ts의 normalizeStudentId, DB 제약과 같은 규칙)
+export function normalizeLoginId(raw) {
+  const value = String(raw || "").trim().toLowerCase();
+  if (!value) return "";
+  return /^[a-z0-9._-]{1,64}$/.test(value) ? value : null;
 }

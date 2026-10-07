@@ -37,3 +37,20 @@ export function collectAlerts(page) {
   });
   return alerts;
 }
+
+// 별도 창에서 로그인 화면으로 로그인해 보고 결과("ok" 또는 오류 문구)를 돌려준다. student: true면 학생 탭에서.
+export async function tryLogin(openOtherAs, loginId, password, { student = false } = {}) {
+  const page = await openOtherAs(null, "/login.html");
+  if (student) await page.click("[data-login-mode='student']");
+  await page.fill("#userId", loginId);
+  await page.fill("#password", password);
+  await page.click("#submitBtn");
+  const target = student ? /student\.html$/ : /check\.html$/;
+  await Promise.race([
+    page.waitForURL(target, { timeout: 8000 }).catch(() => {}),
+    page.locator("#errorBox").waitFor({ state: "visible", timeout: 8000 }).catch(() => {}),
+  ]);
+  return target.test(page.url()) ? "ok" : await page.locator("#errorBox").textContent();
+}
+
+export const WRONG_LOGIN = "아이디 또는 비밀번호가 올바르지 않습니다. 교사/학생 탭이 맞는지도 확인해 주세요.";

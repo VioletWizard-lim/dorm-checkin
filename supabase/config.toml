@@ -5,3 +5,6 @@ project_id = "dorm-checkin"
 # 새 JWT 서명 키와 호환되도록 게이트웨이 검증은 끄고, 함수 안에서 호출자를 직접 확인한다(_shared/supabase.ts getCaller).
 [functions.staff-accounts]
 verify_jwt = false
+
+[functions.student-accounts]
+verify_jwt = false

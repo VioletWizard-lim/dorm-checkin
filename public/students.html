@@ -15,7 +15,7 @@
   <header class="check-header">
     <div class="check-header__titles">
       <div class="check-header__title">학생 명단 관리</div>
-      <div class="check-header__subtitle">학년별 명단과 방과후 요일을 등록·수정합니다</div>
+      <div class="check-header__subtitle">학년별 명단·방과후 요일·학생 계정을 관리합니다</div>
     </div>
     <div class="check-header__meta">
       <a href="./check.html" class="back-link">← 체크 화면으로</a>
@@ -34,6 +34,7 @@
   <div class="roster-toolbar">
     <div class="filter-chips" id="gradeTabs"><span class="loading-hint">불러오는 중...</span></div>
     <div class="roster-toolbar__actions">
+      <button type="button" class="btn-secondary" id="bulkIssueBtn" disabled>계정 일괄 발급</button>
       <button type="button" class="btn-secondary" id="bulkAddBtn" disabled>여러 명 한번에 추가</button>
       <button type="button" class="btn-add" id="addStudentBtn" disabled>+ 학생 추가</button>
     </div>
@@ -55,6 +56,21 @@
           <label for="inputCls">반</label>
           <input id="inputCls" type="text" placeholder="예: 1학년 3반" autocomplete="off">
           <span class="field-hint">학번 입력 시 자동으로 채워집니다. 필요하면 직접 수정하세요.</span>
+        </div>
+      </div>
+      <div class="roster-form__row">
+        <div class="field">
+          <label for="inputLoginId">리로스쿨 ID (학생 로그인 아이디)</label>
+          <input id="inputLoginId" type="text" placeholder="예: hong123" autocomplete="off" autocapitalize="off" spellcheck="false">
+          <span class="field-hint" id="loginIdHint">계정을 발급하면 학생이 이 아이디로 로그인합니다.</span>
+        </div>
+        <div class="field">
+          <label for="inputPhone">학생 연락처</label>
+          <input id="inputPhone" type="tel" placeholder="예: 010-1234-5678" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="inputParentPhone">학부모 연락처</label>
+          <input id="inputParentPhone" type="tel" placeholder="예: 010-1234-5678" autocomplete="off">
         </div>
       </div>
       <div class="field">
@@ -92,14 +108,25 @@
     <div class="roster-form">
       <div class="field">
         <label for="bulkInput">여러 명 붙여넣기</label>
-        <span class="field-hint">한 줄에 한 명씩 "이름 학번" 또는 "이름 학번 이메일" 형식입니다. 엑셀에서 해당 열들을 선택해 그대로 복사·붙여넣기 하면 됩니다. 반은 학번으로 자동 계산됩니다.</span>
-        <textarea id="bulkInput" rows="8" placeholder="홍길동	10305	student1@example.com
+        <span class="field-hint">한 줄에 한 명씩 "이름 · 학번 · 리로스쿨 ID · 학생 연락처 · 학부모 연락처 · 이메일" 순서입니다(학번 뒤는 모두 선택, 빈 칸 가능). 엑셀에서 열을 이 순서로 선택해 그대로 복사·붙여넣기 하면 됩니다. 반은 학번으로 자동 계산되고, 이미 있는 학번이면 새로 추가하지 않고 입력한 정보만 갱신합니다.</span>
+        <textarea id="bulkInput" rows="8" placeholder="홍길동	10305	hong123	010-1234-5678	010-9876-5432	hong@example.com
 김민준	10312"></textarea>
       </div>
       <div class="bulk-preview" id="bulkPreview"></div>
       <div class="roster-form__actions">
         <button type="button" class="btn-secondary" id="cancelBulkFormBtn">취소</button>
         <button type="button" class="btn-add" id="bulkSaveBtn" disabled>일괄 저장 (0명)</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="roster-form-wrap" id="accountResultWrap" hidden>
+    <div class="roster-form">
+      <div class="alert alert-notice">학생 비밀번호는 이 화면에서만 확인할 수 있고 새로고침하면 다시 볼 수 없습니다. 지금 복사해서 학생에게 전달해 주세요.</div>
+      <div id="accountResultList"></div>
+      <div class="field">
+        <label for="accountResultCopy">엑셀에 붙여넣기용 (이름 · 학번 · 아이디 · 비밀번호)</label>
+        <textarea id="accountResultCopy" rows="4" readonly></textarea>
       </div>
     </div>
   </div>

@@ -1,6 +1,16 @@
-import { supabase, requireStaff, signOutTo, describeError, showPageError } from "./supabase-client.js";
+import { supabase, requireStaff, signOutTo, describeError, showPageError, callFunction } from "./supabase-client.js";
 import { liveTable } from "./live-table.js";
-import { GRADES as ALL_GRADES, groupStudentsByGrade, studentToRow } from "./adapters.js";
+import {
+  GRADES as ALL_GRADES,
+  formatPhone,
+  groupStudentsByGrade,
+  normalizeLoginId,
+  normalizePhone,
+  studentToRow,
+} from "./adapters.js";
+
+// 학생 계정 발급 요청 한 번에 보낼 최대 인원(student-accounts 함수 제한)
+const MAX_ACCOUNTS_PER_REQUEST = 200;
 
 const DAY_LABELS = ["월", "화", "수", "목", "금"];
 
@@ -25,6 +35,14 @@ const inputLeaveTo = document.getElementById("inputLeaveTo");
 const inputLeaveReason = document.getElementById("inputLeaveReason");
 const cancelFormBtn = document.getElementById("cancelFormBtn");
 const submitFormBtn = document.getElementById("submitFormBtn");
+const inputLoginId = document.getElementById("inputLoginId");
+const loginIdHint = document.getElementById("loginIdHint");
+const inputPhone = document.getElementById("inputPhone");
+const inputParentPhone = document.getElementById("inputParentPhone");
+const bulkIssueBtn = document.getElementById("bulkIssueBtn");
+const accountResultWrap = document.getElementById("accountResultWrap");
+const accountResultList = document.getElementById("accountResultList");
+const accountResultCopy = document.getElementById("accountResultCopy");
 
 function getDateKey(date = new Date()) {
   const y = date.getFullYear();
@@ -50,6 +68,7 @@ const bulkSaveBtn = document.getElementById("bulkSaveBtn");
 const cancelBulkFormBtn = document.getElementById("cancelBulkFormBtn");
 let bulkPreviewRows = [];
 let studentsLive = null;
+let accountsLive = null;
 
 const state = {
   allowedGrades: [],
@@ -58,6 +77,9 @@ const state = {
   allowedClassesByGrade: {}, // { [grade]: string[] } — 비어있으면 그 학년 전체 담당
   dayFlags: [false, false, false, false, false],
   clsManuallyEdited: false,
+  accounts: {}, // { [studentId]: { loginId } } — 학생 계정(profiles, kind = 'student')
+  accountsLoaded: false,
+  accountResults: [], // 이 화면에서 발급·재발급한 비밀번호(새로고침 전까지만 보여줌)
 };
 
 // 해당 학년에 반 단위 제한이 있으면 허용된 반 목록을, 없으면(학년 전체 담당) null을 반환
@@ -74,27 +96,64 @@ function deriveClsFromSid(sid) {
   return `${grade}학년 ${Number(cls)}반`;
 }
 
-function parseBulkInput(text, classRestriction) {
+// 엑셀에서 복사한 줄: 이름 · 학번 · 리로스쿨 ID · 학생 연락처 · 학부모 연락처 · 이메일(학번 뒤는 선택, 빈 칸 가능).
+// 예전 형식("이름 학번 이메일")도 세 번째 칸에 @가 있으면 이메일로 읽는다.
+// 지금 학년에 같은 학번이 있으면 새로 추가하지 않고 그 학생의 정보를 갱신한다(existingId).
+function parseBulkInput(text, classRestriction, studentsInGrade) {
   const rows = [];
   const errors = [];
+  const existingBySid = new Map(Object.entries(studentsInGrade || {}).map(([id, s]) => [s.sid, { id, ...s }]));
+  const seenSids = new Set();
+  const seenLoginIds = new Set();
   text.split(/\r?\n/).forEach((line, i) => {
     const trimmed = line.trim();
     if (!trimmed) return;
-    const parts = trimmed
-      .split(/\t|,/)
-      .map((p) => p.trim())
-      .filter((p) => p !== "");
-    const [name, sid, email] = parts;
+    const parts = (trimmed.includes("\t") ? trimmed.split("\t") : trimmed.split(",")).map((p) => p.trim());
+    const [name, sid] = parts;
+    const legacy = (parts[2] || "").includes("@");
+    const [rawLoginId, rawPhone, rawParentPhone, rawEmail] = legacy ? ["", "", "", parts[2]] : parts.slice(2);
+    const label = `${i + 1}번째 줄`;
     if (!name || !sid) {
-      errors.push(`${i + 1}번째 줄을 확인해 주세요: "${trimmed}"`);
+      errors.push(`${label}을 확인해 주세요: "${trimmed}"`);
       return;
     }
-    const cls = deriveClsFromSid(sid) || "";
+    if (seenSids.has(sid)) {
+      errors.push(`${label}: 학번 ${sid}이(가) 위에 이미 있습니다.`);
+      return;
+    }
+    const loginId = normalizeLoginId(rawLoginId);
+    const phone = normalizePhone(rawPhone);
+    const parentPhone = normalizePhone(rawParentPhone);
+    if (loginId === null) {
+      errors.push(`${label}: 리로스쿨 ID는 영문·숫자와 . _ - 만 쓸 수 있습니다 ("${rawLoginId}").`);
+      return;
+    }
+    if (phone === null || parentPhone === null) {
+      errors.push(`${label}: 연락처는 010으로 시작하는 휴대폰 번호로 입력해 주세요.`);
+      return;
+    }
+    if (loginId && seenLoginIds.has(loginId)) {
+      errors.push(`${label}: 리로스쿨 ID ${loginId}이(가) 위에 이미 있습니다.`);
+      return;
+    }
+    const existing = existingBySid.get(sid) || null;
+    const cls = existing ? existing.cls : deriveClsFromSid(sid) || "";
     if (classRestriction && cls && !classRestriction.includes(cls)) {
-      errors.push(`${i + 1}번째 줄: "${name}"(${cls})은(는) 담당 반(${classRestriction.join(", ")})이 아닙니다.`);
+      errors.push(`${label}: "${name}"(${cls})은(는) 담당 반(${classRestriction.join(", ")})이 아닙니다.`);
       return;
     }
-    rows.push({ name, sid, cls, email: email || "" });
+    seenSids.add(sid);
+    if (loginId) seenLoginIds.add(loginId);
+    rows.push({
+      existingId: existing ? existing.id : null,
+      name,
+      sid,
+      cls,
+      loginId,
+      phone,
+      parentPhone,
+      email: (rawEmail || "").trim(),
+    });
   });
   return { rows, errors };
 }
@@ -166,17 +225,35 @@ function renderRoster() {
         : leave && leave.from && leave.to
           ? `<div class="since-text">명령퇴사 예정: ${escapeHtml(leave.from)} ~ ${escapeHtml(leave.to)}</div>`
           : "";
+      const contacts = [
+        s.loginId ? `ID ${s.loginId}` : "",
+        s.phone ? `학생 ${formatPhone(s.phone)}` : "",
+        s.parentPhone ? `학부모 ${formatPhone(s.parentPhone)}` : "",
+        s.email,
+      ].filter(Boolean);
+      const hasAccount = Boolean(state.accounts[id]);
+      const accountChip = hasAccount
+        ? `<span class="account-chip account-chip--active">계정 있음</span>`
+        : `<span class="account-chip">${s.loginId ? "계정 없음" : "ID 미등록"}</span>`;
+      const accountButtons = hasAccount
+        ? `<button type="button" class="btn-secondary btn-small" data-reset-account="${escapeHtml(id)}">비번 재발급</button>
+           <button type="button" class="btn-secondary btn-small" data-delete-account="${escapeHtml(id)}">계정 삭제</button>`
+        : s.loginId
+          ? `<button type="button" class="btn-secondary btn-small" data-issue-account="${escapeHtml(id)}">계정 발급</button>`
+          : "";
       return `
         <div class="student-card">
           <div class="student-avatar ${onLeave ? "student-avatar--leave" : "student-avatar--in"}">${escapeHtml((s.name || "?").charAt(0))}</div>
           <div class="student-info">
             <div class="student-name">${escapeHtml(s.name || "이름 없음")}</div>
             <div class="student-meta">학번 ${escapeHtml(s.sid || "-")} · ${escapeHtml(s.cls || "-")}</div>
-            ${s.email ? `<div class="student-meta">${escapeHtml(s.email)}</div>` : ""}
+            ${contacts.length > 0 ? `<div class="student-meta">${escapeHtml(contacts.join(" · "))}</div>` : ""}
           </div>
           <div class="day-pill-row">${days}</div>
           ${leaveBadge}
+          ${accountChip}
           <div class="roster-actions">
+            ${accountButtons}
             <button type="button" class="btn-secondary btn-small" data-edit-id="${escapeHtml(id)}">수정</button>
             <button type="button" class="btn-danger btn-small" data-delete-id="${escapeHtml(id)}">삭제</button>
           </div>
@@ -191,6 +268,10 @@ function openFormForAdd() {
   inputName.value = "";
   inputSid.value = "";
   inputEmail.value = "";
+  inputLoginId.value = "";
+  inputPhone.value = "";
+  inputParentPhone.value = "";
+  setLoginIdLocked(false);
   inputLeaveFrom.value = "";
   inputLeaveTo.value = "";
   inputLeaveReason.value = "";
@@ -219,6 +300,11 @@ function openFormForEdit(id) {
   inputSid.value = s.sid || "";
   inputCls.value = s.cls || "";
   inputEmail.value = s.email || "";
+  inputLoginId.value = s.loginId || "";
+  inputPhone.value = formatPhone(s.phone);
+  inputParentPhone.value = formatPhone(s.parentPhone);
+  // 계정이 있으면 아이디를 바꿀 수 없다(서버 트리거도 막음) — 바꾸려면 계정을 삭제한 뒤 다시 발급
+  setLoginIdLocked(Boolean(state.accounts[id]));
   const leave = s.leaveOfAbsence || {};
   inputLeaveFrom.value = leave.from || "";
   inputLeaveTo.value = leave.to || "";
@@ -229,6 +315,13 @@ function openFormForEdit(id) {
   renderDayToggle();
   formWrap.hidden = false;
   inputName.focus();
+}
+
+function setLoginIdLocked(locked) {
+  inputLoginId.disabled = locked;
+  loginIdHint.textContent = locked
+    ? "계정이 발급되어 있어 바꿀 수 없습니다. 바꾸려면 계정을 삭제한 뒤 다시 발급하세요."
+    : "계정을 발급하면 학생이 이 아이디로 로그인합니다.";
 }
 
 function closeForm() {
@@ -249,17 +342,30 @@ function closeBulkForm() {
 }
 
 function renderBulkPreview() {
-  const { rows, errors } = parseBulkInput(bulkInput.value, getClassRestriction(state.activeGrade));
+  const { rows, errors } = parseBulkInput(
+    bulkInput.value,
+    getClassRestriction(state.activeGrade),
+    state.studentsByGrade[state.activeGrade]
+  );
   bulkPreviewRows = rows;
 
   const parts = [];
   if (rows.length > 0) {
     parts.push(
       `<div class="bulk-preview__list">${rows
-        .map(
-          (r) =>
-            `<div class="bulk-preview__row">${escapeHtml(r.name)} · ${escapeHtml(r.sid)} · ${escapeHtml(r.cls || "반 확인 필요")}${r.email ? ` · ${escapeHtml(r.email)}` : ""}</div>`
-        )
+        .map((r) => {
+          const fields = [
+            r.name,
+            r.sid,
+            r.cls || "반 확인 필요",
+            r.loginId ? `ID ${r.loginId}` : "",
+            r.phone ? `학생 ${formatPhone(r.phone)}` : "",
+            r.parentPhone ? `학부모 ${formatPhone(r.parentPhone)}` : "",
+            r.email,
+          ].filter(Boolean);
+          const tag = r.existingId ? "정보 갱신" : "새로 추가";
+          return `<div class="bulk-preview__row">[${tag}] ${escapeHtml(fields.join(" · "))}</div>`;
+        })
         .join("")}</div>`
     );
   }
@@ -272,6 +378,14 @@ function renderBulkPreview() {
 
   bulkSaveBtn.disabled = rows.length === 0;
   bulkSaveBtn.textContent = `일괄 저장 (${rows.length}명)`;
+}
+
+// 같은 리로스쿨 ID가 이미 다른 학생에게 있을 때(unique 제약) 알아보기 쉬운 문장으로
+function describeStudentSaveError(error) {
+  if (error && error.code === "23505" && /login_id/.test(String(error.message || error.details || ""))) {
+    return "이미 다른 학생이 쓰는 리로스쿨 ID입니다.";
+  }
+  return describeError(error);
 }
 
 addStudentBtn.addEventListener("click", () => {
@@ -299,29 +413,58 @@ bulkInput.addEventListener("keydown", insertTabOnKeydown);
 // 저장 결과 처리: 실패하면 알리고, 성공하면 Realtime 알림을 기다리지 않고 바로 다시 읽는다.
 async function afterWrite(error) {
   if (error) {
-    alert(`저장하지 못했습니다: ${describeError(error)}`);
+    alert(`저장하지 못했습니다: ${describeStudentSaveError(error)}`);
     return false;
   }
-  if (studentsLive) await studentsLive.refresh();
+  await Promise.all([studentsLive ? studentsLive.refresh() : null, accountsLive ? accountsLive.refresh() : null]);
   return true;
 }
 
 bulkSaveBtn.addEventListener("click", async () => {
   if (bulkPreviewRows.length === 0 || !state.activeGrade) return;
-  const rows = bulkPreviewRows.map((row) =>
-    studentToRow(state.activeGrade, {
-      name: row.name,
-      sid: row.sid,
-      cls: row.cls,
-      email: row.email,
-      afterschoolDays: [false, false, false, false, false],
-    })
-  );
+  const newRows = bulkPreviewRows
+    .filter((row) => !row.existingId)
+    .map((row) =>
+      studentToRow(state.activeGrade, {
+        name: row.name,
+        sid: row.sid,
+        cls: row.cls,
+        email: row.email,
+        loginId: row.loginId,
+        phone: row.phone,
+        parentPhone: row.parentPhone,
+        afterschoolDays: [false, false, false, false, false],
+      })
+    );
+  const updates = bulkPreviewRows.filter((row) => row.existingId);
   bulkSaveBtn.disabled = true;
   bulkSaveBtn.textContent = "저장 중...";
-  // 한 번에 저장한다 — 하나라도 실패하면 전부 저장되지 않으므로 고친 뒤 다시 누르면 된다.
-  const { error } = await supabase.from("students").insert(rows);
-  if (!(await afterWrite(error))) {
+
+  // 새 학생은 한 번에 저장한다 — 하나라도 실패하면 새 학생은 전부 저장되지 않으므로 고친 뒤 다시 누르면 된다.
+  if (newRows.length > 0) {
+    const { error } = await supabase.from("students").insert(newRows);
+    if (error) {
+      alert(`새 학생을 저장하지 못했습니다(정보 갱신도 하지 않았습니다): ${describeStudentSaveError(error)}`);
+      renderBulkPreview();
+      return;
+    }
+  }
+  // 이미 있는 학생은 입력한 칸만 갱신한다(빈 칸은 그대로 둠).
+  const failures = [];
+  for (const row of updates) {
+    const patch = { name: row.name };
+    if (row.loginId) patch.login_id = row.loginId;
+    if (row.phone) patch.phone = row.phone;
+    if (row.parentPhone) patch.parent_phone = row.parentPhone;
+    if (row.email) patch.email = row.email;
+    const { data, error } = await supabase.from("students").update(patch).eq("id", row.existingId).select("id");
+    if (error || data.length === 0) {
+      failures.push(`${row.name}(${row.sid}): ${error ? describeStudentSaveError(error) : "권한이 없거나 이미 삭제된 학생입니다."}`);
+    }
+  }
+  await afterWrite(null);
+  if (failures.length > 0) {
+    alert(`다음 학생은 정보를 갱신하지 못했습니다.\n${failures.join("\n")}`);
     renderBulkPreview();
     return;
   }
@@ -354,6 +497,7 @@ gradeTabsEl.addEventListener("click", (event) => {
   closeBulkForm();
   renderGradeTabs();
   renderRoster();
+  renderBulkIssueButton();
 });
 
 rosterListEl.addEventListener("click", (event) => {
@@ -367,14 +511,163 @@ rosterListEl.addEventListener("click", (event) => {
     const id = deleteBtn.dataset.deleteId;
     const s = (state.studentsByGrade[state.activeGrade] || {})[id];
     const name = s ? s.name : "이 학생";
-    if (confirm(`${name}을(를) 명단에서 삭제할까요?`)) {
+    const accountNote = state.accounts[id] ? "\n학생 계정(로그인)도 함께 삭제됩니다." : "";
+    if (confirm(`${name}을(를) 명단에서 삭제할까요?${accountNote}`)) {
       deleteStudent(id);
     }
+    return;
   }
+  const issueBtn = event.target.closest("[data-issue-account]");
+  if (issueBtn) {
+    issueAccounts([issueBtn.dataset.issueAccount], issueBtn);
+    return;
+  }
+  const resetBtn = event.target.closest("[data-reset-account]");
+  if (resetBtn) {
+    resetAccountPassword(resetBtn.dataset.resetAccount, resetBtn);
+    return;
+  }
+  const deleteAccountBtn = event.target.closest("[data-delete-account]");
+  if (deleteAccountBtn) deleteAccount(deleteAccountBtn.dataset.deleteAccount, deleteAccountBtn);
 });
 
+function findStudentInActiveGrade(id) {
+  const s = (state.studentsByGrade[state.activeGrade] || {})[id];
+  return s ? { id, ...s } : null;
+}
+
+// 학생 계정 발급(여러 명). 서버(student-accounts)가 권한·아이디·중복을 확인하고 6자리 비밀번호를 만든다.
+async function issueAccounts(studentIds, btn) {
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "발급 중...";
+  const results = [];
+  for (let start = 0; start < studentIds.length; start += MAX_ACCOUNTS_PER_REQUEST) {
+    const chunk = studentIds.slice(start, start + MAX_ACCOUNTS_PER_REQUEST);
+    let chunkResults = null;
+    let failure = "";
+    try {
+      const data = await callFunction("student-accounts", { action: "issue", studentIds: chunk });
+      chunkResults = Array.isArray(data && data.results) ? data.results : null;
+      if (!chunkResults) failure = "서버 응답을 확인하지 못했습니다.";
+    } catch (err) {
+      failure = err.message;
+    }
+    for (const [i, studentId] of chunk.entries()) {
+      const res = chunkResults ? chunkResults.find((r) => r.studentId === studentId) || chunkResults[i] : null;
+      const s = findStudentInActiveGrade(studentId) || { name: "", sid: "" };
+      results.push({
+        kind: "issue",
+        name: s.name,
+        sid: s.sid,
+        loginId: res && res.ok ? res.loginId : s.loginId || "",
+        password: res && res.ok ? res.password : "",
+        ok: Boolean(res && res.ok),
+        errorText: res && !res.ok ? res.error : failure || "계정을 만들지 못했습니다.",
+      });
+    }
+  }
+  btn.disabled = false;
+  btn.textContent = originalText;
+  addAccountResults(results);
+  if (accountsLive) await accountsLive.refresh();
+}
+
+async function resetAccountPassword(studentId, btn) {
+  const s = findStudentInActiveGrade(studentId) || { name: "이 학생", sid: "" };
+  if (!confirm(`${s.name}의 비밀번호를 새로 발급할까요?\n지금 쓰는 비밀번호로는 더 이상 로그인할 수 없게 됩니다.`)) return;
+  btn.disabled = true;
+  try {
+    const data = await callFunction("student-accounts", { action: "reset-password", studentId });
+    addAccountResults([{ kind: "reset", name: s.name, sid: s.sid, loginId: data.loginId, password: data.password, ok: true }]);
+  } catch (err) {
+    addAccountResults([{ kind: "reset", name: s.name, sid: s.sid, loginId: s.loginId, ok: false, errorText: err.message }]);
+  }
+  btn.disabled = false;
+}
+
+async function deleteAccount(studentId, btn) {
+  const s = findStudentInActiveGrade(studentId) || { name: "이 학생" };
+  if (!confirm(`${s.name}의 학생 계정을 삭제할까요?\n학생은 더 이상 로그인할 수 없고, 명단에는 그대로 남습니다.`)) return;
+  btn.disabled = true;
+  try {
+    await callFunction("student-accounts", { action: "delete", studentId });
+    if (accountsLive) await accountsLive.refresh();
+  } catch (err) {
+    alert(`계정을 삭제하지 못했습니다: ${err.message}`);
+    btn.disabled = false;
+  }
+}
+
+// 지금 보이는 학년(담임은 담당 반)에서 리로스쿨 ID가 있고 계정이 아직 없는 학생
+function getIssuableStudentIds() {
+  const classRestriction = getClassRestriction(state.activeGrade);
+  return Object.entries(state.studentsByGrade[state.activeGrade] || {})
+    .filter(([id, s]) => s.loginId && !state.accounts[id] && (!classRestriction || classRestriction.includes(s.cls)))
+    .sort((a, b) => (a[1].sid || "").localeCompare(b[1].sid || ""))
+    .map(([id]) => id);
+}
+
+function renderBulkIssueButton() {
+  const count = state.activeGrade && state.accountsLoaded ? getIssuableStudentIds().length : 0;
+  bulkIssueBtn.disabled = count === 0;
+  bulkIssueBtn.textContent = `계정 일괄 발급 (${count}명)`;
+}
+
+bulkIssueBtn.addEventListener("click", async () => {
+  const ids = getIssuableStudentIds();
+  if (ids.length === 0) return;
+  if (!confirm(`리로스쿨 ID가 등록되어 있고 계정이 없는 ${ids.length}명의 계정을 발급할까요?`)) return;
+  await issueAccounts(ids, bulkIssueBtn);
+  renderBulkIssueButton();
+});
+
+function addAccountResults(results) {
+  state.accountResults = [...results, ...state.accountResults];
+  renderAccountResults();
+  accountResultWrap.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+// 발급·재발급 결과. 성공한 것만 "이름[탭]학번[탭]아이디[탭]비밀번호" 줄로 모아 엑셀에 붙여넣기 쉽게 보여준다.
+function renderAccountResults() {
+  const results = state.accountResults;
+  accountResultWrap.hidden = results.length === 0;
+  accountResultList.innerHTML = results
+    .map(
+      (r) => `
+        <div class="student-card">
+          <div class="student-info">
+            <div class="student-name">${escapeHtml(r.name || "-")}</div>
+            <div class="student-meta">학번 ${escapeHtml(r.sid || "-")} · ID ${escapeHtml(r.loginId || "-")}</div>
+          </div>
+          ${
+            r.ok
+              ? `<div class="status-badge status-badge--in">${r.kind === "reset" ? "재발급됨" : "발급됨"}</div><div class="since-text">비밀번호: ${escapeHtml(r.password)}</div>`
+              : `<div class="status-badge status-badge--out">실패</div><div class="since-text">${escapeHtml(r.errorText)}</div>`
+          }
+        </div>
+      `
+    )
+    .join("");
+  accountResultCopy.value = results
+    .filter((r) => r.ok)
+    .map((r) => [r.name, r.sid, r.loginId, r.password].join("\t"))
+    .join("\n");
+}
+
 // 권한 밖의 행은 서버(RLS)가 조용히 건너뛰므로, 실제로 바뀐 행이 있는지 확인한다.
+// 계정이 있는 학생은 로그인 정보가 남지 않도록 서버 함수가 계정과 명단을 함께 지운다.
 async function deleteStudent(id) {
+  if (state.accounts[id]) {
+    try {
+      await callFunction("student-accounts", { action: "delete", studentId: id, withStudent: true });
+    } catch (err) {
+      alert(`삭제하지 못했습니다: ${err.message}`);
+      return;
+    }
+    await afterWrite(null);
+    return;
+  }
   const { data, error } = await supabase.from("students").delete().eq("id", id).select("id");
   if (!error && data.length === 0) {
     alert("삭제하지 못했습니다: 권한이 없거나 이미 삭제된 학생입니다.");
@@ -401,6 +694,18 @@ studentForm.addEventListener("submit", async (event) => {
     return;
   }
 
+  const loginId = normalizeLoginId(inputLoginId.value);
+  if (loginId === null) {
+    alert("리로스쿨 ID는 영문·숫자와 . _ - 만 쓸 수 있습니다(64자 이하).");
+    return;
+  }
+  const phone = normalizePhone(inputPhone.value);
+  const parentPhone = normalizePhone(inputParentPhone.value);
+  if (phone === null || parentPhone === null) {
+    alert("연락처는 010으로 시작하는 휴대폰 번호로 입력해 주세요(예: 010-1234-5678).");
+    return;
+  }
+
   const leaveFrom = inputLeaveFrom.value;
   const leaveTo = inputLeaveTo.value;
   if ((leaveFrom && !leaveTo) || (!leaveFrom && leaveTo)) {
@@ -417,6 +722,9 @@ studentForm.addEventListener("submit", async (event) => {
     sid,
     cls,
     email,
+    loginId,
+    phone,
+    parentPhone,
     afterschoolDays: state.dayFlags.slice(),
   };
   if (leaveFrom && leaveTo) {
@@ -453,16 +761,31 @@ function initForGrades(allowedGrades) {
   addStudentBtn.disabled = false;
   bulkAddBtn.disabled = false;
 
+  const reportLoadError = (error) => {
+    showPageError(`데이터를 불러오지 못했습니다(${describeError(error)}). 잠시 후 자동으로 다시 시도합니다.`);
+  };
   studentsLive = liveTable({
     table: "students",
     order: ["id"],
     onRows: (rows) => {
       state.studentsByGrade = groupStudentsByGrade(rows);
       renderRoster();
+      renderBulkIssueButton();
     },
-    onError: (error) => {
-      showPageError(`데이터를 불러오지 못했습니다(${describeError(error)}). 잠시 후 자동으로 다시 시도합니다.`);
+    onError: reportLoadError,
+  });
+  accountsLive = liveTable({
+    table: "profiles",
+    select: "id,student_id,login_id",
+    eq: { kind: "student" },
+    order: ["id"],
+    onRows: (rows) => {
+      state.accounts = Object.fromEntries(rows.map((row) => [row.student_id, { loginId: row.login_id }]));
+      state.accountsLoaded = true;
+      renderRoster();
+      renderBulkIssueButton();
     },
+    onError: reportLoadError,
   });
 }
 

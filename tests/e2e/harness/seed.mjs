@@ -7,7 +7,7 @@ export const ROOM = {
 };
 
 export const STUDENT = {
-  hong: "10000000-0000-4000-8000-000000000001", // 1학년 3반, 1학년실 r0c0, 이메일 있음, 방과후 월~금
+  hong: "10000000-0000-4000-8000-000000000001", // 1학년 3반, 1학년실 r0c0, 이메일·리로스쿨 ID(hong123)·연락처 있음, 방과후 월~금
   minjun: "10000000-0000-4000-8000-000000000002", // 1학년 1반, 1학년실 r0c1, 오늘 자리 없음
   seoyeon: "10000000-0000-4000-8000-000000000003", // 2학년 1반, 2·3학년실 r0c0
   jihun: "10000000-0000-4000-8000-000000000004", // 3학년 2반, 2·3학년실 r1c2, 명령퇴사 중
@@ -41,13 +41,13 @@ export const staffId = (loginId) => STAFF.find((s) => s.loginId === loginId).id;
 
 // 날짜는 학교 기준(KST) 오늘로 맞춘다.
 export const SEED_SQL = `
-insert into public.students (id, grade, name, sid, cls, email, afterschool_days, leave_from, leave_to, leave_reason) values
-  ('${STUDENT.hong}', 1, '홍길동', '10305', '1학년 3반', 'hong@example.com', '{t,t,t,t,t}', null, null, null),
-  ('${STUDENT.minjun}', 1, '김민준', '10101', '1학년 1반', null, '{f,f,f,f,f}', null, null, null),
-  ('${STUDENT.seoyeon}', 2, '이서연', '20101', '2학년 1반', null, '{f,f,f,f,f}', null, null, null),
-  ('${STUDENT.jihun}', 3, '박지훈', '30202', '3학년 2반', null, '{f,f,f,f,f}',
+insert into public.students (id, grade, name, sid, cls, email, login_id, phone, parent_phone, afterschool_days, leave_from, leave_to, leave_reason) values
+  ('${STUDENT.hong}', 1, '홍길동', '10305', '1학년 3반', 'hong@example.com', 'hong123', '01011112222', '01033334444', '{t,t,t,t,t}', null, null, null),
+  ('${STUDENT.minjun}', 1, '김민준', '10101', '1학년 1반', null, null, null, null, '{f,f,f,f,f}', null, null, null),
+  ('${STUDENT.seoyeon}', 2, '이서연', '20101', '2학년 1반', null, 'seoyeon.lee', null, null, '{f,f,f,f,f}', null, null, null),
+  ('${STUDENT.jihun}', 3, '박지훈', '30202', '3학년 2반', null, 'jihun_p', null, null, '{f,f,f,f,f}',
      public.today_kst() - 1, public.today_kst() + 5, '장기 결석'),
-  ('${STUDENT.haneul}', 1, '최하늘', '10302', '1학년 3반', null, '{f,f,f,f,f}', null, null, null);
+  ('${STUDENT.haneul}', 1, '최하늘', '10302', '1학년 3반', null, null, null, null, '{f,f,f,f,f}', null, null, null);
 
 insert into public.rooms (id, name, grades, rows, cols, seat_map, created_at) values
   ('${ROOM.first}', '1학년실', '{1}', 2, 2,

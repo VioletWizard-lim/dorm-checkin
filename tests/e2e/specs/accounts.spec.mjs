@@ -1,25 +1,12 @@
 import { test, expect } from "./fixtures.mjs";
 import { PASSWORD, ROOM, staffId } from "../harness/seed.mjs";
-import { answerDialogs, collectAlerts } from "./helpers.mjs";
+import { answerDialogs, collectAlerts, tryLogin, WRONG_LOGIN } from "./helpers.mjs";
 
 const row = (page, loginId) =>
   page.locator("#accountList .student-card").filter({ has: page.locator(".student-name", { hasText: new RegExp(`^${loginId}$`) }) });
 
 async function profile(env, loginId) {
   return (await env.sql("select * from public.profiles where login_id = $1", [loginId]))[0] ?? null;
-}
-
-// 별도 창에서 로그인 화면으로 로그인해 보고 결과(체크 화면 이동 여부 또는 오류 문구)를 돌려준다.
-async function tryLogin(openOtherAs, loginId, password) {
-  const page = await openOtherAs(null, "/login.html");
-  await page.fill("#userId", loginId);
-  await page.fill("#password", password);
-  await page.click("#submitBtn");
-  await Promise.race([
-    page.waitForURL(/check\.html$/, { timeout: 8000 }).catch(() => {}),
-    page.locator("#errorBox").waitFor({ state: "visible", timeout: 8000 }).catch(() => {}),
-  ]);
-  return page.url().endsWith("/check.html") ? "ok" : await page.locator("#errorBox").textContent();
 }
 
 test.describe("계정 관리", () => {
@@ -120,7 +107,7 @@ test.describe("계정 관리", () => {
     const first = page.locator("#resultList .student-card").first();
     await expect(first).toContainText("재발급됨");
     const newPassword = /비밀번호: (\S+)/.exec(await first.textContent())[1];
-    expect(await tryLogin(openOtherAs, "teacher01", PASSWORD)).toBe("아이디 또는 비밀번호가 올바르지 않습니다.");
+    expect(await tryLogin(openOtherAs, "teacher01", PASSWORD)).toBe(WRONG_LOGIN);
     expect(await tryLogin(openOtherAs, "teacher01", newPassword)).toBe("ok");
 
     await page.click("#bulkResetBtn");
@@ -129,7 +116,7 @@ test.describe("계정 관리", () => {
     expect(lines.map((l) => l.split("\t")[0])).toEqual(["dorm01", "gm01", "homeroom01", "super01", "teacher01", "teacher01"]);
     const dormPassword = lines[0].split("\t")[2];
     expect(await tryLogin(openOtherAs, "dorm01", dormPassword)).toBe("ok");
-    expect(await tryLogin(openOtherAs, "gm01", PASSWORD)).toBe("아이디 또는 비밀번호가 올바르지 않습니다.");
+    expect(await tryLogin(openOtherAs, "gm01", PASSWORD)).toBe(WRONG_LOGIN);
   });
 
   test("서버 함수 호출에 쓰는 헤더가 함수의 CORS 허용 목록에 모두 들어 있다", async ({ env, openAs, page }) => {

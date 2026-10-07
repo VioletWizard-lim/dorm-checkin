@@ -29,6 +29,11 @@
   box-sizing: border-box;
 }
 
+/* hidden 속성은 클래스에 display를 지정해도 항상 숨긴다 */
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   font-family: 'Noto Sans KR', system-ui, sans-serif;
@@ -119,7 +124,8 @@ input {
 }
 
 .field input[type="text"],
-.field input[type="password"] {
+.field input[type="password"],
+.field input[type="email"] {
   width: 100%;
   padding: 13px 14px;
   border-radius: var(--radius-control);
@@ -131,7 +137,8 @@ input {
 }
 
 .field input[type="text"]:focus,
-.field input[type="password"]:focus {
+.field input[type="password"]:focus,
+.field input[type="email"]:focus {
   border-color: var(--color-active);
 }
 
@@ -190,6 +197,31 @@ input {
   text-align: center;
   font-size: 13px;
   color: var(--color-text-faint);
+}
+
+.login-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--radius-control);
+  background: var(--color-bg);
+}
+
+.login-tab {
+  flex: 1;
+  padding: 10px 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-label);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.login-tab.is-active {
+  background: var(--color-card-bg);
+  color: var(--color-text);
+  box-shadow: 0 1px 3px rgba(28, 34, 48, 0.12);
 }
 
 /* Shared */
@@ -450,6 +482,7 @@ input {
   border-radius: 999px;
   font-size: 13px;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .status-badge--out {
@@ -1299,4 +1332,238 @@ input {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+/* Student screen (휴대폰 기준, student.html) */
+
+.student-page {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 16px 16px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.student-page .page-error {
+  margin: 0;
+}
+
+.student-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 4px 0;
+}
+
+.student-header__name {
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.student-header__meta {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+.student-section {
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.student-section__title {
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.my-status {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.my-status__detail {
+  font-size: 14px;
+  color: var(--color-label);
+  line-height: 1.5;
+}
+
+.student-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.student-form .field input {
+  width: 100%;
+  padding: 13px 14px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--color-input-border);
+  font-size: 16px; /* 16px 미만이면 iOS가 입력할 때 화면을 확대함 */
+  color: var(--color-text);
+  background: var(--color-card-bg);
+  outline: none;
+}
+
+.student-form .field input:focus {
+  border-color: var(--color-active);
+}
+
+.student-form .btn-primary {
+  margin-top: 0;
+}
+
+.request-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--color-bg);
+}
+
+.request-item__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.request-item__reason {
+  font-size: 14px;
+  font-weight: 700;
+  word-break: break-all;
+}
+
+.request-item__meta {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.request-chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.request-chip--pending {
+  background: var(--color-away-bg);
+  color: var(--color-away);
+}
+
+.request-chip--approved {
+  background: #E9F6EC;
+  color: #1E8449;
+}
+
+.request-chip--rejected {
+  background: var(--color-out-bg);
+  color: var(--color-out);
+}
+
+.request-chip--cancelled {
+  background: #EEF0F3;
+  color: var(--color-text-faint);
+}
+
+.student-empty {
+  font-size: 14px;
+  color: var(--color-text-faint);
+}
+
+/* 외출 체크 화면의 "외출 신청 대기" 패널 */
+
+.request-panel {
+  margin: 20px 40px 0;
+  padding: 16px 20px;
+  border-radius: var(--radius-card);
+  border: 1px solid #F3D98B;
+  background: #FFFBEA;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.request-panel__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.request-panel__title {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.request-panel__count {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--color-away);
+  color: #FFFFFF;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.request-panel__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.request-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-border);
+}
+
+.request-row__who {
+  width: 200px;
+  flex-shrink: 0;
+}
+
+.request-row__what {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  word-break: break-all;
+}
+
+.pending-chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--color-away-bg);
+  color: var(--color-away);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* 학생 명단: 계정 상태 */
+
+.account-chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  background: #EEF0F3;
+  color: var(--color-text-faint);
+  flex-shrink: 0;
+}
+
+.account-chip--active {
+  background: #E9F6EC;
+  color: #1E8449;
 }
