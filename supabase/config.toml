@@ -1,0 +1,7 @@
+# Supabase CLI 설정 — GitHub Actions(supabase-deploy.yml)의 `db push` / `functions deploy`에서 쓴다.
+# 로컬 개발 스택(supabase start)은 쓰지 않는다. Auth 설정(새 사용자 가입 끄기 등)은 대시보드에서 한다.
+project_id = "dorm-checkin"
+
+# 새 JWT 서명 키와 호환되도록 게이트웨이 검증은 끄고, 함수 안에서 호출자를 직접 확인한다(_shared/supabase.ts getCaller).
+[functions.staff-accounts]
+verify_jwt = false
