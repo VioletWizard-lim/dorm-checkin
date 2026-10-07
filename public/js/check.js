@@ -1,23 +1,16 @@
-import { auth, db } from "./firebase-init.js";
-import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
-import {
-  ref,
-  onValue,
-  set,
-  serverTimestamp,
-} from "https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js";
+import { supabase, requireStaff, signOutTo, describeError, showPageError } from "./supabase-client.js";
+import { liveTable } from "./live-table.js";
+import { GRADES, groupStudentsByGrade, outingsByStudent, roomsById } from "./adapters.js";
 import {
   EMAILJS_PUBLIC_KEY,
   EMAILJS_SERVICE_ID,
   EMAILJS_OUTING_TEMPLATE_ID,
 } from "./emailjs-config.js";
-import { FAKE_EMAIL_DOMAIN } from "./firebase-config.js";
 
 if (window.emailjs) {
   window.emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY });
 }
 
-const GRADES = ["1", "2", "3"];
 let currentTeacherId = "";
 let currentTeacherName = "";
 
@@ -37,7 +30,7 @@ const listEl = document.getElementById("studentList");
 const dateSelectEl = document.getElementById("dateSelect");
 const pastDateNoticeEl = document.getElementById("pastDateNotice");
 
-// outings는 하루가 지나도 기록이 남도록 outings/{날짜}/{학번}으로 저장한다.
+// outings는 하루가 지나도 기록이 남도록 날짜별로 저장한다(outings 테이블의 date 열).
 // "조회 날짜"를 오늘이 아닌 값으로 바꾸면 그 날짜의 기록을 보고 고칠 수 있다(지난 기록 수정).
 function getDateKey(date = new Date()) {
   const y = date.getFullYear();
@@ -65,7 +58,7 @@ const state = {
   selectedDate: TODAY_KEY,
 };
 
-let unsubscribeOutings = null;
+let outingsLive = null;
 
 function escapeHtml(value) {
   return String(value)
@@ -256,24 +249,36 @@ function sendOutingEmail(student, reason, expectedReturn) {
     .catch((err) => console.error("외출증 이메일 발송 실패:", err));
 }
 
-function toggleOuting(studentId, grade, currentStatus, reason, expectedReturn) {
-  const nextStatus = currentStatus === "out" ? "in" : "out";
-  const outingData = { status: nextStatus, since: serverTimestamp() };
-  if (nextStatus === "out") {
-    outingData.reason = reason || "";
-    outingData.expectedReturn = expectedReturn || "";
+// 외출 상태 저장. 시각(since)과 담당 교사는 서버 트리거가 채운다.
+async function saveOuting(studentId, status, reason, expectedReturn) {
+  const row = { date: state.selectedDate, student_id: studentId, status };
+  if (status === "out") {
+    row.reason = reason || null;
+    row.expected_return = expectedReturn || null;
   }
-  set(ref(db, `outings/${state.selectedDate}/${studentId}`), outingData);
+  const { error } = await supabase.from("outings").upsert(row, { onConflict: "date,student_id" });
+  if (error) {
+    alert(`저장하지 못했습니다: ${describeError(error)}`);
+    return false;
+  }
+  if (outingsLive) await outingsLive.refresh();
+  return true;
+}
+
+async function toggleOuting(studentId, grade, currentStatus, reason, expectedReturn) {
+  const nextStatus = currentStatus === "out" ? "in" : "out";
+  const dateWhenClicked = state.selectedDate;
+  const saved = await saveOuting(studentId, nextStatus, reason, expectedReturn);
 
   // 지난 날짜 기록을 고치는 중이면(오늘이 아니면) 외출증 이메일을 보내지 않는다 — 실시간 외출이 아니라 사후 정정이기 때문.
-  if (nextStatus === "out" && state.selectedDate === TODAY_KEY) {
+  if (saved && nextStatus === "out" && dateWhenClicked === TODAY_KEY) {
     const student = (state.studentsByGrade[grade] || {})[studentId];
     if (student) sendOutingEmail(student, reason, expectedReturn);
   }
 }
 
 function restoreToIn(studentId) {
-  set(ref(db, `outings/${state.selectedDate}/${studentId}`), { status: "in", since: serverTimestamp() });
+  return saveOuting(studentId, "in");
 }
 
 chipsEl.addEventListener("click", (event) => {
@@ -286,7 +291,11 @@ chipsEl.addEventListener("click", (event) => {
 listEl.addEventListener("click", (event) => {
   const restoreBtn = event.target.closest("[data-restore-id]");
   if (restoreBtn) {
-    restoreToIn(restoreBtn.dataset.restoreId);
+    // 저장이 끝나 목록이 다시 그려질 때까지 같은 버튼을 또 누르지 못하게 한다.
+    restoreBtn.disabled = true;
+    restoreToIn(restoreBtn.dataset.restoreId).finally(() => {
+      restoreBtn.disabled = false;
+    });
     return;
   }
 
@@ -299,7 +308,10 @@ listEl.addEventListener("click", (event) => {
     reason = (window.prompt("외출 사유를 입력해 주세요 (취소해도 외출 체크는 진행됩니다)", "") || "").trim();
     expectedReturn = (window.prompt("예상 복귀 시각을 입력해 주세요 (예: 17:00, 취소하면 미정으로 표시됩니다)", "") || "").trim();
   }
-  toggleOuting(btn.dataset.toggleId, btn.dataset.grade, currentStatus, reason, expectedReturn);
+  btn.disabled = true;
+  toggleOuting(btn.dataset.toggleId, btn.dataset.grade, currentStatus, reason, expectedReturn).finally(() => {
+    btn.disabled = false;
+  });
 });
 
 searchInput.addEventListener("input", (event) => {
@@ -307,11 +319,24 @@ searchInput.addEventListener("input", (event) => {
   render();
 });
 
+function reportLoadError(error) {
+  showPageError(`데이터를 불러오지 못했습니다(${describeError(error)}). 잠시 후 자동으로 다시 시도합니다.`);
+}
+
 function subscribeOutingsForSelectedDate() {
-  if (unsubscribeOutings) unsubscribeOutings();
-  unsubscribeOutings = onValue(ref(db, `outings/${state.selectedDate}`), (snapshot) => {
-    state.outings = snapshot.val() || {};
-    render();
+  if (outingsLive) outingsLive.stop();
+  const date = state.selectedDate;
+  state.outings = {};
+  outingsLive = liveTable({
+    table: "outings",
+    order: ["student_id"],
+    eq: { date },
+    onRows: (rows) => {
+      if (date !== state.selectedDate) return;
+      state.outings = outingsByStudent(rows);
+      render();
+    },
+    onError: reportLoadError,
   });
 }
 
@@ -321,64 +346,58 @@ dateSelectEl.addEventListener("change", () => {
   render();
 });
 
-onAuthStateChanged(auth, (user) => {
-  if (!user) {
-    window.location.replace("./login.html");
-    return;
-  }
-
-  currentTeacherId = (user.email || "").replace(`@${FAKE_EMAIL_DOMAIN}`, "");
+async function init() {
+  const session = await requireStaff();
+  if (!session) return;
+  const { loginId, profile } = session;
+  currentTeacherId = loginId;
 
   dateSelectEl.max = TODAY_KEY;
   dateSelectEl.value = state.selectedDate;
 
-  for (const grade of GRADES) {
-    onValue(ref(db, `students/${grade}`), (snapshot) => {
-      state.studentsByGrade[grade] = snapshot.val() || {};
+  const hasManagedClasses = Object.values(profile.managedClasses || {}).some(
+    (classes) => Object.keys(classes || {}).length > 0
+  );
+  navLoadingHint.hidden = true;
+  // 기숙사부는 계정 관리만 빼고 admin과 동일한 권한을 가진다.
+  manageLink.hidden =
+    profile.role !== "admin" && profile.role !== "gradeManager" && profile.role !== "dormStaff" && !hasManagedClasses;
+  accountsLink.hidden = profile.role !== "admin";
+  // 자습 감독 계정은 외출 체크 화면만 쓸 수 있게 다른 화면 링크를 모두 숨긴다.
+  const isStudyHallSupervisor = profile.role === "studyHallSupervisor";
+  displayLink.hidden = isStudyHallSupervisor;
+  seatLink.hidden = isStudyHallSupervisor;
+  currentTeacherName = profile.name || "";
+
+  const role = profile.role || "teacher";
+  currentUserNameEl.textContent = currentTeacherName || currentTeacherId;
+  currentUserRoleBadgeEl.textContent = role;
+  currentUserRoleBadgeEl.className = `role-badge role-badge--${role}`;
+
+  liveTable({
+    table: "students",
+    order: ["id"],
+    onRows: (rows) => {
+      state.studentsByGrade = groupStudentsByGrade(rows);
       render();
-    });
-  }
+    },
+    onError: reportLoadError,
+  });
 
   subscribeOutingsForSelectedDate();
 
-  onValue(ref(db, "rooms"), (snapshot) => {
-    state.rooms = snapshot.val() || {};
-    render();
-  });
-
-  onValue(
-    ref(db, `users/${user.uid}`),
-    (snapshot) => {
-      const profile = snapshot.val() || {};
-      if (profile.disabled) {
-        signOut(auth).then(() => window.location.replace("./login.html?disabled=1"));
-        return;
-      }
-      const hasManagedClasses = Object.values(profile.managedClasses || {}).some(
-        (classes) => Object.keys(classes || {}).length > 0
-      );
-      navLoadingHint.hidden = true;
-      // 기숙사부는 계정 관리만 빼고 admin과 동일한 권한을 가진다.
-      manageLink.hidden =
-        profile.role !== "admin" && profile.role !== "gradeManager" && profile.role !== "dormStaff" && !hasManagedClasses;
-      accountsLink.hidden = profile.role !== "admin";
-      // 자습 감독 계정은 외출 체크 화면만 쓸 수 있게 다른 화면 링크를 모두 숨긴다.
-      const isStudyHallSupervisor = profile.role === "studyHallSupervisor";
-      displayLink.hidden = isStudyHallSupervisor;
-      seatLink.hidden = isStudyHallSupervisor;
-      currentTeacherName = profile.name || "";
-
-      const role = profile.role || "teacher";
-      currentUserNameEl.textContent = currentTeacherName || currentTeacherId;
-      currentUserRoleBadgeEl.textContent = role;
-      currentUserRoleBadgeEl.className = `role-badge role-badge--${role}`;
+  liveTable({
+    table: "rooms",
+    order: ["created_at", "id"],
+    onRows: (rows) => {
+      state.rooms = roomsById(rows);
+      render();
     },
-    { onlyOnce: true }
-  );
-});
+    onError: reportLoadError,
+  });
+}
 
-logoutBtn.addEventListener("click", () => {
-  signOut(auth).then(() => window.location.replace("./login.html"));
-});
+logoutBtn.addEventListener("click", () => signOutTo());
 
 render();
+init();

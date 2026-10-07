@@ -1,0 +1,45 @@
+import { test, expect } from "./fixtures.mjs";
+import { STUDENT } from "../harness/seed.mjs";
+import { kstDatePlus, kstWeekdayIndex, todayKst } from "./helpers.mjs";
+
+const panel = (page, id) => page.locator(`#${id}`);
+
+test.describe("기숙사 현황판", () => {
+  test("자리 없음·외출중·명령퇴사·방과후 패널", async ({ openAs, page }) => {
+    await openAs("teacher01", "/display.html");
+    await expect(panel(page, "awayPanelList").locator(".display-card__name")).toHaveText(["김민준"]);
+    await expect(panel(page, "awayPanelCount")).toHaveText("1명");
+    await expect(panel(page, "outPanelCount")).toHaveText("0명");
+    await expect(panel(page, "outPanelList")).toContainText("외출중인 학생이 없습니다.");
+    await expect(panel(page, "leavePanelList").locator(".display-card__name")).toHaveText(["박지훈"]);
+    await expect(panel(page, "leavePanelList")).toContainText(`~${kstDatePlus(5)}`);
+    if (kstWeekdayIndex() === null) {
+      await expect(panel(page, "afterschoolPanelList")).toContainText("오늘은 방과후가 없습니다.");
+    } else {
+      await expect(panel(page, "afterschoolPanelList").locator(".display-card__name")).toHaveText(["홍길동"]);
+    }
+  });
+
+  test("학년·실 필터를 함께 적용한다", async ({ openAs, page }) => {
+    await openAs("dorm01", "/display.html");
+    await page.click("#gradeChips >> text=3학년");
+    await expect(panel(page, "awayPanelCount")).toHaveText("0명");
+    await expect(panel(page, "leavePanelCount")).toHaveText("1명");
+    await page.click("#filterChips >> text=1학년실");
+    await expect(panel(page, "leavePanelCount")).toHaveText("0명");
+    await page.click("#gradeChips >> text=전체");
+    await expect(panel(page, "awayPanelCount")).toHaveText("1명");
+  });
+
+  test("다른 화면에서 바꾼 외출이 실시간으로 반영된다", async ({ env, openAs, page }) => {
+    await openAs("teacher01", "/display.html");
+    await expect(panel(page, "outPanelCount")).toHaveText("0명");
+    await env.sql(
+      "insert into public.outings (date, student_id, status, reason) values ($1, $2, 'out', '학원')",
+      [todayKst(), STUDENT.seoyeon]
+    );
+    await expect(panel(page, "outPanelList").locator(".display-card__name")).toHaveText(["이서연"]);
+    await env.sql("update public.outings set status = 'in' where date = $1 and student_id = $2", [todayKst(), STUDENT.minjun]);
+    await expect(panel(page, "awayPanelCount")).toHaveText("0명");
+  });
+});

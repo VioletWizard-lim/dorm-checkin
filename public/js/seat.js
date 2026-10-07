@@ -1,21 +1,13 @@
-import { auth, db } from "./firebase-init.js";
-import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
-import {
-  ref,
-  onValue,
-  set,
-  update,
-  remove,
-  push,
-  serverTimestamp,
-} from "https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js";
-import { FAKE_EMAIL_DOMAIN } from "./firebase-config.js";
+import { supabase, requireStaff, signOutTo, describeError, showPageError } from "./supabase-client.js";
+import { liveTable } from "./live-table.js";
+import { GRADES, groupStudentsByGrade, outingsByStudent, roomsById } from "./adapters.js";
 
-const GRADES = ["1", "2", "3"];
 const MIN_SIZE = 1;
 let currentTeacherName = "";
+let outingsLive = null;
+let roomsLive = null;
 
-// outings는 outings/{날짜}/{학번}으로 저장된다(check.js 참고). 좌석 배치판은 항상 "오늘"만 보여준다.
+// outings는 날짜별로 저장된다(check.js 참고). 좌석 배치판은 항상 "오늘"만 보여준다.
 function getDateKey(date = new Date()) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -315,8 +307,20 @@ function render() {
   renderGrid(activeRoom);
 }
 
-function resizeRoom(dimension, dir) {
-  const room = state.rooms[state.activeRoomId];
+// 저장 결과 처리: 실패하면 알리고, 성공하면 Realtime 알림을 기다리지 않고 바로 다시 읽는다.
+async function afterWrite(error, live) {
+  if (error) {
+    alert(`저장하지 못했습니다: ${describeError(error)}`);
+    return false;
+  }
+  if (live) await live.refresh();
+  return true;
+}
+
+// 행/열 크기 변경: 줄어든 범위 밖의 좌석 배정은 서버(resize_room)가 함께 지운다.
+async function resizeRoom(dimension, dir) {
+  const roomId = state.activeRoomId;
+  const room = state.rooms[roomId];
   if (!room) return;
   const current = Number(room[dimension]) || 1;
   const next = Math.max(MIN_SIZE, current + dir);
@@ -324,56 +328,58 @@ function resizeRoom(dimension, dir) {
 
   const rows = dimension === "rows" ? next : Number(room.rows) || 1;
   const cols = dimension === "cols" ? next : Number(room.cols) || 1;
-  const updates = { [`rooms/${state.activeRoomId}/${dimension}`]: next };
-  const seatMap = room.seatMap || {};
-  for (const cellKey of Object.keys(seatMap)) {
-    const m = /^r(\d+)c(\d+)$/.exec(cellKey);
-    if (!m) continue;
-    if (Number(m[1]) >= rows || Number(m[2]) >= cols) {
-      updates[`rooms/${state.activeRoomId}/seatMap/${cellKey}`] = null;
-    }
-  }
-  update(ref(db), updates);
+  const { error } = await supabase.rpc("resize_room", { p_room_id: roomId, p_rows: rows, p_cols: cols });
+  await afterWrite(error, roomsLive);
 }
 
-function toggleRoomGrade(grade) {
-  const room = state.rooms[state.activeRoomId];
+async function toggleRoomGrade(grade) {
+  const roomId = state.activeRoomId;
+  const room = state.rooms[roomId];
   if (!room) return;
   const grades = new Set(room.grades || []);
   if (grades.has(grade)) grades.delete(grade);
   else grades.add(grade);
-  set(ref(db, `rooms/${state.activeRoomId}/grades`), Array.from(grades).sort());
+  const { error } = await supabase
+    .from("rooms")
+    .update({ grades: Array.from(grades).sort().map(Number) })
+    .eq("id", roomId);
+  await afterWrite(error, roomsLive);
 }
 
-function assignStudent(targetCellKey, studentId) {
-  const targetRoomId = state.activeRoomId;
-  const updates = {};
-  for (const [roomId, room] of Object.entries(state.rooms)) {
-    const seatMap = (room && room.seatMap) || {};
-    for (const [cellKey, sid] of Object.entries(seatMap)) {
-      if (sid === studentId && !(roomId === targetRoomId && cellKey === targetCellKey)) {
-        updates[`rooms/${roomId}/seatMap/${cellKey}`] = null;
-      }
-    }
-  }
-  updates[`rooms/${targetRoomId}/seatMap/${targetCellKey}`] = studentId;
-  update(ref(db), updates);
+// 그 학생이 다른 자리(다른 실 포함)에 앉아 있던 기록은 서버(assign_seat)가 함께 지운다.
+async function assignStudent(targetCellKey, studentId) {
+  const roomId = state.activeRoomId;
   state.editingCellKey = null;
+  const { error } = await supabase.rpc("assign_seat", {
+    p_room_id: roomId,
+    p_cell_key: targetCellKey,
+    p_student_id: studentId,
+  });
+  await afterWrite(error, roomsLive);
 }
 
-function unassignSeat(cellKey) {
-  set(ref(db, `rooms/${state.activeRoomId}/seatMap/${cellKey}`), null);
+async function unassignSeat(cellKey) {
+  const { error } = await supabase.rpc("unassign_seat", { p_room_id: state.activeRoomId, p_cell_key: cellKey });
+  await afterWrite(error, roomsLive);
 }
 
 // 좌석 배치도에서는 "외출"(재실 -> 외출중)은 할 수 없다 — 그건 사유·이메일까지 딸린 공식적인
 // 절차라 check.html에서만 하도록 함. 여기서는 순회하며 바로 처리할 만한 것만: 자리없음 표시/해제,
 // 이미 나간 학생의 복귀 체크(둘 다 그냥 "재실"로 되돌리는 동작이라 restoreToIn 하나로 처리).
+// 시각(since)과 담당 교사는 서버 트리거가 채운다.
+async function saveTodayStatus(studentId, status) {
+  const { error } = await supabase
+    .from("outings")
+    .upsert({ date: TODAY_KEY, student_id: studentId, status }, { onConflict: "date,student_id" });
+  await afterWrite(error, outingsLive);
+}
+
 function markAway(studentId) {
-  set(ref(db, `outings/${TODAY_KEY}/${studentId}`), { status: "away", since: serverTimestamp() });
+  return saveTodayStatus(studentId, "away");
 }
 
 function restoreToIn(studentId) {
-  set(ref(db, `outings/${TODAY_KEY}/${studentId}`), { status: "in", since: serverTimestamp() });
+  return saveTodayStatus(studentId, "in");
 }
 
 roomTabsEl.addEventListener("click", (event) => {
@@ -392,12 +398,19 @@ editModeToggle.addEventListener("click", () => {
   render();
 });
 
-addRoomBtn.addEventListener("click", () => {
-  const newRef = push(ref(db, "rooms"));
-  set(newRef, { name: "새 실", grades: [], rows: 3, cols: 4, seatMap: {} }).then(() => {
-    state.activeRoomId = newRef.key;
-    render();
-  });
+addRoomBtn.addEventListener("click", async () => {
+  addRoomBtn.disabled = true;
+  const { data, error } = await supabase
+    .from("rooms")
+    .insert({ name: "새 실", grades: [], rows: 3, cols: 4, seat_map: {} })
+    .select("id")
+    .single();
+  const saved = await afterWrite(error, roomsLive);
+  addRoomBtn.disabled = false;
+  if (!saved) return;
+  // 다시 읽은 목록에 새 실이 들어온 뒤에 선택해야 첫 번째 실로 되돌아가지 않는다.
+  state.activeRoomId = data.id;
+  render();
 });
 
 deleteRoomBtn.addEventListener("click", () => {
@@ -406,14 +419,24 @@ deleteRoomBtn.addEventListener("click", () => {
   const room = state.rooms[state.activeRoomId];
   const name = room ? room.name : "이 실";
   if (!confirm(`${name}을(를) 삭제할까요? 배정된 좌석 정보도 함께 삭제됩니다.`)) return;
-  remove(ref(db, `rooms/${state.activeRoomId}`));
-  state.activeRoomId = null;
+  const roomId = state.activeRoomId;
+  supabase
+    .from("rooms")
+    .delete()
+    .eq("id", roomId)
+    .then(async ({ error }) => {
+      if ((await afterWrite(error, roomsLive)) && state.activeRoomId === roomId) {
+        state.activeRoomId = null;
+        render();
+      }
+    });
 });
 
-roomNameInput.addEventListener("change", () => {
+roomNameInput.addEventListener("change", async () => {
   if (!state.activeRoomId) return;
   const value = roomNameInput.value.trim() || "이름 없음";
-  set(ref(db, `rooms/${state.activeRoomId}/name`), value);
+  const { error } = await supabase.from("rooms").update({ name: value }).eq("id", state.activeRoomId);
+  await afterWrite(error, roomsLive);
 });
 
 roomGradeToggleRow.addEventListener("click", (event) => {
@@ -499,65 +522,68 @@ seatGridEl.addEventListener("change", (event) => {
   render();
 });
 
-onAuthStateChanged(auth, (user) => {
-  if (!user) {
-    window.location.replace("./login.html");
+function reportLoadError(error) {
+  showPageError(`데이터를 불러오지 못했습니다(${describeError(error)}). 잠시 후 자동으로 다시 시도합니다.`);
+}
+
+async function init() {
+  const session = await requireStaff();
+  if (!session) return;
+  const { loginId, profile } = session;
+  // 자습 감독 계정은 외출 체크 화면만 쓸 수 있다.
+  if (profile.role === "studyHallSupervisor") {
+    window.location.replace("./check.html");
     return;
   }
+  state.role = profile.role || "teacher";
+  state.roleResolved = true;
+  state.managedRoomIds = Object.keys(profile.managedRooms || {});
+  currentTeacherName = profile.name || "";
+  currentUserNameEl.textContent = currentTeacherName || loginId;
+  currentUserRoleBadgeEl.textContent = state.role;
+  currentUserRoleBadgeEl.className = `role-badge role-badge--${state.role}`;
+  const hasManagedClasses = Object.values(profile.managedClasses || {}).some(
+    (classes) => Object.keys(classes || {}).length > 0
+  );
+  navLoadingHint.hidden = true;
+  manageLink.hidden =
+    state.role !== "admin" && state.role !== "gradeManager" && state.role !== "dormStaff" && !hasManagedClasses;
+  accountsLink.hidden = state.role !== "admin";
+  render();
 
-  for (const grade of GRADES) {
-    onValue(ref(db, `students/${grade}`), (snapshot) => {
-      state.studentsByGrade[grade] = snapshot.val() || {};
-      render();
-    });
-  }
-
-  onValue(ref(db, `outings/${TODAY_KEY}`), (snapshot) => {
-    state.outings = snapshot.val() || {};
-    render();
-  });
-
-  onValue(ref(db, "rooms"), (snapshot) => {
-    state.rooms = snapshot.val() || {};
-    render();
-  });
-
-  const loginId = (user.email || "").replace(`@${FAKE_EMAIL_DOMAIN}`, "");
-  onValue(
-    ref(db, `users/${user.uid}`),
-    (snapshot) => {
-      const profile = snapshot.val() || {};
-      if (profile.disabled) {
-        signOut(auth).then(() => window.location.replace("./login.html?disabled=1"));
-        return;
-      }
-      // 자습 감독 계정은 외출 체크 화면만 쓸 수 있다.
-      if (profile.role === "studyHallSupervisor") {
-        window.location.replace("./check.html");
-        return;
-      }
-      state.role = profile.role || "teacher";
-      state.roleResolved = true;
-      state.managedRoomIds = Object.keys(profile.managedRooms || {});
-      currentTeacherName = profile.name || "";
-      currentUserNameEl.textContent = currentTeacherName || loginId;
-      currentUserRoleBadgeEl.textContent = state.role;
-      currentUserRoleBadgeEl.className = `role-badge role-badge--${state.role}`;
-      const hasManagedClasses = Object.values(profile.managedClasses || {}).some(
-        (classes) => Object.keys(classes || {}).length > 0
-      );
-      navLoadingHint.hidden = true;
-      manageLink.hidden =
-        state.role !== "admin" && state.role !== "gradeManager" && state.role !== "dormStaff" && !hasManagedClasses;
-      accountsLink.hidden = state.role !== "admin";
+  liveTable({
+    table: "students",
+    order: ["id"],
+    onRows: (rows) => {
+      state.studentsByGrade = groupStudentsByGrade(rows);
       render();
     },
-    { onlyOnce: true }
-  );
-});
+    onError: reportLoadError,
+  });
 
-logoutBtn.addEventListener("click", () => {
-  signOut(auth).then(() => window.location.replace("./login.html"));
-});
+  outingsLive = liveTable({
+    table: "outings",
+    order: ["student_id"],
+    eq: { date: TODAY_KEY },
+    onRows: (rows) => {
+      state.outings = outingsByStudent(rows);
+      render();
+    },
+    onError: reportLoadError,
+  });
+
+  roomsLive = liveTable({
+    table: "rooms",
+    order: ["created_at", "id"],
+    onRows: (rows) => {
+      state.rooms = roomsById(rows);
+      render();
+    },
+    onError: reportLoadError,
+  });
+}
+
+logoutBtn.addEventListener("click", () => signOutTo());
 
 render();
+init();

@@ -3,52 +3,33 @@
 자세한 기능 스펙과 데이터 모델은 [`CLAUDE.md`](./CLAUDE.md)를 확인하세요.
 Claude Code로 이 폴더를 열면 `CLAUDE.md`를 자동으로 읽어 프로젝트 맥락을 파악합니다.
 
-## 시작하는 방법
+## 구성
+- 화면(`public/`): 순수 HTML/CSS/JS. Firebase Hosting에서 서비스하고, `main`에 push하면 GitHub Actions가 자동 배포합니다(PR마다 미리보기 URL).
+- 백엔드: Supabase(Postgres·Auth·Realtime·Edge Functions). `supabase/`가 바뀐 채로 `main`에 들어오면 GitHub Actions(`supabase-deploy.yml`)가 DB 마이그레이션과 Edge Function을 배포합니다.
 
-### 1. 이 폴더를 GitHub 저장소로 만들기
-```bash
-cd dorm-checkin
-git init
-git add .
-git commit -m "init: 프로젝트 스캐폴드"
-gh repo create dorm-checkin --private --source=. --push
-# (gh CLI가 없으면 GitHub 웹에서 저장소 생성 후 git remote add origin ... 으로 연결)
-```
+## 처음 설정할 때
+1. Supabase에 프로젝트를 만들고(서울 리전) Authentication 설정에서 새 사용자 가입(Sign up)을 끕니다.
+2. 프로젝트 URL과 publishable 키를 `public/js/supabase-config.js`에 넣습니다(공개돼도 안전한 값).
+3. GitHub 저장소 Settings → Secrets and variables → Actions에 등록합니다.
+   - `SUPABASE_ACCESS_TOKEN`: Supabase 계정의 Access Token(이 프로젝트 하나로 범위를 좁혀서 발급)
+   - `SUPABASE_PROJECT_REF`: 프로젝트 ref(URL의 `https://<ref>.supabase.co` 부분)
+   - `SUPABASE_DB_PASSWORD`: 프로젝트를 만들 때 정한 DB 비밀번호
+   - `SUPABASE_SECRET_KEY`: 프로젝트 Settings → API Keys의 secret 키(`sb_secret_...`, Firebase 데이터 이전에만 사용)
+4. `main`에 push하면 테이블·권한 규칙·Edge Function이 자동으로 만들어집니다. SQL 편집기에서 마이그레이션을 직접 실행하지 마세요.
+5. 첫 관리자 계정: Supabase 대시보드 Authentication → Users → Add user에서 `관리자아이디@donghall.local`과 비밀번호로 만들고(Auto Confirm 체크), SQL 편집기에서 프로필을 넣습니다.
+   ```sql
+   insert into public.profiles (id, login_id, kind, role, name)
+   select id, '관리자아이디', 'staff', 'admin', '관리자 이름' from auth.users where email = '관리자아이디@donghall.local';
+   ```
+   이후 교사 계정은 화면의 "계정 관리"에서 만듭니다.
 
-### 2. Firebase 프로젝트 준비
-1. https://console.firebase.google.com 에서 새 프로젝트 생성
-2. Authentication → 로그인 방법 → 이메일/비밀번호 활성화
-3. Realtime Database → 데이터베이스 만들기 (프로덕션 모드)
-4. 프로젝트 설정 → 일반 탭에서 설정값을 복사해 `public/js/firebase-config.js`에 채워 넣기
-   (이 값들은 비밀키가 아니라 공개되어도 안전해서 그대로 커밋되어 있습니다 — GitHub Actions 자동배포에도
-   항상 포함되어야 하므로 `.gitignore`에는 올리지 않습니다)
+## 테스트
+- DB(RLS·RPC): `bash tests/db/run.sh` (Postgres 16 서버 바이너리 필요)
+- Edge Functions: `deno test --node-modules-dir=none --no-lock --allow-env supabase/functions/`
+- 데이터 이전 스크립트: `cd scripts/migrate && npm test`
+- 화면 E2E: `cd tests/e2e && npm ci && bash fetch-postgrest.sh && npx playwright test` (Postgres 16, Deno, Chromium 필요)
 
-### 3. Firebase CLI 연결
-```bash
-npm install
-npx firebase login
-npx firebase use --add   # 방금 만든 Firebase 프로젝트 선택
-npx firebase deploy --only database   # 보안 규칙 배포
-```
-
-### 4. GitHub Actions 자동 배포 연결
-```bash
-npx firebase init hosting:github
-```
-CLI 질문에 따라 진행하면 `.github/workflows/`에 배포용 워크플로가 자동 생성되고,
-이후 `main` 브랜치에 push할 때마다 자동으로 Firebase Hosting에 배포됩니다.
-
-### 5. 로컬 테스트
-```bash
-npm run dev   # Firebase 에뮬레이터로 로컬 실행
-```
-
-### 6. 첫 관리자 계정 만들기
-Firebase 콘솔 → Authentication에서 이메일/비밀번호로 계정 하나를 만들고,
-Realtime Database의 `users/{그_계정의_uid}`에 아래 값을 직접 입력하면 관리자 계정이 됩니다.
-```json
-{ "role": "admin" }
-```
+PR을 올리면 GitHub Actions가 위 테스트를 자동으로 돌립니다.
 
 ## 와이어프레임
 화면 디자인 참고용 목업: https://claude.ai/artifact/G7UJ6u23e1Cqgepecepbsy

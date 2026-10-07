@@ -1,16 +1,7 @@
-import { auth, db } from "./firebase-init.js";
-import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
-import {
-  ref,
-  onValue,
-  push,
-  set,
-  update,
-  remove,
-} from "https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js";
-import { FAKE_EMAIL_DOMAIN } from "./firebase-config.js";
+import { supabase, requireStaff, signOutTo, describeError, showPageError } from "./supabase-client.js";
+import { liveTable } from "./live-table.js";
+import { GRADES as ALL_GRADES, groupStudentsByGrade, studentToRow } from "./adapters.js";
 
-const ALL_GRADES = ["1", "2", "3"];
 const DAY_LABELS = ["월", "화", "수", "목", "금"];
 
 const logoutBtn = document.getElementById("logoutBtn");
@@ -33,6 +24,7 @@ const inputLeaveFrom = document.getElementById("inputLeaveFrom");
 const inputLeaveTo = document.getElementById("inputLeaveTo");
 const inputLeaveReason = document.getElementById("inputLeaveReason");
 const cancelFormBtn = document.getElementById("cancelFormBtn");
+const submitFormBtn = document.getElementById("submitFormBtn");
 
 function getDateKey(date = new Date()) {
   const y = date.getFullYear();
@@ -57,6 +49,7 @@ const bulkPreviewEl = document.getElementById("bulkPreview");
 const bulkSaveBtn = document.getElementById("bulkSaveBtn");
 const cancelBulkFormBtn = document.getElementById("cancelBulkFormBtn");
 let bulkPreviewRows = [];
+let studentsLive = null;
 
 const state = {
   allowedGrades: [],
@@ -303,20 +296,35 @@ cancelBulkFormBtn.addEventListener("click", () => {
 bulkInput.addEventListener("input", renderBulkPreview);
 bulkInput.addEventListener("keydown", insertTabOnKeydown);
 
-bulkSaveBtn.addEventListener("click", () => {
+// 저장 결과 처리: 실패하면 알리고, 성공하면 Realtime 알림을 기다리지 않고 바로 다시 읽는다.
+async function afterWrite(error) {
+  if (error) {
+    alert(`저장하지 못했습니다: ${describeError(error)}`);
+    return false;
+  }
+  if (studentsLive) await studentsLive.refresh();
+  return true;
+}
+
+bulkSaveBtn.addEventListener("click", async () => {
   if (bulkPreviewRows.length === 0 || !state.activeGrade) return;
-  const updates = {};
-  for (const row of bulkPreviewRows) {
-    const newKey = push(ref(db, `students/${state.activeGrade}`)).key;
-    updates[`students/${state.activeGrade}/${newKey}`] = {
+  const rows = bulkPreviewRows.map((row) =>
+    studentToRow(state.activeGrade, {
       name: row.name,
       sid: row.sid,
       cls: row.cls,
-      email: row.email || "",
+      email: row.email,
       afterschoolDays: [false, false, false, false, false],
-    };
+    })
+  );
+  bulkSaveBtn.disabled = true;
+  bulkSaveBtn.textContent = "저장 중...";
+  // 한 번에 저장한다 — 하나라도 실패하면 전부 저장되지 않으므로 고친 뒤 다시 누르면 된다.
+  const { error } = await supabase.from("students").insert(rows);
+  if (!(await afterWrite(error))) {
+    renderBulkPreview();
+    return;
   }
-  update(ref(db), updates);
   closeBulkForm();
 });
 
@@ -360,12 +368,22 @@ rosterListEl.addEventListener("click", (event) => {
     const s = (state.studentsByGrade[state.activeGrade] || {})[id];
     const name = s ? s.name : "이 학생";
     if (confirm(`${name}을(를) 명단에서 삭제할까요?`)) {
-      remove(ref(db, `students/${state.activeGrade}/${id}`));
+      deleteStudent(id);
     }
   }
 });
 
-studentForm.addEventListener("submit", (event) => {
+// 권한 밖의 행은 서버(RLS)가 조용히 건너뛰므로, 실제로 바뀐 행이 있는지 확인한다.
+async function deleteStudent(id) {
+  const { data, error } = await supabase.from("students").delete().eq("id", id).select("id");
+  if (!error && data.length === 0) {
+    alert("삭제하지 못했습니다: 권한이 없거나 이미 삭제된 학생입니다.");
+    return;
+  }
+  await afterWrite(error);
+}
+
+studentForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const name = inputName.value.trim();
   const sid = inputSid.value.trim();
@@ -405,13 +423,18 @@ studentForm.addEventListener("submit", (event) => {
     data.leaveOfAbsence = { from: leaveFrom, to: leaveTo, reason: inputLeaveReason.value.trim() };
   }
 
+  const row = studentToRow(state.activeGrade, data);
   const editingId = editingIdInput.value;
-  if (editingId) {
-    set(ref(db, `students/${state.activeGrade}/${editingId}`), data);
-  } else {
-    const newRef = push(ref(db, `students/${state.activeGrade}`));
-    set(newRef, data);
+  submitFormBtn.disabled = true;
+  const { data: saved, error } = editingId
+    ? await supabase.from("students").update(row).eq("id", editingId).select("id")
+    : await supabase.from("students").insert(row).select("id");
+  submitFormBtn.disabled = false;
+  if (!error && saved.length === 0) {
+    alert("저장하지 못했습니다: 권한이 없거나 이미 삭제된 학생입니다.");
+    return;
   }
+  if (!(await afterWrite(error))) return;
   closeForm();
 });
 
@@ -430,75 +453,63 @@ function initForGrades(allowedGrades) {
   addStudentBtn.disabled = false;
   bulkAddBtn.disabled = false;
 
-  for (const grade of allowedGrades) {
-    onValue(ref(db, `students/${grade}`), (snapshot) => {
-      state.studentsByGrade[grade] = snapshot.val() || {};
-      if (grade === state.activeGrade) {
-        renderRoster();
-      }
-    });
+  studentsLive = liveTable({
+    table: "students",
+    order: ["id"],
+    onRows: (rows) => {
+      state.studentsByGrade = groupStudentsByGrade(rows);
+      renderRoster();
+    },
+    onError: (error) => {
+      showPageError(`데이터를 불러오지 못했습니다(${describeError(error)}). 잠시 후 자동으로 다시 시도합니다.`);
+    },
+  });
+}
+
+async function init() {
+  const session = await requireStaff();
+  if (!session) return;
+  const { loginId, profile } = session;
+  const role = profile.role;
+  navLoadingHint.hidden = true;
+  accountsLink.hidden = role !== "admin";
+
+  function showCurrentUser() {
+    currentUserNameEl.textContent = profile.name || loginId;
+    currentUserRoleBadgeEl.textContent = role;
+    currentUserRoleBadgeEl.className = `role-badge role-badge--${role}`;
+  }
+
+  if (role === "admin" || role === "dormStaff") {
+    showCurrentUser();
+    initForGrades(ALL_GRADES);
+  } else if (role === "gradeManager") {
+    showCurrentUser();
+    const managed = profile.managedGrades || {};
+    const allowed = ALL_GRADES.filter((g) => managed[g]);
+    initForGrades(allowed);
+  } else if (role === "teacher") {
+    // teacher는 담임을 맡은 반(managedClasses)이 있을 때만 그 반의 명단을 관리할 수 있다.
+    const managedClasses = profile.managedClasses || {};
+    const allowedGradesForTeacher = Object.keys(managedClasses).filter(
+      (g) => Object.keys(managedClasses[g] || {}).length > 0
+    );
+    if (allowedGradesForTeacher.length === 0) {
+      window.location.replace("./check.html");
+      return;
+    }
+    showCurrentUser();
+    state.allowedClassesByGrade = {};
+    for (const g of allowedGradesForTeacher) {
+      state.allowedClassesByGrade[g] = Object.keys(managedClasses[g]);
+    }
+    initForGrades(allowedGradesForTeacher.sort());
+  } else {
+    window.location.replace("./check.html");
   }
 }
 
-onAuthStateChanged(auth, (user) => {
-  if (!user) {
-    window.location.replace("./login.html");
-    return;
-  }
-
-  onValue(
-    ref(db, `users/${user.uid}`),
-    (snapshot) => {
-      const profile = snapshot.val() || {};
-      if (profile.disabled) {
-        signOut(auth).then(() => window.location.replace("./login.html?disabled=1"));
-        return;
-      }
-      const role = profile.role;
-      const loginId = (user.email || "").replace(`@${FAKE_EMAIL_DOMAIN}`, "");
-      navLoadingHint.hidden = true;
-      accountsLink.hidden = role !== "admin";
-
-      function showCurrentUser() {
-        currentUserNameEl.textContent = profile.name || loginId;
-        currentUserRoleBadgeEl.textContent = role;
-        currentUserRoleBadgeEl.className = `role-badge role-badge--${role}`;
-      }
-
-      if (role === "admin" || role === "dormStaff") {
-        showCurrentUser();
-        initForGrades(ALL_GRADES);
-      } else if (role === "gradeManager") {
-        showCurrentUser();
-        const managed = profile.managedGrades || {};
-        const allowed = ALL_GRADES.filter((g) => managed[g]);
-        initForGrades(allowed);
-      } else if (role === "teacher") {
-        // teacher는 담임을 맡은 반(managedClasses)이 있을 때만 그 반의 명단을 관리할 수 있다.
-        const managedClasses = profile.managedClasses || {};
-        const allowedGradesForTeacher = Object.keys(managedClasses).filter(
-          (g) => Object.keys(managedClasses[g] || {}).length > 0
-        );
-        if (allowedGradesForTeacher.length === 0) {
-          window.location.replace("./check.html");
-          return;
-        }
-        showCurrentUser();
-        state.allowedClassesByGrade = {};
-        for (const g of allowedGradesForTeacher) {
-          state.allowedClassesByGrade[g] = Object.keys(managedClasses[g]);
-        }
-        initForGrades(allowedGradesForTeacher.sort());
-      } else {
-        window.location.replace("./check.html");
-      }
-    },
-    { onlyOnce: true }
-  );
-});
-
-logoutBtn.addEventListener("click", () => {
-  signOut(auth).then(() => window.location.replace("./login.html"));
-});
+logoutBtn.addEventListener("click", () => signOutTo());
 
 renderDayToggle();
+init();

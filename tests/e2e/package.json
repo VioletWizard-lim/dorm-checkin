@@ -1,0 +1,15 @@
+{
+  "name": "dorm-checkin-e2e",
+  "private": true,
+  "type": "module",
+  "description": "화면 E2E 테스트: 로컬 Postgres + PostgREST + 가짜 Supabase 게이트웨이(Auth·Realtime 흉내)로 실제 supabase-js를 돌린다",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1",
+    "@supabase/supabase-js": "2.117.2",
+    "esbuild": "^0.25.0",
+    "pg": "^8.13.0"
+  }
+}

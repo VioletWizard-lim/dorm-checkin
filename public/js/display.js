@@ -1,11 +1,8 @@
-import { auth, db } from "./firebase-init.js";
-import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
-import { ref, onValue } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js";
-import { FAKE_EMAIL_DOMAIN } from "./firebase-config.js";
+import { requireStaff, signOutTo, describeError, showPageError } from "./supabase-client.js";
+import { liveTable } from "./live-table.js";
+import { GRADES, groupStudentsByGrade, outingsByStudent, roomsById } from "./adapters.js";
 
-const GRADES = ["1", "2", "3"];
-
-// outings는 outings/{날짜}/{학번}으로 저장된다(check.js 참고). 현황판은 항상 "오늘"만 보여준다.
+// outings는 날짜별로 저장된다(check.js 참고). 현황판은 항상 "오늘"만 보여준다.
 function getDateKey(date = new Date()) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -252,60 +249,63 @@ chipsEl.addEventListener("click", (event) => {
   render();
 });
 
-onAuthStateChanged(auth, (user) => {
-  if (!user) {
-    window.location.replace("./login.html");
+function reportLoadError(error) {
+  showPageError(`데이터를 불러오지 못했습니다(${describeError(error)}). 잠시 후 자동으로 다시 시도합니다.`);
+}
+
+async function init() {
+  const session = await requireStaff();
+  if (!session) return;
+  const { loginId, profile } = session;
+  // 자습 감독 계정은 외출 체크 화면만 쓸 수 있다.
+  if (profile.role === "studyHallSupervisor") {
+    window.location.replace("./check.html");
     return;
   }
-
-  for (const grade of GRADES) {
-    onValue(ref(db, `students/${grade}`), (snapshot) => {
-      state.studentsByGrade[grade] = snapshot.val() || {};
-      render();
-    });
-  }
-
-  onValue(ref(db, `outings/${TODAY_KEY}`), (snapshot) => {
-    state.outings = snapshot.val() || {};
-    render();
-  });
-
-  onValue(ref(db, "rooms"), (snapshot) => {
-    state.rooms = snapshot.val() || {};
-    render();
-  });
-
-  const loginId = (user.email || "").replace(`@${FAKE_EMAIL_DOMAIN}`, "");
-  onValue(
-    ref(db, `users/${user.uid}`),
-    (snapshot) => {
-      const profile = snapshot.val() || {};
-      if (profile.disabled) {
-        signOut(auth).then(() => window.location.replace("./login.html?disabled=1"));
-        return;
-      }
-      // 자습 감독 계정은 외출 체크 화면만 쓸 수 있다.
-      if (profile.role === "studyHallSupervisor") {
-        window.location.replace("./check.html");
-        return;
-      }
-      const role = profile.role || "teacher";
-      currentUserNameEl.textContent = profile.name || loginId;
-      currentUserRoleBadgeEl.textContent = role;
-      currentUserRoleBadgeEl.className = `role-badge role-badge--${role}`;
-      const hasManagedClasses = Object.values(profile.managedClasses || {}).some(
-        (classes) => Object.keys(classes || {}).length > 0
-      );
-      navLoadingHint.hidden = true;
-      manageLink.hidden = role !== "admin" && role !== "gradeManager" && role !== "dormStaff" && !hasManagedClasses;
-      accountsLink.hidden = role !== "admin";
-    },
-    { onlyOnce: true }
+  const role = profile.role || "teacher";
+  currentUserNameEl.textContent = profile.name || loginId;
+  currentUserRoleBadgeEl.textContent = role;
+  currentUserRoleBadgeEl.className = `role-badge role-badge--${role}`;
+  const hasManagedClasses = Object.values(profile.managedClasses || {}).some(
+    (classes) => Object.keys(classes || {}).length > 0
   );
-});
+  navLoadingHint.hidden = true;
+  manageLink.hidden = role !== "admin" && role !== "gradeManager" && role !== "dormStaff" && !hasManagedClasses;
+  accountsLink.hidden = role !== "admin";
 
-logoutBtn.addEventListener("click", () => {
-  signOut(auth).then(() => window.location.replace("./login.html"));
-});
+  liveTable({
+    table: "students",
+    order: ["id"],
+    onRows: (rows) => {
+      state.studentsByGrade = groupStudentsByGrade(rows);
+      render();
+    },
+    onError: reportLoadError,
+  });
+
+  liveTable({
+    table: "outings",
+    order: ["student_id"],
+    eq: { date: TODAY_KEY },
+    onRows: (rows) => {
+      state.outings = outingsByStudent(rows);
+      render();
+    },
+    onError: reportLoadError,
+  });
+
+  liveTable({
+    table: "rooms",
+    order: ["created_at", "id"],
+    onRows: (rows) => {
+      state.rooms = roomsById(rows);
+      render();
+    },
+    onError: reportLoadError,
+  });
+}
+
+logoutBtn.addEventListener("click", () => signOutTo());
 
 render();
+init();

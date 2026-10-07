@@ -1,18 +1,12 @@
-import { auth, db } from "./firebase-init.js";
-import {
-  onAuthStateChanged,
-  signOut,
-  getAuth,
-  createUserWithEmailAndPassword,
-} from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
-import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
-import { ref, onValue, set } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js";
-import { firebaseConfig, FAKE_EMAIL_DOMAIN } from "./firebase-config.js";
+import { supabase, requireStaff, signOutTo, describeError, showPageError, callFunction } from "./supabase-client.js";
+import { liveTable } from "./live-table.js";
+import { GRADES, groupStudentsByGrade, managedClassesToRows, roomsById, userFromProfile } from "./adapters.js";
 
 const ROLES = ["teacher", "gradeManager", "admin", "studyHallSupervisor", "dormStaff"];
-const GRADES = ["1", "2", "3"];
-const ID_PATTERN = /^[A-Za-z0-9]+$/;
+// 서버(staff-accounts 함수)와 같은 규칙: 영문·숫자 32자 이하, 소문자로 저장
+const ID_PATTERN = /^[A-Za-z0-9]{1,32}$/;
 const PASSWORD_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+const MAX_ACCOUNTS_PER_REQUEST = 200;
 
 const logoutBtn = document.getElementById("logoutBtn");
 const currentUserNameEl = document.getElementById("currentUserName");
@@ -23,6 +17,8 @@ const bulkPreviewEl = document.getElementById("bulkAccountPreview");
 const bulkCreateBtn = document.getElementById("bulkCreateBtn");
 const resultWrap = document.getElementById("resultWrap");
 const resultListEl = document.getElementById("resultList");
+const resultCopyEl = document.getElementById("resultCopy");
+const bulkResetBtn = document.getElementById("bulkResetBtn");
 
 const state = {
   users: {},
@@ -35,7 +31,10 @@ const state = {
   editGrades: [],
   editRooms: [],
   editClasses: {}, // { [grade]: string[] } — 비어있으면 그 학년 전체 담당
+  // 이 화면에서 만든 계정·재발급한 비밀번호(다시 조회할 수 없어서 새로고침 전까지만 보여줌)
+  passwordResults: [],
 };
+let profilesLive = null;
 
 function getClassesInGrade(grade) {
   const set = new Set();
@@ -70,11 +69,8 @@ function insertTabOnKeydown(event) {
 }
 
 function generatePassword() {
-  let pw = "";
-  for (let i = 0; i < 8; i++) {
-    pw += PASSWORD_CHARS[Math.floor(Math.random() * PASSWORD_CHARS.length)];
-  }
-  return pw;
+  const values = crypto.getRandomValues(new Uint32Array(8));
+  return Array.from(values, (n) => PASSWORD_CHARS[n % PASSWORD_CHARS.length]).join("");
 }
 
 function parseBulkInput(text) {
@@ -87,12 +83,14 @@ function parseBulkInput(text) {
       .split(/\t|,/)
       .map((p) => p.trim())
       .filter((p) => p !== "");
-    const [userId, name, passwordRaw] = parts;
+    const [rawUserId, name, passwordRaw] = parts;
 
-    if (!userId || !ID_PATTERN.test(userId)) {
-      errors.push(`${i + 1}번째 줄: 아이디는 영문/숫자만 사용할 수 있습니다 ("${trimmed}")`);
+    if (!rawUserId || !ID_PATTERN.test(rawUserId)) {
+      errors.push(`${i + 1}번째 줄: 아이디는 영문/숫자 32자 이하만 사용할 수 있습니다 ("${trimmed}")`);
       return;
     }
+    // 로그인 아이디는 대소문자를 구분하지 않고 소문자로 저장된다.
+    const userId = rawUserId.toLowerCase();
     if (!name) {
       errors.push(`${i + 1}번째 줄: 이름을 입력해 주세요 ("${trimmed}")`);
       return;
@@ -132,82 +130,78 @@ function renderBulkPreview() {
   bulkCreateBtn.textContent = `계정 생성 (${rows.length}명)`;
 }
 
-function mapCreateError(code) {
-  switch (code) {
-    case "auth/email-already-in-use":
-      return "이미 사용 중인 아이디입니다.";
-    case "auth/weak-password":
-      return "비밀번호가 너무 단순합니다(6자 이상 필요).";
-    case "auth/invalid-email":
-      return "아이디 형식이 올바르지 않습니다.";
-    default:
-      return "계정 생성 중 오류가 발생했습니다.";
-  }
-}
-
-// 이미 로그인된 관리자 세션을 유지한 채로 새 계정을 만들기 위해, 임시로
-// 별도의(secondary) Firebase 앱 인스턴스에서 계정을 생성한다. 기본 앱의
-// auth 인스턴스를 그대로 썼다면 createUserWithEmailAndPassword가 자동으로
-// 그 계정으로 로그인을 전환시켜서 관리자가 로그아웃되어 버린다.
-async function createTeacherAccount(userId, name, password) {
-  const secondaryApp = initializeApp(firebaseConfig, `secondary-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-  const secondaryAuth = getAuth(secondaryApp);
-  try {
-    const email = `${userId}@${FAKE_EMAIL_DOMAIN}`;
-    const cred = await createUserWithEmailAndPassword(secondaryAuth, email, password);
-    await set(ref(db, `users/${cred.user.uid}`), { id: userId, role: "teacher", name });
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, code: err.code };
-  } finally {
-    try {
-      await signOut(secondaryAuth);
-    } catch (e) {
-      // 무시: 어차피 앱 인스턴스를 바로 폐기함
-    }
-    try {
-      await deleteApp(secondaryApp);
-    } catch (e) {
-      // 무시
-    }
-  }
-}
-
+// 계정 생성은 Edge Function(staff-accounts)이 한다 — 브라우저에서는 다른 사람 계정을 만들 수 없음.
+// 비밀번호는 미리보기에 보여준 값을 그대로 보내서, 화면에 보인 비밀번호와 실제 비밀번호가 항상 같다.
 async function runBulkCreate() {
   if (bulkPreviewRows.length === 0) return;
+  const rows = bulkPreviewRows;
   bulkCreateBtn.disabled = true;
   bulkCreateBtn.textContent = "생성 중...";
 
   const results = [];
-  for (const row of bulkPreviewRows) {
-    const res = await createTeacherAccount(row.userId, row.name, row.password);
-    results.push({ ...row, ok: res.ok, errorText: res.ok ? "" : mapCreateError(res.code) });
+  for (let start = 0; start < rows.length; start += MAX_ACCOUNTS_PER_REQUEST) {
+    const chunk = rows.slice(start, start + MAX_ACCOUNTS_PER_REQUEST);
+    let chunkResults = null;
+    let failure = "";
+    try {
+      const data = await callFunction("staff-accounts", {
+        action: "create",
+        accounts: chunk.map((r) => ({ loginId: r.userId, name: r.name, password: r.password })),
+      });
+      chunkResults = Array.isArray(data && data.results) ? data.results : null;
+      if (!chunkResults) failure = "서버 응답을 확인하지 못했습니다.";
+    } catch (err) {
+      failure = err.message;
+    }
+    chunk.forEach((row, i) => {
+      const res = chunkResults ? chunkResults[i] : null;
+      results.push({
+        kind: "create",
+        userId: row.userId,
+        name: row.name,
+        password: row.password,
+        ok: !!(res && res.ok),
+        errorText: res && !res.ok ? res.error : failure || "계정을 만들지 못했습니다.",
+      });
+    });
   }
 
-  renderResults(results);
+  addPasswordResults(results);
   bulkInput.value = "";
   renderBulkPreview();
+  if (profilesLive) await profilesLive.refresh();
 }
 
-function renderResults(results) {
-  resultWrap.hidden = false;
+function addPasswordResults(results) {
+  state.passwordResults = [...results, ...state.passwordResults];
+  renderResults();
+}
+
+// 생성·재발급 결과. 성공한 것만 "아이디[탭]이름[탭]비밀번호" 줄로 모아 엑셀에 붙여넣기 쉽게 보여준다.
+function renderResults() {
+  const results = state.passwordResults;
+  resultWrap.hidden = results.length === 0;
   resultListEl.innerHTML = results
     .map(
       (r) => `
         <div class="student-card">
           <div class="student-info">
             <div class="student-name">${escapeHtml(r.userId)}</div>
-            <div class="student-meta">${escapeHtml(r.name)}</div>
+            <div class="student-meta">${escapeHtml(r.name || "이름 미등록")}</div>
           </div>
           ${
             r.ok
-              ? `<div class="status-badge status-badge--in">생성됨</div><div class="since-text">비밀번호: ${escapeHtml(r.password)}</div>`
+              ? `<div class="status-badge status-badge--in">${r.kind === "reset" ? "재발급됨" : "생성됨"}</div><div class="since-text">비밀번호: ${escapeHtml(r.password)}</div>`
               : `<div class="status-badge status-badge--out">실패</div><div class="since-text">${escapeHtml(r.errorText)}</div>`
           }
         </div>
       `
     )
     .join("");
+  resultCopyEl.value = results
+    .filter((r) => r.ok)
+    .map((r) => [r.userId, r.name || "", r.password].join("\t"))
+    .join("\n");
 }
 
 function renderAccountList() {
@@ -275,6 +269,7 @@ function renderAccountRow(uid, u) {
           ? `<div class="since-text ml-auto">본인 계정</div>`
           : `<div class="roster-actions">
                <button type="button" class="btn-secondary btn-small" data-edit-role="${escapeHtml(uid)}">정보 수정</button>
+               <button type="button" class="btn-secondary btn-small" data-reset-password="${escapeHtml(uid)}">비밀번호 재발급</button>
                <button type="button" class="btn-danger btn-small" data-delete-account="${escapeHtml(uid)}">삭제</button>
              </div>`
       }
@@ -362,11 +357,18 @@ function renderEditRow(uid, u) {
 bulkInput.addEventListener("input", renderBulkPreview);
 bulkInput.addEventListener("keydown", insertTabOnKeydown);
 bulkCreateBtn.addEventListener("click", runBulkCreate);
+bulkResetBtn.addEventListener("click", resetAllPasswords);
 
 accountListEl.addEventListener("click", (event) => {
   const deleteBtn = event.target.closest("[data-delete-account]");
   if (deleteBtn) {
     deleteAccount(deleteBtn.dataset.deleteAccount, deleteBtn);
+    return;
+  }
+
+  const resetBtn = event.target.closest("[data-reset-password]");
+  if (resetBtn) {
+    resetPassword(resetBtn.dataset.resetPassword, resetBtn);
     return;
   }
 
@@ -446,108 +448,178 @@ accountListEl.addEventListener("input", (event) => {
 });
 
 async function saveRole(uid, saveBtn) {
-  const existing = state.users[uid] || {};
-  const data = { id: existing.id || "", name: state.editName.trim(), role: state.editRole };
-  if (state.editRole === "gradeManager") {
-    data.managedGrades = Object.fromEntries(state.editGrades.map((g) => [g, true]));
-    data.managedRooms = Object.fromEntries(state.editRooms.map((r) => [r, true]));
-  } else if (state.editRole === "teacher") {
-    const managedClasses = {};
-    for (const g of GRADES) {
-      const classes = state.editClasses[g] || [];
-      if (classes.length > 0) {
-        managedClasses[g] = Object.fromEntries(classes.map((c) => [c, true]));
-      }
-    }
-    if (Object.keys(managedClasses).length > 0) {
-      data.managedClasses = managedClasses;
-    }
-  }
+  // 역할을 바꾸면 그 역할에서 쓰지 않는 담당 범위는 비운다(예전 users/{uid}를 통째로 덮어쓰던 것과 같은 결과).
+  const patch = {
+    name: state.editName.trim() || null,
+    role: state.editRole,
+    managed_grades: state.editRole === "gradeManager" ? state.editGrades.map(Number).sort() : [],
+    managed_rooms: state.editRole === "gradeManager" ? state.editRooms.slice() : [],
+    managed_classes: state.editRole === "teacher" ? managedClassesToRows(state.editClasses) : [],
+  };
 
   saveBtn.disabled = true;
   saveBtn.textContent = "저장 중...";
-  try {
-    await set(ref(db, `users/${uid}`), data);
-    state.editingUid = null;
-    renderAccountList();
-  } catch (err) {
-    alert(`저장에 실패했습니다: ${err.message || err.code || "알 수 없는 오류"}`);
+  const { data, error } = await supabase.from("profiles").update(patch).eq("id", uid).select("id");
+  // 권한 밖의 행은 서버(RLS)가 조용히 건너뛰므로 실제로 바뀐 행이 있는지 확인한다.
+  const failure = error ? describeError(error) : data.length === 0 ? "권한이 없거나 계정을 찾을 수 없습니다." : "";
+  if (failure) {
+    alert(`저장에 실패했습니다: ${failure}`);
     saveBtn.disabled = false;
     saveBtn.textContent = "저장";
+    return;
   }
+  // 다시 읽은 값으로 목록을 그려야 잠깐이라도 예전 역할이 보이지 않는다.
+  if (profilesLive) await profilesLive.refresh();
+  state.editingUid = null;
+  renderAccountList();
+}
+
+function accountLabel(uid) {
+  const u = state.users[uid] || {};
+  return u.name ? `${u.id || uid} (${u.name})` : u.id || uid;
 }
 
 async function deleteAccount(uid, btn) {
-  const u = state.users[uid] || {};
-  const label = u.name ? `${u.id || uid} (${u.name})` : u.id || uid;
   const confirmed = window.confirm(
-    `${label} 계정을 삭제할까요?\n\n` +
-      "이 시스템의 모든 화면에서 즉시 로그아웃되고 다시 들어올 수 없게 됩니다.\n" +
-      "단, Firebase 로그인 자체(아이디/비밀번호)는 남아있어 완전히 없애려면 Firebase 콘솔에서 별도로 삭제해야 합니다."
+    `${accountLabel(uid)} 계정을 삭제할까요?\n\n` +
+      "이 계정으로는 더 이상 로그인할 수 없게 됩니다(이미 열려 있는 화면도 데이터를 읽지 못함).\n" +
+      "목록에는 \"삭제됨\"으로 남아 처리 이력을 확인할 수 있습니다."
   );
   if (!confirmed) return;
 
   btn.disabled = true;
   btn.textContent = "삭제 중...";
   try {
-    await set(ref(db, `users/${uid}`), { id: u.id || "", name: u.name || "", disabled: true });
+    await callFunction("staff-accounts", { action: "disable", userId: uid });
+    if (profilesLive) await profilesLive.refresh();
   } catch (err) {
-    alert(`삭제에 실패했습니다: ${err.message || err.code || "알 수 없는 오류"}`);
+    alert(`삭제에 실패했습니다: ${err.message}`);
     btn.disabled = false;
     btn.textContent = "삭제";
   }
 }
 
-logoutBtn.addEventListener("click", () => {
-  signOut(auth).then(() => window.location.replace("./login.html"));
-});
-
-function initAccountsPage() {
-  onValue(ref(db, "users"), (snapshot) => {
-    state.users = snapshot.val() || {};
-    renderAccountList();
-  });
-
-  onValue(ref(db, "rooms"), (snapshot) => {
-    state.rooms = snapshot.val() || {};
-    renderAccountList();
-  });
-
-  for (const grade of GRADES) {
-    onValue(ref(db, `students/${grade}`), (snapshot) => {
-      state.studentsByGrade[grade] = snapshot.val() || {};
-      if (state.editingUid) renderAccountList();
-    });
+async function requestNewPassword(uid) {
+  const u = state.users[uid] || {};
+  try {
+    const data = await callFunction("staff-accounts", { action: "reset-password", userId: uid });
+    if (!data || typeof data.password !== "string") throw new Error("서버 응답을 확인하지 못했습니다.");
+    return { kind: "reset", userId: u.id || uid, name: u.name, password: data.password, ok: true };
+  } catch (err) {
+    return { kind: "reset", userId: u.id || uid, name: u.name, ok: false, errorText: err.message };
   }
 }
 
-onAuthStateChanged(auth, (user) => {
-  if (!user) {
-    window.location.replace("./login.html");
+async function resetPassword(uid, btn) {
+  const confirmed = window.confirm(
+    `${accountLabel(uid)} 계정의 비밀번호를 새로 발급할까요?\n\n지금 쓰는 비밀번호로는 더 이상 로그인할 수 없게 됩니다.`
+  );
+  if (!confirmed) return;
+  btn.disabled = true;
+  btn.textContent = "발급 중...";
+  const result = await requestNewPassword(uid);
+  btn.disabled = false;
+  btn.textContent = "비밀번호 재발급";
+  addPasswordResults([result]);
+  resultWrap.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+// 본인을 제외한 모든(삭제되지 않은) 계정의 비밀번호를 한 번에 새로 발급한다 — Supabase로 옮긴 직후처럼
+// 모든 교사에게 새 비밀번호를 나눠줘야 할 때 쓴다.
+function getResettableUids() {
+  return Object.entries(state.users)
+    .filter(([uid, u]) => uid !== state.currentUid && !u.disabled)
+    .sort((a, b) => (a[1].id || a[0]).localeCompare(b[1].id || b[0]))
+    .map(([uid]) => uid);
+}
+
+let bulkResetting = false;
+
+function renderBulkResetButton() {
+  if (bulkResetting) return; // 진행 중 표시를 목록 갱신이 덮어쓰지 않게
+  const count = getResettableUids().length;
+  bulkResetBtn.disabled = count === 0;
+  bulkResetBtn.textContent = `비밀번호 일괄 재발급 (${count}명)`;
+}
+
+async function resetAllPasswords() {
+  const uids = getResettableUids();
+  if (uids.length === 0) return;
+  const confirmed = window.confirm(
+    `본인을 제외한 ${uids.length}명의 비밀번호를 모두 새로 발급할까요?\n\n` +
+      "지금 쓰는 비밀번호로는 더 이상 로그인할 수 없게 됩니다. 새 비밀번호는 아래 결과 목록에서 복사해 전달해 주세요."
+  );
+  if (!confirmed) return;
+  bulkResetting = true;
+  bulkResetBtn.disabled = true;
+  const results = [];
+  for (const [i, uid] of uids.entries()) {
+    bulkResetBtn.textContent = `발급 중... (${i + 1}/${uids.length})`;
+    results.push(await requestNewPassword(uid));
+  }
+  bulkResetting = false;
+  addPasswordResults(results);
+  renderBulkResetButton();
+  resultWrap.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+logoutBtn.addEventListener("click", () => signOutTo());
+
+function reportLoadError(error) {
+  showPageError(`데이터를 불러오지 못했습니다(${describeError(error)}). 잠시 후 자동으로 다시 시도합니다.`);
+}
+
+function initAccountsPage() {
+  // 학생 계정(3단계에서 추가)은 이 목록에 넣지 않는다 — 교직원만.
+  profilesLive = liveTable({
+    table: "profiles",
+    order: ["id"],
+    eq: { kind: "staff" },
+    onRows: (rows) => {
+      state.users = Object.fromEntries(rows.map((row) => [row.id, userFromProfile(row)]));
+      renderAccountList();
+      renderBulkResetButton();
+    },
+    onError: reportLoadError,
+  });
+
+  liveTable({
+    table: "rooms",
+    order: ["created_at", "id"],
+    onRows: (rows) => {
+      state.rooms = roomsById(rows);
+      renderAccountList();
+    },
+    onError: reportLoadError,
+  });
+
+  liveTable({
+    table: "students",
+    order: ["id"],
+    select: "id,grade,cls",
+    onRows: (rows) => {
+      state.studentsByGrade = groupStudentsByGrade(rows);
+      if (state.editingUid) renderAccountList();
+    },
+    onError: reportLoadError,
+  });
+}
+
+async function init() {
+  const session = await requireStaff();
+  if (!session) return;
+  const { uid, loginId, profile } = session;
+  if (profile.role !== "admin") {
+    window.location.replace("./check.html");
     return;
   }
-  state.currentUid = user.uid;
-
-  onValue(
-    ref(db, `users/${user.uid}`),
-    (snapshot) => {
-      const profile = snapshot.val() || {};
-      if (profile.disabled) {
-        signOut(auth).then(() => window.location.replace("./login.html?disabled=1"));
-        return;
-      }
-      if (profile.role !== "admin") {
-        window.location.replace("./check.html");
-        return;
-      }
-      const loginId = (user.email || "").replace(`@${FAKE_EMAIL_DOMAIN}`, "");
-      currentUserNameEl.textContent = profile.name || loginId;
-      currentUserRoleBadgeEl.textContent = "admin";
-      currentUserRoleBadgeEl.className = "role-badge role-badge--admin";
-      initAccountsPage();
-    },
-    { onlyOnce: true }
-  );
-});
+  state.currentUid = uid;
+  currentUserNameEl.textContent = profile.name || loginId;
+  currentUserRoleBadgeEl.textContent = "admin";
+  currentUserRoleBadgeEl.className = "role-badge role-badge--admin";
+  initAccountsPage();
+}
 
 renderBulkPreview();
+renderBulkResetButton();
+init();
