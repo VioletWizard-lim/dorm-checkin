@@ -7,7 +7,7 @@
 //   SUPABASE_URL              https://<project-ref>.supabase.co
 //   SUPABASE_SECRET_KEY       Supabase secret(service_role) 키
 import { randomBytes } from "node:crypto";
-import { cert, initializeApp } from "firebase-admin/app";
+import { cert, deleteApp, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getDatabase } from "firebase-admin/database";
 import { createClient } from "@supabase/supabase-js";
@@ -31,22 +31,27 @@ async function readFirebase() {
     credential: cert(JSON.parse(requireEnv("FIREBASE_SERVICE_ACCOUNT"))),
     databaseURL: requireEnv("FIREBASE_DATABASE_URL"),
   });
-  const snapshot = await getDatabase(app).ref("/").once("value");
-  const rtdb = snapshot.val() ?? {};
-
-  const authUsers = [];
   try {
-    let pageToken;
-    do {
-      const page = await getAuth(app).listUsers(1000, pageToken);
-      for (const u of page.users) authUsers.push({ uid: u.uid, email: u.email ?? "" });
-      pageToken = page.pageToken;
-    } while (pageToken);
-  } catch (error) {
-    // Auth 조회 권한이 없으면 users/{uid}.id로 아이디를 정한다(그 값이 없는 계정은 건너뜀).
-    console.log(`::warning::Firebase Auth 사용자 목록을 읽지 못했습니다 (code: ${error?.code ?? "unknown"}). users.id 값으로 진행합니다.`);
+    const snapshot = await getDatabase(app).ref("/").once("value");
+    const rtdb = snapshot.val() ?? {};
+
+    const authUsers = [];
+    try {
+      let pageToken;
+      do {
+        const page = await getAuth(app).listUsers(1000, pageToken);
+        for (const u of page.users) authUsers.push({ uid: u.uid, email: u.email ?? "" });
+        pageToken = page.pageToken;
+      } while (pageToken);
+    } catch (error) {
+      // Auth 조회 권한이 없으면 users/{uid}.id로 아이디를 정한다(그 값이 없는 계정은 건너뜀).
+      console.log(`::warning::Firebase Auth 사용자 목록을 읽지 못했습니다 (code: ${error?.code ?? "unknown"}). users.id 값으로 진행합니다.`);
+    }
+    return { rtdb, authUsers };
+  } finally {
+    // RTDB 연결(웹소켓)이 열려 있으면 작업이 끝나도 프로세스가 종료되지 않는다.
+    await deleteApp(app);
   }
-  return { rtdb, authUsers };
 }
 
 // 실서비스가 이미 Supabase로 넘어간 뒤(학생 계정·외출 신청이 생긴 뒤)에 실수로 다시 돌려 데이터를 덮어쓰지 않게 막는다.
@@ -147,7 +152,8 @@ async function main() {
   if (staffResult.failed > 0) process.exitCode = 1;
 }
 
-main().catch((error) => {
+// 열린 연결이 남아 있어도 작업이 끝나면 바로 종료한다(워크플로가 끝나지 않고 도는 것 방지).
+main().then(() => process.exit(process.exitCode ?? 0), (error) => {
   console.error(`::error::${error.message}`);
   process.exit(1);
 });
