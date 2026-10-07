@@ -1,6 +1,13 @@
 import { supabase, requireStaff, signOutTo, describeError, showPageError } from "./supabase-client.js";
 import { liveTable } from "./live-table.js";
-import { GRADES, groupStudentsByGrade, outingsByStudent, roomsById } from "./adapters.js";
+import {
+  GRADES,
+  groupStudentsByGrade,
+  outingsByStudent,
+  roomsById,
+  isScheduledOuting,
+  createStartTimeTicker,
+} from "./adapters.js";
 import {
   EMAILJS_PUBLIC_KEY,
   EMAILJS_SERVICE_ID,
@@ -143,6 +150,8 @@ function findStudent(studentId) {
 const STATUS_META = {
   in: { badge: "재실", badgeClass: "status-badge--in", avatarClass: "student-avatar--in" },
   out: { badge: "외출중", badgeClass: "status-badge--out", avatarClass: "student-avatar--out" },
+  // 승인됐지만 신청한 외출 시각이 아직 안 됨(DB에는 out). 그 시각이 되면 외출중으로 바뀐다.
+  scheduled: { badge: "외출 예정", badgeClass: "status-badge--scheduled", avatarClass: "student-avatar--in" },
   away: { badge: "자리 없음", badgeClass: "status-badge--away", avatarClass: "student-avatar--away" },
   leave: { badge: "명령퇴사", badgeClass: "status-badge--leave", avatarClass: "student-avatar--leave" },
 };
@@ -155,8 +164,12 @@ function getOutingStatus(student) {
   const outing = state.outings[student.id];
   const status = outing && outing.status;
   if (status === "away" || status === "unauthorized") return "away";
+  if (status === "out" && isScheduledOuting(outing, state.selectedDate, TODAY_KEY)) return "scheduled";
   return status === "out" ? "out" : "in";
 }
+
+// 외출 예정 학생의 외출 시각이 되면 다시 그려서 "외출중"으로 바꾼다.
+const updateStartTicker = createStartTimeTicker(() => render());
 
 function renderChips() {
   const roomEntries = Object.entries(state.rooms);
@@ -180,7 +193,7 @@ function renderList(filtered) {
   listEl.innerHTML = filtered
     .map((s) => {
       const status = getOutingStatus(s);
-      const isOut = status === "out";
+      const isOut = status === "out" || status === "scheduled";
       const meta = STATUS_META[status];
       const outing = state.outings[s.id];
       const reasonText = isOut && outing && outing.reason ? ` · ${outing.reason}` : "";
@@ -202,6 +215,8 @@ function renderList(filtered) {
         actionsHtml = `<button type="button" class="toggle-btn toggle-btn--mark-out" data-toggle-id="${escapeHtml(s.id)}" data-grade="${escapeHtml(s.grade)}" data-current-status="in">외출 체크</button>`;
       } else if (status === "out") {
         actionsHtml = `<button type="button" class="toggle-btn toggle-btn--mark-in" data-toggle-id="${escapeHtml(s.id)}" data-grade="${escapeHtml(s.grade)}" data-current-status="out">복귀 체크</button>`;
+      } else if (status === "scheduled") {
+        actionsHtml = `<button type="button" class="toggle-btn toggle-btn--mark-in" data-toggle-id="${escapeHtml(s.id)}" data-grade="${escapeHtml(s.grade)}" data-current-status="out">외출 취소</button>`;
       } else if (status === "leave") {
         actionsHtml = `<div class="since-text ml-auto">학생 명단 관리에서 설정</div>`;
       } else {
@@ -240,7 +255,11 @@ function render() {
   const roomIdByStudent = getRoomIdByStudentId();
 
   const outCount = allStudents.filter((s) => getOutingStatus(s) === "out").length;
-  outCountEl.textContent = isToday ? `외출중 ${outCount}명` : `그 날 외출 기록 ${outCount}명`;
+  const scheduledCount = isToday ? allStudents.filter((s) => getOutingStatus(s) === "scheduled").length : 0;
+  outCountEl.textContent = isToday
+    ? `외출중 ${outCount}명${scheduledCount ? ` · 외출 예정 ${scheduledCount}명` : ""}`
+    : `그 날 외출 기록 ${outCount}명`;
+  updateStartTicker(isToday ? Object.values(state.outings) : []);
 
   renderChips();
 

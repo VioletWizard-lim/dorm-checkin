@@ -1,6 +1,13 @@
 import { supabase, requireStaff, signOutTo, describeError, showPageError } from "./supabase-client.js";
 import { liveTable } from "./live-table.js";
-import { GRADES, groupStudentsByGrade, outingsByStudent, roomsById } from "./adapters.js";
+import {
+  GRADES,
+  groupStudentsByGrade,
+  outingsByStudent,
+  roomsById,
+  isScheduledOuting,
+  createStartTimeTicker,
+} from "./adapters.js";
 
 const MIN_SIZE = 1;
 let currentTeacherName = "";
@@ -109,7 +116,8 @@ function getStudentStatus(studentId, studentsById) {
   const outing = state.outings[studentId];
   // "unauthorized"는 예전 상태 이름(자리비움과 합쳐지기 전) — 기존 데이터 호환용으로 계속 away 취급
   if (outing && (outing.status === "away" || outing.status === "unauthorized")) return "away";
-  if (outing && outing.status === "out") return "out";
+  // 외출 예정(승인됐지만 외출 시각 전)은 아직 자리에 있으므로 외출 색으로 칠하지 않는다.
+  if (outing && outing.status === "out" && !isScheduledOuting(outing, TODAY_KEY, TODAY_KEY)) return "out";
   const todayIdx = todayWeekdayIndex();
   if (student && todayIdx !== null && Array.isArray(student.afterschoolDays) && student.afterschoolDays[todayIdx]) {
     return "afterschool";
@@ -122,6 +130,7 @@ function getRawOutingStatus(studentId) {
   const outing = state.outings[studentId];
   const status = outing && outing.status;
   if (status === "away" || status === "unauthorized") return "away";
+  if (status === "out" && isScheduledOuting(outing, TODAY_KEY, TODAY_KEY)) return "scheduled";
   return status === "out" ? "out" : "in";
 }
 
@@ -255,7 +264,12 @@ function renderGrid(room) {
       const student = studentsById[studentId];
       const status = getStudentStatus(studentId, studentsById);
       const name = student ? student.name || "이름 없음" : "(삭제된 학생)";
-      const meta = student ? `학번 ${student.sid || "-"}` : "";
+      const scheduledOuting = isScheduledOuting(state.outings[studentId], TODAY_KEY, TODAY_KEY);
+      const meta = student
+        ? scheduledOuting
+          ? `${state.outings[studentId].startTime} 외출 예정`
+          : `학번 ${student.sid || "-"}`
+        : "";
       // 보기 모드에서는(편집 모드가 아니고, 학생 데이터가 남아있고, 명령퇴사 중이 아니면)
       // 좌석을 눌러 바로 출석 상태를 바꿀 수 있다 — 명령퇴사는 students.html에서만 설정.
       const onLeave = isOnLeave(student, TODAY_KEY);
@@ -267,6 +281,8 @@ function renderGrid(room) {
         if (rawStatus === "in") {
           // "외출"(재실 -> 외출중)은 여기서 할 수 없다 — check.html에서만.
           actionButtonsHtml = `<button type="button" class="seat-cell__action-btn" data-seat-mark-away="${escapeHtml(studentId)}">자리없음</button>`;
+        } else if (rawStatus === "scheduled") {
+          actionButtonsHtml = `<button type="button" class="seat-cell__action-btn" data-seat-restore="${escapeHtml(studentId)}">외출 취소</button>`;
         } else if (rawStatus === "out") {
           actionButtonsHtml = `<button type="button" class="seat-cell__action-btn" data-seat-restore="${escapeHtml(studentId)}">복귀</button>`;
         } else {
@@ -305,7 +321,11 @@ function render() {
   const activeRoom = state.activeRoomId ? state.rooms[state.activeRoomId] : null;
   renderRoomSettingsPanel(activeRoom);
   renderGrid(activeRoom);
+  updateStartTicker(Object.values(state.outings));
 }
+
+// 외출 예정 학생의 외출 시각이 되면 다시 그려서 외출 색으로 바꾼다.
+const updateStartTicker = createStartTimeTicker(() => render());
 
 // 저장 결과 처리: 실패하면 알리고, 성공하면 Realtime 알림을 기다리지 않고 바로 다시 읽는다.
 async function afterWrite(error, live) {

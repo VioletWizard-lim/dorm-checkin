@@ -115,7 +115,8 @@ test.describe("외출 신청 승인", () => {
     await env.createStudentAccount(STUDENT.hong, "hong123");
     const studentPage = await openOtherAs("hong123", "/student.html");
     await studentPage.fill("#reasonInput", "치과");
-    await studentPage.selectOption("#startHour", "19");
+    // 외출 시각이 이미 지났으므로(00:00) 승인하면 바로 외출중
+    await studentPage.selectOption("#startHour", "00");
     await studentPage.selectOption("#startMinute", "00");
     await studentPage.selectOption("#returnHour", "21");
     await studentPage.click("#requestBtn");
@@ -124,31 +125,31 @@ test.describe("외출 신청 승인", () => {
     await openAs("homeroom01", "/check.html");
     await expect(page.locator("#requestPanel")).toBeVisible();
     await expect(page.locator("#requestCount")).toHaveText("1건");
-    await expect(requestRow(page, "홍길동")).toContainText("치과 (19:00~21:00)");
+    await expect(requestRow(page, "홍길동")).toContainText("치과 (00:00~21:00)");
     await expect(page.locator(".student-card", { hasText: "홍길동" }).locator(".pending-chip")).toHaveText("외출 신청 대기");
 
     await requestRow(page, "홍길동").getByRole("button", { name: "승인" }).click();
     await expect(page.locator("#requestPanel")).toBeHidden();
     await expect(page.locator(".student-card", { hasText: "홍길동" }).locator(".status-badge")).toHaveText("외출중");
-    await expect(page.locator(".student-card", { hasText: "홍길동" })).toContainText("19:00 외출중 · 치과 (~21:00)");
+    await expect(page.locator(".student-card", { hasText: "홍길동" })).toContainText("00:00 외출중 · 치과 (~21:00)");
 
     const [request] = await requestsOf(env, STUDENT.hong);
     expect(request).toMatchObject({ status: "approved", decided_by_name: "김담임" });
     expect(await outingOf(env, STUDENT.hong)).toMatchObject({
       status: "out",
       reason: "치과",
-      start_time: "19:00",
+      start_time: "00:00",
       expected_return: "21:00",
       request_id: request.id,
       checked_by_name: "김담임",
     });
     const sends = await page.evaluate(() => window.__emailjsSends);
-    expect(sends.map((s) => s.params)).toMatchObject([{ student_name: "홍길동", reason: "치과", out_time: "19:00", return_time: "21:00", teacher_id: "김담임" }]);
+    expect(sends.map((s) => s.params)).toMatchObject([{ student_name: "홍길동", reason: "치과", out_time: "00:00", return_time: "21:00", teacher_id: "김담임" }]);
 
     await expect(studentPage.locator("#requestList .request-chip")).toHaveText(["승인됨"]);
     await expect(studentPage.locator("#requestList")).toContainText("김담임 선생님 승인");
     await expect(studentPage.locator("#statusBox .status-badge")).toHaveText("외출중");
-    await expect(studentPage.locator("#statusBox")).toContainText("19:00부터 외출 중");
+    await expect(studentPage.locator("#statusBox")).toContainText("00:00부터 외출 중");
     await expect(studentPage.locator("#requestHint")).toContainText("이미 외출 중입니다");
   });
 
@@ -196,5 +197,68 @@ test.describe("외출 신청 승인", () => {
     await expect(supervisor.locator("#requestPanel")).toBeHidden();
     const dorm = await openOtherAs("dorm01", "/check.html");
     await expect(requestRow(dorm, "이서연")).toContainText("학원");
+  });
+});
+
+test.describe("외출 예정(승인됐지만 외출 시각 전)", () => {
+  // 브라우저 시계를 오늘(KST) 00:10으로 둔다. 실제 시각보다 앞서지 않게 해서 로그인 토큰이 만료로 보이지 않게 한다.
+  const fakeNow = () => new Date(`${todayKst()}T00:10:00+09:00`);
+
+  async function seedApprovedOuting(env) {
+    await env.sql(
+      `insert into public.outings (date, student_id, status, reason, start_time, expected_return, checked_by_name)
+       values ($1, $2, 'out', '병원', '00:40', '02:00', '김담임')`,
+      [todayKst(), STUDENT.hong]
+    );
+  }
+
+  test("교사 화면: 외출 시각 전에는 외출 예정, 그 시각이 되면 외출중", async ({ env, context, page, openAs }) => {
+    await seedApprovedOuting(env);
+    await context.clock.install({ time: fakeNow() });
+    await openAs("admin01", "/check.html");
+    const hong = page.locator(".student-card", { hasText: "홍길동" });
+    await expect(hong.locator(".status-badge")).toHaveText("외출 예정");
+    await expect(hong).toContainText("00:40 외출 예정 · 병원 (~02:00)");
+    await expect(hong.getByRole("button", { name: "외출 취소" })).toBeVisible();
+    await expect(page.locator("#outCountText")).toHaveText("외출중 0명 · 외출 예정 1명");
+
+    await page.clock.fastForward("31:00");
+    await expect(hong.locator(".status-badge")).toHaveText("외출중");
+    await expect(hong).toContainText("00:40 외출중 · 병원 (~02:00)");
+    await expect(page.locator("#outCountText")).toHaveText("외출중 1명");
+  });
+
+  test("현황판·좌석 배치판: 외출 예정은 인원에서 빼고 좌석은 외출 색이 아니다", async ({ env, context, page, openAs }) => {
+    await seedApprovedOuting(env);
+    await context.clock.install({ time: fakeNow() });
+    await openAs("admin01", "/display.html");
+    await expect(page.locator("#outPanelCount")).toHaveText("0명 · 예정 1명");
+    await expect(page.locator("#outPanelList .display-card--scheduled")).toContainText("00:40 외출 예정");
+
+    await page.goto("/seat.html");
+    const seat = page.locator("#seatGrid > .seat-cell").first();
+    await expect(seat).toContainText("00:40 외출 예정");
+    await expect(seat).not.toHaveClass(/seat-cell--out/);
+    await seat.click();
+    await expect(seat.locator(".seat-cell__action-btn")).toHaveText(["외출 취소", "취소"]);
+    await seat.locator(".seat-cell__action-btn", { hasText: "외출 취소" }).click();
+    await expect.poll(async () => (await outingOf(env, STUDENT.hong)).status).toBe("in");
+  });
+
+  test("학생 화면: 외출 예정으로 보이고 다시 신청할 수 없으며, 그 시각이 되면 외출중", async ({ env, context, openOtherAs }) => {
+    void context; // 테스트 시작 때 데이터를 되돌리는 fixture
+    await seedApprovedOuting(env);
+    await env.createStudentAccount(STUDENT.hong, "hong123");
+    const studentPage = await openOtherAs("hong123", "/student.html");
+    await studentPage.clock.install({ time: fakeNow() });
+    await studentPage.reload();
+    await expect(studentPage.locator("#statusBox .status-badge")).toHaveText("외출 예정");
+    await expect(studentPage.locator("#statusBox")).toContainText("00:40에 외출할 수 있습니다(승인됨)");
+    await expect(studentPage.locator("#requestBtn")).toBeDisabled();
+    await expect(studentPage.locator("#requestHint")).toHaveText("승인된 외출이 있습니다.");
+
+    await studentPage.clock.fastForward("31:00");
+    await expect(studentPage.locator("#statusBox .status-badge")).toHaveText("외출중");
+    await expect(studentPage.locator("#statusBox")).toContainText("00:40부터 외출 중");
   });
 });

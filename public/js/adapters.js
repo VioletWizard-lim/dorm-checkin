@@ -139,3 +139,40 @@ export function normalizeLoginId(raw) {
   if (!value) return "";
   return /^[a-z0-9._-]{1,64}$/.test(value) ? value : null;
 }
+
+// ─── 외출 예정 ───
+// 학생 신청을 승인하면 DB에는 바로 'out'으로 기록되지만, 신청한 외출 시각(start_time)이 아직 안 됐으면
+// 화면에는 "외출 예정"으로 보여 주고 그 시각이 되면 "외출중"으로 바꾼다. 오늘 기록에만 해당.
+
+// 이 컴퓨터의 지금 시각 "HH:MM"
+export function currentHHMM(now = new Date()) {
+  return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+}
+
+// outing.startTime(adapters 모양) 또는 start_time(DB 행) 둘 다 받는다.
+export function isScheduledOuting(outing, dateKey, todayKey, now = new Date()) {
+  const startTime = outing && (outing.startTime || outing.start_time);
+  return Boolean(outing && outing.status === "out" && startTime && dateKey === todayKey && currentHHMM(now) < startTime);
+}
+
+// 가장 가까운 외출 시각이 되면 onTick을 부른다(그때 화면을 다시 그림). 화면마다 하나씩 만들어
+// 그릴 때마다 update(오늘 외출 기록들)를 부르면 된다.
+export function createStartTimeTicker(onTick) {
+  let timer = null;
+  return function update(outings) {
+    if (timer) clearTimeout(timer);
+    timer = null;
+    const now = new Date();
+    const nowText = currentHHMM(now);
+    const upcoming = outings
+      .filter((o) => o && o.status === "out")
+      .map((o) => o.startTime || o.start_time)
+      .filter((t) => /^\d{2}:\d{2}$/.test(t || "") && t > nowText)
+      .sort();
+    if (upcoming.length === 0) return;
+    const [h, m] = upcoming[0].split(":").map(Number);
+    const target = new Date(now);
+    target.setHours(h, m, 0, 0);
+    timer = setTimeout(onTick, Math.max(0, target - now) + 500);
+  };
+}
