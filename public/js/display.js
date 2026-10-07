@@ -1,6 +1,13 @@
 import { requireStaff, signOutTo, describeError, showPageError } from "./supabase-client.js";
 import { liveTable } from "./live-table.js";
-import { GRADES, groupStudentsByGrade, outingsByStudent, roomsById } from "./adapters.js";
+import {
+  GRADES,
+  groupStudentsByGrade,
+  outingsByStudent,
+  roomsById,
+  isScheduledOuting,
+  createStartTimeTicker,
+} from "./adapters.js";
 
 // outings는 날짜별로 저장된다(check.js 참고). 현황판은 항상 "오늘"만 보여준다.
 function getDateKey(date = new Date()) {
@@ -121,11 +128,20 @@ function renderRoomChips() {
 
 function renderOutingPanel(students, statuses, listEl, countEl, extraLabel, emptyText) {
   const statusList = Array.isArray(statuses) ? statuses : [statuses];
+  // 외출 예정(승인됐지만 외출 시각 전)은 외출중 패널 맨 아래에 따로 표시하고 인원에서는 뺀다.
+  const isScheduled = (s) => isScheduledOuting(state.outings[s.id], TODAY_KEY, TODAY_KEY);
   const matched = students
     .filter((s) => state.outings[s.id] && statusList.includes(state.outings[s.id].status))
-    .sort((a, b) => (state.outings[a.id]?.since || 0) - (state.outings[b.id]?.since || 0));
+    .sort((a, b) => {
+      const sa = isScheduled(a);
+      const sb = isScheduled(b);
+      if (sa !== sb) return sa ? 1 : -1;
+      if (sa) return state.outings[a.id].startTime.localeCompare(state.outings[b.id].startTime);
+      return (state.outings[a.id]?.since || 0) - (state.outings[b.id]?.since || 0);
+    });
 
-  countEl.textContent = `${matched.length}명`;
+  const scheduledCount = matched.filter(isScheduled).length;
+  countEl.textContent = `${matched.length - scheduledCount}명${scheduledCount ? ` · 예정 ${scheduledCount}명` : ""}`;
 
   if (matched.length === 0) {
     listEl.innerHTML = `<div class="display-panel__empty">${emptyText}</div>`;
@@ -135,14 +151,15 @@ function renderOutingPanel(students, statuses, listEl, countEl, extraLabel, empt
   listEl.innerHTML = matched
     .map((s) => {
       const outing = state.outings[s.id];
+      const scheduled = isScheduled(s);
       return `
-        <div class="display-card">
+        <div class="display-card${scheduled ? " display-card--scheduled" : ""}">
           <div class="display-card__avatar">${escapeHtml((s.name || "?").charAt(0))}</div>
           <div class="display-card__info">
             <div class="display-card__name">${escapeHtml(s.name || "이름 없음")}</div>
             <div class="display-card__meta">학번 ${escapeHtml(s.sid || "-")} · ${escapeHtml(s.cls || "-")}</div>
           </div>
-          <div class="display-card__extra">${escapeHtml((outing && outing.startTime) || formatTime(outing && outing.since))} ${extraLabel}</div>
+          <div class="display-card__extra">${escapeHtml((outing && outing.startTime) || formatTime(outing && outing.since))} ${scheduled ? "외출 예정" : extraLabel}</div>
         </div>
       `;
     })
@@ -233,7 +250,11 @@ function render() {
   renderOutingPanel(notOnLeave, "out", outListEl, outCountEl, "외출", "외출중인 학생이 없습니다.");
   renderLeavePanel(onLeave);
   renderAfterschoolPanel(notOnLeave);
+  updateStartTicker(Object.values(state.outings));
 }
+
+// 외출 예정 학생의 외출 시각이 되면 다시 그린다.
+const updateStartTicker = createStartTimeTicker(() => render());
 
 gradeChipsEl.addEventListener("click", (event) => {
   const btn = event.target.closest("[data-grade-filter]");

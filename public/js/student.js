@@ -2,7 +2,7 @@
 // 신청·취소는 RPC(create_outing_request·cancel_outing_request)로만 한다 — 학생 정보는 서버가 로그인 계정으로 찾는다.
 import { supabase, requireStudent, signOutTo, describeError, showPageError } from "./supabase-client.js";
 import { liveTable } from "./live-table.js";
-import { studentFromRow } from "./adapters.js";
+import { studentFromRow, isScheduledOuting, createStartTimeTicker } from "./adapters.js";
 
 function getDateKey(date = new Date()) {
   const y = date.getFullYear();
@@ -31,6 +31,7 @@ const logoutBtn = document.getElementById("logoutBtn");
 const STATUS_META = {
   in: { badge: "재실", badgeClass: "status-badge--in" },
   out: { badge: "외출중", badgeClass: "status-badge--out" },
+  scheduled: { badge: "외출 예정", badgeClass: "status-badge--scheduled" },
   away: { badge: "자리 없음", badgeClass: "status-badge--away" },
   leave: { badge: "명령퇴사", badgeClass: "status-badge--leave" },
 };
@@ -127,7 +128,7 @@ function isOnLeave(student) {
 function currentStatus() {
   if (isOnLeave(state.student)) return "leave";
   const status = state.outing && state.outing.status;
-  if (status === "out") return "out";
+  if (status === "out") return isScheduledOuting(state.outing, TODAY_KEY, TODAY_KEY) ? "scheduled" : "out";
   if (status === "away") return "away";
   return "in";
 }
@@ -146,6 +147,12 @@ function renderStatus() {
     if (o.expected_return) parts.push(`예상 복귀 ${o.expected_return}`);
     if (o.checked_by_name) parts.push(`${o.checked_by_name} 선생님 확인`);
     detail = parts.join(" · ");
+  } else if (status === "scheduled") {
+    const o = state.outing;
+    const parts = [`${o.start_time}에 외출할 수 있습니다(승인됨)`];
+    if (o.expected_return) parts.push(`예상 복귀 ${o.expected_return}`);
+    if (o.checked_by_name) parts.push(`${o.checked_by_name} 선생님 승인`);
+    detail = parts.join(" · ");
   } else if (status === "away") {
     detail = `${formatTime(state.outing.since)}에 자리 없음으로 표시되었습니다. 사감 선생님께 확인해 주세요.`;
   }
@@ -160,6 +167,7 @@ function blockedReason() {
   const status = currentStatus();
   if (status === "leave") return "명령퇴사 기간에는 외출을 신청할 수 없습니다.";
   if (status === "out") return "이미 외출 중입니다. 복귀 체크는 사감 선생님이 합니다.";
+  if (status === "scheduled") return "승인된 외출이 있습니다.";
   if (state.requests.some((r) => r.status === "pending")) {
     return "승인을 기다리는 신청이 있습니다. 취소한 뒤 다시 신청할 수 있습니다.";
   }
@@ -212,8 +220,12 @@ function renderRequests() {
     .join("");
 }
 
+// 외출 시각이 되면 다시 그려서 "외출 예정" → "외출중"으로 바꾼다.
+const updateStartTicker = createStartTimeTicker(() => render());
+
 function render() {
   if (!state.student) return;
+  updateStartTicker(state.outing ? [state.outing] : []);
   renderStatus();
   renderForm();
   renderRequests();
