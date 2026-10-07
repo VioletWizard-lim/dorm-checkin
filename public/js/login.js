@@ -1,9 +1,4 @@
-import { auth } from "./firebase-init.js";
-import { FAKE_EMAIL_DOMAIN } from "./firebase-config.js";
-import {
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-} from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+import { supabase, staffEmail } from "./supabase-client.js";
 
 const REDIRECT_TARGET = "./check.html";
 const ID_STORAGE_KEY = "dormcheckin.savedUserId";
@@ -46,21 +41,20 @@ function setSubmitting(isSubmitting) {
   submitButton.textContent = isSubmitting ? "로그인 중..." : "로그인";
 }
 
-function mapAuthError(code) {
-  switch (code) {
-    case "auth/invalid-credential":
-    case "auth/user-not-found":
-    case "auth/wrong-password":
+function mapAuthError(error) {
+  switch (error && error.code) {
+    case "invalid_credentials":
       return "아이디 또는 비밀번호가 올바르지 않습니다.";
-    case "auth/too-many-requests":
+    case "user_banned":
+      return "삭제(비활성화)된 계정입니다. 관리자에게 문의해 주세요.";
+    case "over_request_rate_limit":
       return "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.";
-    case "auth/user-disabled":
-      return "사용이 중지된 계정입니다. 관리자에게 문의해 주세요.";
-    case "auth/network-request-failed":
-      return "네트워크 연결을 확인해 주세요.";
     default:
-      return "로그인 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.";
+      break;
   }
+  if (error && error.status === 429) return "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.";
+  if (error && error.name === "AuthRetryableFetchError") return "네트워크 연결을 확인해 주세요.";
+  return "로그인 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.";
 }
 
 const savedId = localStorage.getItem(ID_STORAGE_KEY);
@@ -73,8 +67,8 @@ if (new URLSearchParams(window.location.search).get("disabled") === "1") {
   showError("삭제(비활성화)된 계정입니다. 관리자에게 문의해 주세요.");
 }
 
-onAuthStateChanged(auth, (user) => {
-  if (user) {
+supabase.auth.getSession().then(({ data }) => {
+  if (data && data.session) {
     window.location.replace(REDIRECT_TARGET);
   }
 });
@@ -105,11 +99,11 @@ form.addEventListener("submit", async (event) => {
     localStorage.removeItem(ID_STORAGE_KEY);
   }
 
-  try {
-    const email = `${userId}@${FAKE_EMAIL_DOMAIN}`;
-    await signInWithEmailAndPassword(auth, email, password);
-  } catch (err) {
+  const { error } = await supabase.auth.signInWithPassword({ email: staffEmail(userId), password });
+  if (error) {
     setSubmitting(false);
-    showError(mapAuthError(err.code));
+    showError(mapAuthError(error));
+    return;
   }
+  window.location.replace(REDIRECT_TARGET);
 });

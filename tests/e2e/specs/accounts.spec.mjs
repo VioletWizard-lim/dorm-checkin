@@ -1,0 +1,155 @@
+import { test, expect } from "./fixtures.mjs";
+import { PASSWORD, ROOM, staffId } from "../harness/seed.mjs";
+import { answerDialogs, collectAlerts } from "./helpers.mjs";
+
+const row = (page, loginId) =>
+  page.locator("#accountList .student-card").filter({ has: page.locator(".student-name", { hasText: new RegExp(`^${loginId}$`) }) });
+
+async function profile(env, loginId) {
+  return (await env.sql("select * from public.profiles where login_id = $1", [loginId]))[0] ?? null;
+}
+
+// 별도 창에서 로그인 화면으로 로그인해 보고 결과(체크 화면 이동 여부 또는 오류 문구)를 돌려준다.
+async function tryLogin(openOtherAs, loginId, password) {
+  const page = await openOtherAs(null, "/login.html");
+  await page.fill("#userId", loginId);
+  await page.fill("#password", password);
+  await page.click("#submitBtn");
+  await Promise.race([
+    page.waitForURL(/check\.html$/, { timeout: 8000 }).catch(() => {}),
+    page.locator("#errorBox").waitFor({ state: "visible", timeout: 8000 }).catch(() => {}),
+  ]);
+  return page.url().endsWith("/check.html") ? "ok" : await page.locator("#errorBox").textContent();
+}
+
+test.describe("계정 관리", () => {
+  test("관리자만 들어올 수 있고 목록에 역할·담당 범위가 보인다", async ({ openAs, page }) => {
+    await openAs("admin01", "/accounts.html");
+    await expect(page.locator("#accountList .student-name")).toHaveText([
+      "admin01", "dorm01", "gm01", "gone01", "homeroom01", "super01", "teacher01",
+    ]);
+    await expect(row(page, "admin01")).toContainText("본인 계정");
+    await expect(row(page, "admin01").locator("button")).toHaveCount(0);
+    await expect(row(page, "gone01")).toContainText("삭제됨");
+    await expect(row(page, "gm01")).toContainText("1학년 · 1학년실");
+    await expect(row(page, "homeroom01")).toContainText("담당 반: 1학년 3반");
+    await expect(page.locator("#bulkResetBtn")).toHaveText("비밀번호 일괄 재발급 (5명)");
+  });
+
+  test("정보 수정: 이름·역할·담당 학년/실·담당 반", async ({ env, openAs, page }) => {
+    await openAs("admin01", "/accounts.html");
+    await row(page, "teacher01").getByRole("button", { name: "정보 수정" }).click();
+    await page.fill("[data-edit-name]", "2학년부장");
+    await page.click("[data-edit-set-role='gradeManager']");
+    await page.click("[data-edit-grade='2']");
+    await page.click(`[data-edit-room='${ROOM.second}']`);
+    await page.click("[data-save-role]");
+    await expect(row(page, "teacher01")).toContainText("2학년 · 2·3학년실");
+    expect(await profile(env, "teacher01")).toMatchObject({
+      name: "2학년부장",
+      role: "gradeManager",
+      managed_grades: [2],
+      managed_rooms: [ROOM.second],
+      managed_classes: [],
+    });
+
+    // 담임으로 바꾸면 학년/실 담당은 비워지고 담당 반이 저장된다
+    await row(page, "teacher01").getByRole("button", { name: "정보 수정" }).click();
+    await page.click("[data-edit-set-role='teacher']");
+    await page.click("[data-edit-class='1'][data-edit-class-value='1학년 1반']");
+    await page.click("[data-save-role]");
+    await expect(row(page, "teacher01")).toContainText("담당 반: 1학년 1반");
+    expect(await profile(env, "teacher01")).toMatchObject({
+      role: "teacher",
+      managed_grades: [],
+      managed_rooms: [],
+      managed_classes: [{ grade: 1, cls: "1학년 1반" }],
+    });
+  });
+
+  test("저장이 거부되면 알림을 띄우고 편집 폼을 유지한다", async ({ env, openAs, page }) => {
+    const alerts = collectAlerts(page);
+    await openAs("admin01", "/accounts.html");
+    await row(page, "teacher01").getByRole("button", { name: "정보 수정" }).click();
+    await env.sql("update public.profiles set role = 'teacher' where login_id = 'admin01'"); // 그 사이 관리자 권한을 잃음
+    await page.click("[data-edit-set-role='dormStaff']");
+    await page.click("[data-save-role]");
+    await expect.poll(() => alerts.at(-1)).toBe("저장에 실패했습니다: 권한이 없거나 계정을 찾을 수 없습니다.");
+    await expect(page.locator("[data-save-role]")).toBeVisible();
+    expect((await profile(env, "teacher01")).role).toBe("teacher");
+  });
+
+  test("삭제하면 로그인 자체가 막히고 목록에 삭제됨으로 남는다", async ({ env, openAs, openOtherAs, page }) => {
+    answerDialogs(page, [true]);
+    await openAs("admin01", "/accounts.html");
+    await row(page, "homeroom01").getByRole("button", { name: "삭제" }).click();
+    await expect(row(page, "homeroom01")).toContainText("삭제됨");
+    expect(await profile(env, "homeroom01")).toMatchObject({ disabled: true, role: null, managed_classes: [] });
+    expect(await tryLogin(openOtherAs, "homeroom01", PASSWORD)).toBe("삭제(비활성화)된 계정입니다. 관리자에게 문의해 주세요.");
+    await expect(page.locator("#bulkResetBtn")).toHaveText("비밀번호 일괄 재발급 (4명)");
+  });
+
+  test("교사 계정 일괄 생성: 미리보기의 비밀번호로 바로 로그인된다", async ({ env, openAs, openOtherAs, page }) => {
+    await openAs("admin01", "/accounts.html");
+    await page.fill("#bulkAccountInput", "NewT1\t새교사\nnewt2\t둘째교사\tmypass99\nadmin01\t중복\nbad id\t오류");
+    await expect(page.locator("#bulkAccountPreview .bulk-preview__row")).toHaveCount(3);
+    await expect(page.locator("#bulkAccountPreview .bulk-preview__row").first()).toContainText("newt1 · 새교사 · 비밀번호");
+    await expect(page.locator("#bulkAccountPreview .bulk-preview__errors")).toContainText("4번째 줄");
+    const autoPassword = /비밀번호 (\S+) \(자동 생성\)/.exec(
+      await page.locator("#bulkAccountPreview .bulk-preview__row").first().textContent()
+    )[1];
+
+    await page.click("#bulkCreateBtn");
+    await expect(page.locator("#resultWrap")).toBeVisible();
+    const results = page.locator("#resultList .student-card");
+    await expect(results).toHaveCount(3);
+    await expect(results.nth(0)).toContainText(`생성됨비밀번호: ${autoPassword}`);
+    await expect(results.nth(1)).toContainText("생성됨비밀번호: mypass99");
+    await expect(results.nth(2)).toContainText("이미 사용 중인 아이디입니다.");
+    await expect(page.locator("#resultCopy")).toHaveValue(`newt1\t새교사\t${autoPassword}\nnewt2\t둘째교사\tmypass99`);
+
+    await expect(row(page, "newt1")).toContainText("teacher");
+    expect(await profile(env, "newt2")).toMatchObject({ kind: "staff", role: "teacher", name: "둘째교사" });
+    expect(await tryLogin(openOtherAs, "NEWT1", autoPassword)).toBe("ok");
+  });
+
+  test("비밀번호 재발급: 새 비밀번호만 통한다(개별·일괄)", async ({ openAs, openOtherAs, page }) => {
+    answerDialogs(page, [true, true]);
+    await openAs("admin01", "/accounts.html");
+    await row(page, "teacher01").getByRole("button", { name: "비밀번호 재발급" }).click();
+    const first = page.locator("#resultList .student-card").first();
+    await expect(first).toContainText("재발급됨");
+    const newPassword = /비밀번호: (\S+)/.exec(await first.textContent())[1];
+    expect(await tryLogin(openOtherAs, "teacher01", PASSWORD)).toBe("아이디 또는 비밀번호가 올바르지 않습니다.");
+    expect(await tryLogin(openOtherAs, "teacher01", newPassword)).toBe("ok");
+
+    await page.click("#bulkResetBtn");
+    await expect(page.locator("#resultList .student-card")).toHaveCount(6);
+    const lines = (await page.locator("#resultCopy").inputValue()).split("\n");
+    expect(lines.map((l) => l.split("\t")[0])).toEqual(["dorm01", "gm01", "homeroom01", "super01", "teacher01", "teacher01"]);
+    const dormPassword = lines[0].split("\t")[2];
+    expect(await tryLogin(openOtherAs, "dorm01", dormPassword)).toBe("ok");
+    expect(await tryLogin(openOtherAs, "gm01", PASSWORD)).toBe("아이디 또는 비밀번호가 올바르지 않습니다.");
+  });
+
+  test("서버 함수 호출에 쓰는 헤더가 함수의 CORS 허용 목록에 모두 들어 있다", async ({ env, openAs, page }) => {
+    // Playwright는 가로챈 요청의 사전 요청(OPTIONS)을 직접 처리하므로, 실제 함수의 허용 목록과 따로 대조한다.
+    answerDialogs(page, [true]);
+    await openAs("admin01", "/accounts.html");
+    const requestPromise = page.waitForRequest((req) => req.url().includes("/functions/v1/staff-accounts"));
+    await row(page, "teacher01").getByRole("button", { name: "비밀번호 재발급" }).click();
+    const sent = Object.keys((await requestPromise).headers()).filter(
+      (name) => !["accept", "accept-language", "content-language", "referer", "user-agent", "origin"].includes(name) && !name.startsWith("sec-")
+    );
+    const preflight = await fetch(env.functionUrls["staff-accounts"], { method: "OPTIONS" });
+    const allowed = (preflight.headers.get("access-control-allow-headers") ?? "").split(",").map((h) => h.trim().toLowerCase());
+    expect(sent.length).toBeGreaterThan(0);
+    for (const name of sent) expect(allowed, `${name} 헤더가 CORS 허용 목록에 없음`).toContain(name);
+    expect(preflight.headers.get("access-control-allow-methods")).toContain("POST");
+  });
+
+  test("기숙사부는 계정 관리에 들어올 수 없다", async ({ openAs, page }) => {
+    await openAs("dorm01", "/accounts.html");
+    await expect(page).toHaveURL(/check\.html$/);
+  });
+});

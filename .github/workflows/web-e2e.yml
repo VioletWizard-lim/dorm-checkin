@@ -1,0 +1,44 @@
+name: Web E2E tests
+on:
+  pull_request:
+    paths:
+      - "public/**"
+      - "supabase/**"
+      - "tests/db/shim.sql"
+      - "tests/e2e/**"
+      - ".github/workflows/web-e2e.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: 화면 E2E (Playwright + 로컬 Postgres·PostgREST)
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: tests/e2e
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tests/e2e/package-lock.json
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - uses: actions/cache@v4
+        with:
+          path: tests/e2e/.cache
+          key: postgrest-${{ hashFiles('tests/e2e/fetch-postgrest.sh') }}
+      - run: bash fetch-postgrest.sh
+      - run: npx playwright test
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-results
+          path: tests/e2e/test-results
+          retention-days: 7

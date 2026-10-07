@@ -1202,6 +1202,19 @@ input {
   color: var(--color-text-muted);
 }
 
+.section-subtext--with-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* 데이터를 불러오지 못했을 때 화면 맨 위에 뜨는 안내(supabase-client.js의 showPageError) */
+.page-error {
+  margin: 16px 40px 0;
+}
+
 .role-badge {
   padding: 6px 14px;
   border-radius: 999px;
