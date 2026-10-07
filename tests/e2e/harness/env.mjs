@@ -22,6 +22,7 @@ const clientSource = readFileSync(join(PUBLIC_DIR, "js", "supabase-client.js"), 
 const configSource = readFileSync(join(PUBLIC_DIR, "js", "supabase-config.js"), "utf8");
 export const SUPABASE_URL = /SUPABASE_URL = "([^"]+)"/.exec(configSource)[1];
 export const STAFF_EMAIL_DOMAIN = /STAFF_EMAIL_DOMAIN = "([^"]+)"/.exec(configSource)[1];
+export const STUDENT_EMAIL_DOMAIN = /STUDENT_EMAIL_DOMAIN = "([^"]+)"/.exec(configSource)[1];
 const SESSION_STORAGE_KEY = `sb-${new URL(SUPABASE_URL).hostname.split(".")[0]}-auth-token`;
 
 const CONTENT_TYPES = {
@@ -123,7 +124,9 @@ export async function startEnv() {
     throw new Error(`PostgREST 실행 파일이 없습니다(${postgrestBin}). bash tests/e2e/fetch-postgrest.sh를 먼저 실행하세요.`);
   }
   const denoBin = process.env.DENO_BIN || "deno";
-  const [pgPort, restPort, gatewayPort, functionPort] = await Promise.all([freePort(), freePort(), freePort(), freePort()]);
+  const [pgPort, restPort, gatewayPort] = await Promise.all([freePort(), freePort(), freePort()]);
+  const FUNCTION_NAMES = ["staff-accounts", "student-accounts"];
+  const functionPorts = Object.fromEntries(await Promise.all(FUNCTION_NAMES.map(async (name) => [name, await freePort()])));
 
   const stops = [];
   const stopAll = async () => {
@@ -156,34 +159,38 @@ export async function startEnv() {
     await waitFor(async () => (await fetch(`${postgrestUrl}/`)).ok, "PostgREST");
 
     const auth = new AuthStore(db.pool);
-    const functionUrl = `http://127.0.0.1:${functionPort}`;
-    const gateway = createGateway({ auth, postgrestUrl, functionUrls: { "staff-accounts": functionUrl } });
+    const functionUrls = Object.fromEntries(FUNCTION_NAMES.map((name) => [name, `http://127.0.0.1:${functionPorts[name]}`]));
+    const gateway = createGateway({ auth, postgrestUrl, functionUrls });
     const gatewayUrl = await gateway.listen(gatewayPort);
     stops.push(() => gateway.close());
 
-    const fn = startProcess(
-      denoBin,
-      [
-        "run",
-        "--allow-net",
-        "--allow-env",
-        "--node-modules-dir=none",
-        "--no-lock",
-        join(REPO_ROOT, "supabase", "functions", "staff-accounts", "index.ts"),
-      ],
-      {
-        cwd: REPO_ROOT,
-        env: {
-          ...process.env,
-          DENO_SERVE_ADDRESS: `tcp:127.0.0.1:${functionPort}`,
-          SUPABASE_URL: gatewayUrl,
-          SUPABASE_SECRET_KEYS: JSON.stringify({ default: SECRET_KEY }),
+    for (const name of FUNCTION_NAMES) {
+      const fn = startProcess(
+        denoBin,
+        [
+          "run",
+          "--allow-net",
+          "--allow-env",
+          "--node-modules-dir=none",
+          "--no-lock",
+          join(REPO_ROOT, "supabase", "functions", name, "index.ts"),
+        ],
+        {
+          cwd: REPO_ROOT,
+          env: {
+            ...process.env,
+            DENO_SERVE_ADDRESS: `tcp:127.0.0.1:${functionPorts[name]}`,
+            SUPABASE_URL: gatewayUrl,
+            SUPABASE_SECRET_KEYS: JSON.stringify({ default: SECRET_KEY }),
+          },
         },
-      },
-      "staff-accounts"
-    );
-    stops.push(() => fn.stop());
-    await waitFor(async () => (await fetch(functionUrl, { method: "OPTIONS" })).ok, "Edge Function(staff-accounts)", 120000);
+        name
+      );
+      stops.push(() => fn.stop());
+    }
+    for (const name of FUNCTION_NAMES) {
+      await waitFor(async () => (await fetch(functionUrls[name], { method: "OPTIONS" })).ok, `Edge Function(${name})`, 120000);
+    }
 
     const realtime = new RealtimeHub({ connection: db.connection, pool: db.pool, jwtSecret: JWT_SECRET });
     await realtime.start();
@@ -197,7 +204,7 @@ export async function startEnv() {
       auth,
       gateway,
       realtime,
-      functionUrls: { "staff-accounts": functionUrl },
+      functionUrls,
       stop: stopAll,
 
       // 기본 데이터로 되돌린다(계정·학생·실·외출 기록 전부).
@@ -277,8 +284,10 @@ export async function startEnv() {
 
       // 로그인 화면을 거치지 않고 그 계정의 세션을 브라우저 저장소에 넣어 둔다(로그인 화면 자체는 login.spec에서 확인).
       // expired: true면 이미 만료된 access token을 넣는다(밤새 켜 둔 전자칠판처럼 — refresh token으로 다시 받아야 함).
+      // 교직원 아이디가 없으면 학생 아이디(리로스쿨 ID)로 찾는다.
       async loginAs(context, loginId, { expired = false } = {}) {
-        const user = auth.findByEmail(`${loginId}@${STAFF_EMAIL_DOMAIN}`);
+        const user =
+          auth.findByEmail(`${loginId}@${STAFF_EMAIL_DOMAIN}`) ?? auth.findByEmail(`${loginId}@${STUDENT_EMAIL_DOMAIN}`);
         if (!user) throw new Error(`테스트 계정 없음: ${loginId}`);
         const session = auth.issueSession(user, expired ? -600 : 3600);
         await context.addInitScript(
@@ -294,6 +303,22 @@ export async function startEnv() {
           },
           { origin: APP_ORIGIN, key: SESSION_STORAGE_KEY, value: JSON.stringify(session) }
         );
+      },
+
+      // 학생 계정을 바로 만든다(화면에서 발급하는 흐름은 students.spec에서 따로 확인).
+      async createStudentAccount(studentId, loginId, password = PASSWORD) {
+        await db.pool.query("update public.students set login_id = $2 where id = $1", [studentId, loginId]);
+        const user = await auth.createUser({
+          email: `${loginId}@${STUDENT_EMAIL_DOMAIN}`,
+          password,
+          app_metadata: { kind: "student" },
+        });
+        await db.pool.query(
+          `insert into public.profiles (id, login_id, kind, role, name, student_id)
+           select $1, $2, 'student', 'student', s.name, s.id from public.students s where s.id = $3`,
+          [user.id, loginId, studentId]
+        );
+        return user;
       },
 
       async sql(text, params = []) {

@@ -1,13 +1,18 @@
 // 모든 화면이 공유하는 Supabase 클라이언트와 로그인·권한 확인 도우미.
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm";
-import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STAFF_EMAIL_DOMAIN } from "./supabase-config.js";
-import { userFromProfile } from "./adapters.js";
+import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STAFF_EMAIL_DOMAIN, STUDENT_EMAIL_DOMAIN } from "./supabase-config.js";
+import { studentFromRow, userFromProfile } from "./adapters.js";
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
 // 사용자는 아이디만 입력하고, Supabase Auth에는 코드 안에서만 이메일 형식으로 바꿔 넘긴다.
 export function staffEmail(loginId) {
   return `${String(loginId).trim().toLowerCase()}@${STAFF_EMAIL_DOMAIN}`;
+}
+
+// 학생은 학생 명단에 등록된 ID로 로그인한다.
+export function studentEmail(loginId) {
+  return `${String(loginId).trim().toLowerCase()}@${STUDENT_EMAIL_DOMAIN}`;
 }
 
 let leaving = false;
@@ -23,12 +28,8 @@ export async function signOutTo(target = "./login.html") {
   window.location.replace(target);
 }
 
-// 교직원 화면 공통 진입: 세션과 프로필을 확인한다.
-// - 로그인 안 됨 → login.html
-// - 삭제(비활성화)됐거나 역할이 없는 계정 → 로그아웃 후 login.html?disabled=1
-// - 그 외 → { uid, loginId, profile } (profile은 예전 users/{uid} 모양, adapters.js 참고)
-// 다른 곳으로 보내는 중이면 null을 돌려준다.
-export async function requireStaff() {
+// 세션과 내 프로필(profiles 행)을 읽는다. 로그인 화면으로 보내는 중이면 null.
+async function loadOwnProfile() {
   const { data } = await supabase.auth.getSession();
   const session = data && data.session;
   if (!session) {
@@ -50,11 +51,51 @@ export async function requireStaff() {
     showPageError(`계정 정보를 불러오지 못했습니다(${describeError(error)}). 새로고침해 주세요.`);
     return null;
   }
-  if (!row || row.kind !== "staff" || row.disabled || !row.role) {
+  if (!row || row.disabled) {
+    await signOutTo("./login.html?disabled=1");
+    return null;
+  }
+  return row;
+}
+
+// 교직원 화면 공통 진입: 세션과 프로필을 확인한다.
+// - 로그인 안 됨 → login.html / 학생 계정 → student.html
+// - 삭제(비활성화)됐거나 역할이 없는 계정 → 로그아웃 후 login.html?disabled=1
+// - 그 외 → { uid, loginId, profile } (profile은 예전 users/{uid} 모양, adapters.js 참고)
+// 다른 곳으로 보내는 중이면 null을 돌려준다.
+export async function requireStaff() {
+  const row = await loadOwnProfile();
+  if (!row) return null;
+  if (row.kind === "student") {
+    window.location.replace("./student.html");
+    return null;
+  }
+  if (!row.role) {
     await signOutTo("./login.html?disabled=1");
     return null;
   }
   return { uid: row.id, loginId: row.login_id, profile: userFromProfile(row) };
+}
+
+// 학생 화면 진입: 학생 계정이면 { uid, loginId, student }(student는 students 행을 화면 모양으로 바꾼 것 + id).
+// 교직원 계정이면 check.html로 보낸다.
+export async function requireStudent() {
+  const row = await loadOwnProfile();
+  if (!row) return null;
+  if (row.kind !== "student") {
+    window.location.replace("./check.html");
+    return null;
+  }
+  const { data: studentRow, error } = await supabase.from("students").select("*").eq("id", row.student_id).maybeSingle();
+  if (error) {
+    showPageError(`학생 정보를 불러오지 못했습니다(${describeError(error)}). 새로고침해 주세요.`);
+    return null;
+  }
+  if (!studentRow) {
+    await signOutTo("./login.html?disabled=1");
+    return null;
+  }
+  return { uid: row.id, loginId: row.login_id, student: { id: studentRow.id, ...studentFromRow(studentRow) } };
 }
 
 // Supabase 에러 → 화면에 보여줄 문장
@@ -93,7 +134,7 @@ export async function callFunction(name, body) {
 
 // 화면 맨 위에 오류 안내를 띄운다(같은 문구는 한 번만).
 export function showPageError(message) {
-  const container = document.querySelector(".check-page") || document.body;
+  const container = document.querySelector(".check-page, .student-page") || document.body;
   const existing = Array.from(container.querySelectorAll(".page-error")).find((el) => el.textContent === message);
   if (existing) return;
   const box = document.createElement("div");

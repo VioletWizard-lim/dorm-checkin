@@ -5,7 +5,7 @@
 
 ## 한 줄 요약
 고등학교 기숙사에서 학생의 외출 여부와 오늘의 방과후 일정을 실시간으로 확인하고,
-좌석(실) 배치를 관리 교사가 직접 구성할 수 있는 웹 앱.
+좌석(실) 배치를 관리 교사가 직접 구성할 수 있는 웹 앱. 학생은 자기 계정(리로스쿨 ID)으로 외출을 신청하고, 담임 등이 승인하면 바로 외출로 처리된다.
 
 ## 기술 스택
 - **Frontend**: 순수 HTML/CSS/JS (프레임워크·빌드 없음), PWA(홈 화면 추가 지원)
@@ -13,7 +13,7 @@
   - 브라우저는 `supabase-js`를 CDN(jsdelivr `+esm`)에서 버전 고정으로 불러온다(`public/js/supabase-client.js`)
 - **Hosting**: Firebase Hosting(화면 파일만). GitHub Actions로 main 브랜치 push 시 자동 배포, PR마다 미리보기 URL
 - **폰트**: Noto Sans KR (Google Fonts)
-- **대상 기기**: 교무실/사감실 PC(입력·현황판 화면), Android 기반 전자칠판(전체화면 PWA)
+- **대상 기기**: 교무실/사감실 PC(입력·현황판 화면), Android 기반 전자칠판(전체화면 PWA), 학생 휴대폰(학생 화면)
 
 ## Supabase 이전 (진행 중)
 백엔드를 Firebase(RTDB·Auth)에서 Supabase로 옮기는 중이다. **2단계부터 화면은 Supabase만 쓴다.** 이 문서의 화면·데이터 모델·보안 규칙 설명은 Supabase 기준이다. Firebase RTDB에는 이전 직전 데이터가 백업처럼 남아 있고, 5단계에서 Firebase 코드·규칙을 정리한다.
@@ -22,9 +22,9 @@
   - 화면 파일은 계속 Firebase Hosting에서 서비스한다
 - 단계(PR 단위):
   1. Supabase 기반(스키마·RLS·RPC, 교사 계정 Edge Function, 배포·이전 워크플로) ← 완료
-  2. 화면을 Supabase로 전환(기능은 동일, 교사 비밀번호 재발급, 화면 E2E 테스트) ← 완료
-  3. 학생 계정 + 신청/승인
-  4. 외출증 문자(솔라피). 외출증 이메일은 이때 제거
+  2. 화면을 Supabase로 전환(기능은 동일, 교사 비밀번호 재발급, 화면 E2E 테스트) ← 완료(전환까지 끝남)
+  3. 학생 계정 + 신청/승인 ← 완료. 학생 비밀번호는 화면에 띄워 전달(문자 발송은 4단계)
+  4. 외출증 문자(솔라피) + 학생 비밀번호 문자. 외출증 이메일은 이때 제거
   5. Firebase 코드 정리(`firebase-init.js`·`firebase-config.js`·`database.rules.json`·규칙 배포 워크플로)
 - 전환 절차(2단계 PR을 머지할 때 한 번)
   1. GitHub Secrets에 `SUPABASE_SECRET_KEY` 등록 → Actions의 "Migrate Firebase → Supabase (manual)"을 `MIGRATE`로 실행
@@ -36,6 +36,7 @@
   - `supabase/migrations/`: 테이블(`profiles`·`students`·`rooms`·`outings`·`outing_requests`), 권한 함수(`is_staff`·`can_manage_student`·`can_edit_room` 등), RLS, RPC(좌석 배정·크기 변경·외출 신청/취소/승인/반려)
   - `supabase/functions/`: Edge Functions(Deno)
     - `staff-accounts`: 교사 계정 생성·비밀번호 재발급·비활성화(ban), 관리자 전용
+    - `student-accounts`: 학생 계정 발급(여러 명)·비밀번호 재발급·삭제(`withStudent`면 명단 행까지). 호출자가 그 학생의 명단을 관리할 수 있어야 함(`_shared/scope.ts`의 `canManageStudent` — DB `can_manage_student`와 같은 규칙)
     - `config.toml`에서 `verify_jwt`를 끄고, 함수 안(`_shared/supabase.ts`의 `getCaller`)에서 호출자를 확인한다
   - `scripts/migrate/`: Firebase → Supabase 데이터 이전. 수동 워크플로 `migrate-firebase-to-supabase.yml`로 실행하고 입력란에 `MIGRATE`를 넣는다
     - 예전 RTDB 키는 UUIDv5로 바꾸므로 다시 돌려도 같은 id가 나온다
@@ -43,7 +44,7 @@
     - 학생 계정이나 외출 신청이 생긴 뒤에는 실행을 거부한다(전환 후 덮어쓰기 방지)
   - `public/js/`의 공통 모듈
     - `supabase-config.js`: 프로젝트 URL·publishable 키(공개돼도 안전한 값)·가짜 이메일 도메인
-    - `supabase-client.js`: 클라이언트, `requireStaff()`(세션·프로필 확인, 비활성화 계정 로그아웃), `signOutTo()`(이 기기만 로그아웃), `describeError()`, `callFunction()`, `showPageError()`
+    - `supabase-client.js`: 클라이언트, `requireStaff()`(세션·프로필 확인, 비활성화 계정 로그아웃, 학생 계정은 student.html로), `requireStudent()`(교직원 계정은 check.html로), `signOutTo()`(이 기기만 로그아웃), `describeError()`, `callFunction()`, `showPageError()`
     - `live-table.js`: 테이블 하나를 "전체 조회 + Realtime 변경 알림이 오면 다시 조회"로 화면에 맞춰 둔다. 1000행씩 나눠 읽고, 구독이 다시 연결될 때·화면이 다시 보일 때 다시 조회하며, Realtime이 안 되면 15초마다 조회한다. `refresh()`는 다시 읽기가 끝나면 풀리는 Promise
     - `adapters.js`: DB 행(snake_case) ↔ 화면 코드가 쓰는 예전 Firebase 모양(`studentsByGrade`, `seatMap`, `managedClasses` 등) 변환. 화면 렌더링 코드는 예전 모양을 그대로 쓴다
 - 배포
@@ -59,21 +60,26 @@
 - 이전 스크립트: `cd scripts/migrate && npm test`
 - 화면 E2E: `cd tests/e2e && npm ci && bash fetch-postgrest.sh && npx playwright test`
   - 실제 supabase-js가 가짜 게이트웨이(`harness/gateway.mjs`)를 거쳐 로컬 PostgREST + 마이그레이션이 적용된 Postgres(진짜 RLS)에 붙는다
-  - Auth(로그인·토큰 갱신·관리자 API)와 Realtime(Phoenix 웹소켓, `postgres_changes`)은 하네스가 흉내내고, `staff-accounts`는 Deno로 실제 코드를 띄운다
+  - Auth(로그인·토큰 갱신·관리자 API)와 Realtime(Phoenix 웹소켓, `postgres_changes`)은 하네스가 흉내내고, Edge Function(`staff-accounts`·`student-accounts`)은 Deno로 실제 코드를 띄운다
   - 필요한 것: Postgres 16 서버 바이너리(`PG_BIN`), Deno(`DENO_BIN`, 기본 `deno`), Chromium(Playwright)
   - `public/js/supabase-client.js`의 supabase-js 버전과 `tests/e2e/package.json`의 버전이 다르면 테스트가 바로 실패한다(같이 올릴 것)
-  - 기본 데이터는 `harness/seed.mjs`(모든 테스트 계정 비밀번호 `pass1234`)
+  - 기본 데이터는 `harness/seed.mjs`(모든 테스트 계정 비밀번호 `pass1234`). 학생 계정은 테스트마다 `env.createStudentAccount()`로 만든다
+- 운영 메모: Supabase Auth는 IP당 로그인 횟수를 제한한다. 학생들이 같은 학교 와이파이에서 한꺼번에 처음 로그인하다 막히면 대시보드 Authentication → Rate Limits에서 늘린다
 
-## 화면 구성 (6개)
+## 화면 구성 (7개)
 로그인 화면을 제외한 모든 화면의 헤더에는 로그아웃 버튼이 있음(이 기기에서만 로그아웃 — 다른 기기·전자칠판의 로그인은 유지, `login.html`로 이동).
-로그인 화면을 제외한 모든 화면의 헤더에는 그 계정이 접근 가능한 **다른 화면으로 가는 링크가 전부** 노출됨(자기 자신 화면으로의 링크는 제외, 대신 check.html이 아닌 화면에는 "← 체크 화면으로" 링크가 있음) — 권한이 없는 화면의 링크는 숨겨짐(판단 로직은 화면마다 독립적으로 구현되어 있지만 기준은 모두 동일). 예: teacher가 담당 반이 없으면 어느 화면에서도 "학생 명단 관리" 링크가 안 보이고, admin이 아니면 어느 화면에서도 "계정 관리" 링크가 안 보임.
+학생 계정은 학생 화면(`student.html`)만 쓸 수 있고, 교사 화면 URL로 들어가면 학생 화면으로 돌아간다(교직원이 학생 화면에 들어가면 check.html로).
+로그인·학생 화면을 제외한 모든 화면의 헤더에는 그 계정이 접근 가능한 **다른 화면으로 가는 링크가 전부** 노출됨(자기 자신 화면으로의 링크는 제외, 대신 check.html이 아닌 화면에는 "← 체크 화면으로" 링크가 있음) — 권한이 없는 화면의 링크는 숨겨짐(판단 로직은 화면마다 독립적으로 구현되어 있지만 기준은 모두 동일). 예: teacher가 담당 반이 없으면 어느 화면에서도 "학생 명단 관리" 링크가 안 보이고, admin이 아니면 어느 화면에서도 "계정 관리" 링크가 안 보임.
 모든 화면은 데이터를 실시간으로 갱신한다(`live-table.js`). 저장이 서버에서 거부되면(권한 없음 등) alert로 이유를 보여주고 화면은 서버 상태 그대로 둔다. 데이터를 불러오지 못하면 화면 맨 위에 안내가 뜨고 자동으로 다시 시도한다.
 
 ### 1. 로그인 (`login.html`)
-- 이메일이 아닌 **아이디**로 로그인 (화면에는 아이디만 노출)
-- 내부적으로 `${아이디(소문자)}@donghall.local` 형태로 변환해 Supabase Auth에 전달(아이디 대소문자는 구분하지 않음)
-- 회원가입 화면 없음 — 계정은 관리자가 미리 생성(Supabase Auth의 공개 가입은 꺼 둠)
-- 아이디는 영문+숫자만 허용 (이메일 변환 시 깨짐 방지)
+- **교사 / 학생** 탭. 마지막으로 고른 탭과 "아이디 저장"은 탭별로 기억함
+- 학생 아이디는 리로스쿨 ID와 같은 값이지만, 화면 문구에서는 "리로스쿨"을 빼고 그냥 "ID"/"아이디"라고 쓴다(사용자 요청)
+- 이메일이 아닌 **아이디**로 로그인 (화면에는 아이디만 노출). 아이디 대소문자는 구분하지 않음
+  - 교사: 영문+숫자 → 내부적으로 `${아이디(소문자)}@donghall.local`
+  - 학생: 리로스쿨 ID(영문·숫자와 `. _ -`) → `${아이디(소문자)}@student.donghall.local`
+- 로그인하면 교사는 `check.html`, 학생은 `student.html`로. 틀리면 "교사/학생 탭이 맞는지도 확인해 주세요" 안내
+- 회원가입 화면 없음 — 교사 계정은 관리자가, 학생 계정은 담임 등이 학생 명단 화면에서 발급(Supabase Auth의 공개 가입은 꺼 둠)
 - accounts.html에서 "삭제"된 계정은 로그인 자체가 차단(ban)되어 "삭제(비활성화)된 계정입니다" 안내가 뜸. 이미 로그인돼 있던 세션은 화면을 여는 즉시(프로필의 `disabled` 확인) 로그아웃되어 `login.html?disabled=1`로 돌아옴
 
 ### 2. 외출 체크 입력 화면 (`check.html`)
@@ -81,6 +87,10 @@
 - 실 필터: "전체" / 실 이름별 탭(실 목록은 `rooms`에서 동적으로 읽어옴)
 - 검색창(이름 검색)
 - **조회 날짜 선택**(`<input type="date">`, 기본값 오늘, 미래 날짜는 선택 불가): 오늘이 아닌 날짜를 고르면 그 날짜의 `outings` 기록을 보고 그 자리에서 고칠 수 있음("출석체크 변경") — 화면에 "지난 기록을 보는 중입니다" 안내가 뜨고, 이 상태에서 체크를 바꿔도 이메일은 발송되지 않음(실시간 외출이 아니라 사후 정정이므로)
+- **외출 신청 대기** 패널(맨 위, 승인할 신청이 있을 때만): 오늘 들어온 학생 신청 중 **내가 승인할 수 있는 것만**(담임은 담당 반, 학년부장은 담당 학년, 관리자·기숙사부는 전체 — 서버 `can_manage_student`와 같은 범위) 이름·학번·반·사유·예상 복귀·신청 시각과 [승인] / [반려] 버튼
+  - 승인 → RPC `approve_outing_request`가 신청을 승인하고 그 학생을 바로 "외출중"으로 기록(담당 교사 = 승인한 교사). "외출 체크"와 같이 외출증 이메일 발송
+  - 반려 → 사유를 묻는 프롬프트(비워도 됨, 취소하면 반려 안 함) → RPC `reject_outing_request`. 사유는 학생 화면에 보임
+  - 신청이 있는 학생의 카드 이름 옆에 "외출 신청 대기" 표시(승인 범위와 상관없이 모두에게)
 - 학생 카드 리스트: 아바타, 이름, "학번 · 반", 상태 배지(재실/외출중/자리 없음/명령퇴사), 상태별 조작:
   - **재실** → "외출 체크" 버튼(아래 설명)만 노출 — "자리 없음" 표시는 여기서 하지 않고 seat.html(좌석 배치 현황판)에서만 함(순회하며 좌석에서 바로 표시하는 동작이라 좌석 배치판 전용으로 둠)
   - **외출중** → "복귀 체크" 버튼(재실로)
@@ -115,18 +125,39 @@
 - 좌석 카드 색상 우선순위: **명령퇴사(보라) > 자리 없음(황금) > 외출중(빨강) > 오늘 방과후(파랑) > 재실(회색) > 빈자리(점선)** — 자리 없음/명령퇴사의 의미는 check.html/students.html 참고. 좌석 배치판은 항상 오늘 기준만 표시함
 - 학년관리자는 자기 `managed_rooms`에 속한 실의 좌석 배정만 할 수 있음(실 추가·삭제·이름·대상 학년·크기는 admin·기숙사부만) — 서버(RPC·RLS)도 같은 범위를 강제함
 
-### 5. 학생 명단 관리 (`students.html`)
+### 5. 학생 명단 관리·학생 계정 (`students.html`)
 - admin·gradeManager·dormStaff는 항상 접근 가능. teacher는 담임(담당 반, `managed_classes`)이 배정되어 있을 때만 접근 가능 — 아무 반도 배정 안 된 일반 teacher는 접근 시 `check.html`로 리다이렉트
 - 학년 탭: admin·dormStaff는 1/2/3학년 전체, gradeManager는 자기 `managed_grades`에 속한 학년 전체(반 구분 없음), teacher는 자기 담당 반이 있는 학년만(그 학년 탭 안에서도 담당 반 학생만 보임)
 - teacher가 담당 반이 정확히 하나면 "+ 학생 추가" 폼의 반 입력란이 자동으로 채워짐. 담당 반이 아닌 값으로 저장하려 하면 alert로 막음. 서버(RLS)도 반 단위까지 막는다(화면을 우회해도 다른 반 학생은 추가·수정·삭제 불가). gradeManager·admin은 이 제한이 없음(학년 전체 대상)
-- "+ 학생 추가" → 이름/학번/반/방과후 요일(월~금 토글) 입력 폼 → `students`에 저장
+- "+ 학생 추가" → 이름/학번/반/리로스쿨 ID/학생 연락처/학부모 연락처/이메일/방과후 요일(월~금 토글) 입력 폼 → `students`에 저장
   - 학번(5자리: 학년1+반2+번호2)을 입력하면 반이 자동 계산되어 채워짐(직접 수정하면 그 값을 우선)
-- "여러 명 한번에 추가" → 엑셀에서 복사한 "이름[탭]학번[탭]이메일(선택)" 줄들을 붙여넣으면 실시간 미리보기 후 한 번에 저장(하나라도 실패하면 전부 저장되지 않음). teacher가 담당 반으로 제한된 경우, 학번으로 계산된 반이 담당 반이 아닌 줄은 미리보기에서 오류로 표시되고 저장 대상에서 제외됨
+  - 리로스쿨 ID는 소문자로 저장(영문·숫자와 `. _ -`, 64자 이하). 다른 학생과 겹치면 "이미 다른 학생이 쓰는 리로스쿨 ID입니다"
+  - 연락처는 숫자만 저장(010으로 시작하는 10~11자리), 화면에는 010-1234-5678 형태로 표시
+- "여러 명 한번에 추가" → 엑셀에서 복사한 "이름 · 학번 · 리로스쿨 ID · 학생 연락처 · 학부모 연락처 · 이메일" 순서의 줄들(학번 뒤는 모두 선택, 빈 칸 가능. 예전 "이름 · 학번 · 이메일" 형식도 세 번째 칸에 @가 있으면 그대로 읽음)을 붙여넣으면 실시간 미리보기 후 저장
+  - **지금 학년에 같은 학번이 있으면 새로 추가하지 않고 입력한 칸만 갱신**(빈 칸은 기존 값 유지) — 이미 등록한 학생에게 ID·연락처를 한 번에 넣을 때. 미리보기에 [새로 추가]/[정보 갱신]으로 표시
+  - 새 학생은 한 번에 저장(하나라도 실패하면 새 학생은 전부 저장되지 않음), 갱신은 한 명씩 하고 실패한 학생만 알려 줌
+  - teacher가 담당 반으로 제한된 경우, 반이 담당 반이 아닌 줄은 미리보기에서 오류로 표시되고 저장 대상에서 제외됨
+- **학생 계정**(카드마다 "계정 있음" / "계정 없음" / "ID 미등록" 표시)
+  - [계정 발급]: 리로스쿨 ID가 있고 계정이 없을 때. 6자리 숫자 비밀번호를 만들어 아래 결과 목록에 표시
+  - [계정 일괄 발급 (N명)]: 지금 학년 탭(담임은 담당 반)에서 ID가 있고 계정이 없는 학생 전부
+  - [비번 재발급]: 새 6자리 비밀번호. 예전 비밀번호는 더 이상 안 됨
+  - [계정 삭제]: 로그인 정보만 지우고 명단은 남김. 계정이 있는 학생을 명단에서 "삭제"하면 계정도 함께 지움(로그인 정보가 남지 않게 서버 함수가 처리)
+  - 계정이 있으면 리로스쿨 ID 입력칸이 잠김(서버 트리거도 막음) — 바꾸려면 계정을 삭제하고 다시 발급
+  - 결과 목록은 "이름[탭]학번[탭]아이디[탭]비밀번호" 줄로도 모아 엑셀에 붙여넣기 쉽게 보여줌(새로고침하면 사라짐). 4단계에서 문자 발송이 붙기 전까지는 이 비밀번호를 학생에게 직접 전달
+  - 발급·재발급·삭제는 Edge Function `student-accounts`가 하고, 서버가 담당 범위를 다시 확인함
 - 명단 카드의 "수정"/"삭제"로 기존 학생 정보 수정·삭제. 학생을 삭제하면 좌석표의 그 자리와 외출 기록도 함께 지워진다(서버 트리거·외래키)
 - 학생별 **명령퇴사 기간**(선택) 설정: "+ 학생 추가"/"수정" 폼에 시작일·종료일·사유 입력란이 있음. 시작일·종료일은 하나만 입력하면 alert로 막고(둘 다 입력하거나 둘 다 비워야 함), 종료일이 시작일보다 빠르면 저장을 막음(DB 제약도 같음). 저장하면 `leave_from`·`leave_to`·`leave_reason`에 반영되고, 그 기간 동안 check.html·display.html·seat.html에서 "명령퇴사"로 표시되며 "자리 없음" 판정에서 제외됨(둘 다 비우고 저장하면 해제)
 - 다른 화면들(자기 자신인 students.html 제외) 상단에 이 화면으로 가는 "학생 명단 관리" 링크가 admin·gradeManager·dormStaff·(담당 반이 있는)teacher에게만 노출됨
 
-### 6. 계정 관리 (`accounts.html`)
+### 6. 학생 화면 (`student.html`, 휴대폰 기준)
+- 학생 계정 전용. 헤더에 이름·학번·반, 로그아웃
+- **오늘 내 상태**: 재실 / 외출중(시각·사유·예상 복귀·확인한 교사) / 자리 없음 / 명령퇴사(기간)
+- **외출 신청**: 사유(필수, 200자) + 예상 복귀 시각(선택, 시각 선택 칸) → RPC `create_outing_request`(학생 정보는 서버가 로그인 계정으로 찾으므로 다른 학생 이름으로 신청할 수 없음)
+  - 승인 대기 중인 신청이 있거나, 이미 외출 중이거나, 명령퇴사 기간이면 신청 칸이 잠기고 이유를 보여줌(서버도 같은 조건을 거부)
+- **오늘 신청 내역**: 승인 대기(→ [신청 취소], RPC `cancel_outing_request`) / 승인됨(교사·시각) / 반려됨(사유) / 취소함
+- 승인·반려·외출 상태가 실시간으로 바뀜. 학생은 자기 행만 읽을 수 있음(RLS)
+
+### 7. 계정 관리 (`accounts.html`)
 - admin 전용(admin이 아니면 `check.html`로 리다이렉트 — dormStaff도 예외 없이 포함). 다른 화면들(자기 자신인 accounts.html 제외) 상단에 이 화면으로 가는 "계정 관리" 링크가 admin에게만 노출됨
 - 상단: 등록된 교직원 계정 목록(`profiles` 중 `kind = 'staff'`, 학생 계정은 제외) — 아이디·이름·역할 배지(teacher/gradeManager/admin/studyHallSupervisor/dormStaff), gradeManager는 담당 학년·담당 실을, teacher는 담당 반(있는 경우만)을 함께 표시
   - 본인 계정 행에는 버튼이 없음(관리자가 실수로 자기 자신을 강등·삭제해 잠기는 것을 방지 — 서버 RLS·함수도 본인 대상은 거부)
@@ -154,8 +185,11 @@
 | 학생 명단·방과후 요일·명령퇴사 기간 등록/수정 | ✅ (담당 반만, `managed_classes` 배정된 경우) | ✅ (담당 학년 전체) | ✅ (전체) | ❌ | ✅ (전체) |
 | 실 추가/삭제·이름 변경·대상 학년·크기 지정 | ❌ | ❌ | ✅ | ❌ | ✅ |
 | 교사 계정 추가/역할 지정/비밀번호 재발급/삭제 | ❌ | ❌ | ✅ | ❌ | ❌ |
+| 학생 외출 신청 승인/반려 | ✅ (담당 반만) | ✅ (담당 학년) | ✅ (전체) | ❌ | ✅ (전체) |
+| 학생 계정 발급/비밀번호 재발급/삭제 | ✅ (담당 반만) | ✅ (담당 학년) | ✅ (전체) | ❌ | ✅ (전체) |
 
 studyHallSupervisor는 외출 체크 화면(`check.html`) 외에는 아무 화면도 접근할 수 없음(다른 화면 URL로 직접 이동해도 check.html로 리다이렉트). dormStaff는 반대로 계정 관리(`accounts.html`) 한 곳만 접근할 수 없고 나머지는 admin과 동일함(accounts.html 접근 시 check.html로 리다이렉트).
+학생(`role = student`) 계정은 학생 화면에서 자기 정보·외출 기록·신청만 보고, 외출 신청·취소만 할 수 있다.
 화면 링크·리다이렉트는 편의 기능이고, 실제 권한은 서버(RLS·RPC·Edge Function)가 아래 "보안 규칙"대로 강제한다.
 
 ## 데이터 모델 (Supabase Postgres, `supabase/migrations/`)
@@ -168,11 +202,11 @@ profiles          -- 로그인 계정(auth.users와 1:1)
   managed_grades smallint[]   -- gradeManager 담당 학년
   managed_rooms uuid[]        -- gradeManager 담당 실
   managed_classes jsonb       -- teacher 담임 반: [{"grade": 1, "cls": "1학년 3반"}] (grade는 반드시 숫자)
-  student_id uuid?            -- 학생 계정이면 students.id (3단계)
+  student_id uuid?            -- 학생 계정이면 students.id (login_id = 리로스쿨 ID, role = 'student')
 
 students
   id uuid, grade smallint(1~3), name, sid(학번, 예 "10305"), cls(반, 예 "1학년 3반"),
-  login_id(학생 아이디 = 리로스쿨 ID, 3단계), phone, parent_phone, email?,
+  login_id(학생 아이디 = 리로스쿨 ID, 소문자, 계정이 있으면 못 바꿈), phone, parent_phone(숫자만), email?,
   afterschool_days bool[5](월~금), leave_from date?, leave_to date?, leave_reason?   -- 명령퇴사(둘 다 있어야 유효)
   legacy_key(예전 RTDB 키)
 
@@ -185,7 +219,9 @@ outings           -- PK (date, student_id). 레코드가 없으면 그 날 "재�
   since timestamptz, reason?, expected_return?(out일 때만),
   checked_by, checked_by_name(서버 트리거가 채움), request_id?(3단계), notice jsonb?(4단계 문자 결과)
 
-outing_requests   -- 학생 외출 신청(3단계): pending|approved|rejected|cancelled, RPC로만 씀
+outing_requests   -- 학생 외출 신청: date(KST), student_id, requested_by, reason, expected_return?,
+                  -- status pending|approved|rejected|cancelled, decided_by(_name), decided_at, reject_reason?. RPC로만 씀
+                  -- 학생·날짜별 대기 중 신청은 하나만(부분 unique 인덱스). 지난 날짜 신청은 승인 불가
 ```
 - 화면 코드는 `adapters.js`로 위 행을 예전 모양(`studentsByGrade[grade][id]`, `room.seatMap`, `outing.expectedReturn`, `user.managedClasses[grade][cls]` 등)으로 바꿔서 쓴다
 - "자리 없음"의 예전 값 `unauthorized`는 이전할 때 `away`로 바뀌었다
@@ -207,12 +243,12 @@ outing_requests   -- 학생 외출 신청(3단계): pending|approved|rejected|ca
 - 방과후 강조색: `#2B6CB0` (배경 `#EAF1FB`)
 - 선택/활성 상태: `#1C2230` (다크 네이비)
 - 카드 radius 12~18px, 폰트 Noto Sans KR
-- 데스크톱 전용 레이아웃 (1280px 기준)
+- 교사 화면은 데스크톱 레이아웃(1280px 기준), 학생 화면(`student.html`)은 휴대폰 기준(390px, 입력칸 글자 16px — iOS 확대 방지)
 
 ## 외부 서비스 연동
 
 ### EmailJS (외출증 이메일 발송) — 4단계에서 문자(솔라피)로 바뀌며 제거 예정
-- 학생 계정이 아직 없어서(3단계에서 추가), 외출 체크 시 학생에게 직접 알릴 방법이 없었음
+- 학생 계정이 없던 시절, 외출 체크 시 학생에게 외출증을 보내려고 도입함(교사의 "외출 체크"와 신청 "승인" 모두 발송)
 - 서버나 유료 SMS 계정 없이, 클라이언트에서 바로 이메일을 보낼 수 있는 [EmailJS](https://www.emailjs.com)(무료 월 200통)를 사용
 - 설정 방법:
   1. emailjs.com 가입 → **Email Services**에서 발송용 메일 계정(Gmail 등) 연결 → Service ID 확인
@@ -241,7 +277,7 @@ outing_requests   -- 학생 외출 신청(3단계): pending|approved|rejected|ca
 - [x] 모든 화면 헤더에 권한별 전체 메뉴 링크 통일
 - [x] Supabase 이전 1단계: 스키마·RLS·RPC, `staff-accounts` Edge Function, 배포·이전 워크플로, DB·함수·이전 스크립트 테스트
 - [x] Supabase 이전 2단계: 화면을 Supabase로 전환(기능 동일) + 비밀번호 재발급 + 화면 E2E 테스트
-- [ ] 전환 실행: 데이터 이전 → 관리자 비밀번호 설정 → 미리보기 확인 → 머지 → 교사 비밀번호 일괄 재발급(위 "전환 절차")
-- [ ] Supabase 이전 3단계: 학생 계정(리로스쿨 ID) + 외출 신청/승인(`student.html`, 승인 패널)
-- [ ] Supabase 이전 4단계: 외출증 문자(학생 MMS·학부모 문자, 솔라피) + 외출증 이메일 제거
+- [x] 전환 실행: 데이터 이전 → 관리자 비밀번호 설정 → 미리보기 확인 → 머지
+- [x] Supabase 이전 3단계: 학생 계정(리로스쿨 ID) + 외출 신청/승인(`student.html`, 승인 패널), 명단에 ID·연락처, 붙여넣기로 정보 갱신
+- [ ] Supabase 이전 4단계: 외출증 문자(학생 MMS·학부모 문자, 솔라피) + 학생 비밀번호 문자 발송 + 외출증 이메일 제거
 - [ ] Supabase 이전 5단계: Firebase Auth·RTDB 코드와 규칙 배포 워크플로 정리

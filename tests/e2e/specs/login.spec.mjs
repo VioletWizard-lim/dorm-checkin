@@ -1,5 +1,6 @@
 import { test, expect } from "./fixtures.mjs";
 import { PASSWORD } from "../harness/seed.mjs";
+import { WRONG_LOGIN } from "./helpers.mjs";
 
 test.describe("로그인", () => {
   test("아이디·비밀번호가 맞으면 체크 화면으로 이동하고, 대문자로 입력해도 된다", async ({ page }) => {
@@ -26,7 +27,7 @@ test.describe("로그인", () => {
     await page.fill("#userId", "admin01");
     await page.fill("#password", "wrong-password");
     await page.click("#submitBtn");
-    await expect(page.locator("#errorBox")).toHaveText("아이디 또는 비밀번호가 올바르지 않습니다.");
+    await expect(page.locator("#errorBox")).toHaveText(WRONG_LOGIN);
     await expect(page).toHaveURL(/\/login\.html$/);
   });
 

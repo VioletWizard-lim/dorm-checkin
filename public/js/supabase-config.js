@@ -5,5 +5,6 @@ export const SUPABASE_URL = "https://jlgbpniutisnppunkhpc.supabase.co";
 export const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_SVaLD8KJkhm70yeTi16gow_QYYqvmue";
 
 // 아이디 로그인을 이메일 형식으로 바꿀 때 쓰는 가짜 도메인(화면에는 보이지 않음).
-// supabase/functions/_shared/accounts.ts의 STAFF_EMAIL_DOMAIN과 같은 값이어야 한다.
+// supabase/functions/_shared/accounts.ts의 STAFF_EMAIL_DOMAIN·STUDENT_EMAIL_DOMAIN과 같은 값이어야 한다.
 export const STAFF_EMAIL_DOMAIN = "donghall.local";
+export const STUDENT_EMAIL_DOMAIN = "student.donghall.local";

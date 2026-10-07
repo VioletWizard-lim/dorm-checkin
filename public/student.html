@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="google-site-verification" content="PskTvPUma23TKR9FEzgMFdyuOPyNKl2Cs_kTToIcHhw" />
+<title>기숙사 외출체크 - 학생</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+
+<div class="student-page">
+
+  <header class="student-header">
+    <div>
+      <div class="student-header__name" id="studentName"></div>
+      <div class="student-header__meta" id="studentMeta">불러오는 중...</div>
+    </div>
+    <button type="button" class="back-link" id="logoutBtn">로그아웃</button>
+  </header>
+
+  <section class="student-section">
+    <div class="student-section__title">오늘 내 상태 <span class="since-text" id="todayDate"></span></div>
+    <div class="my-status" id="statusBox"><span class="student-empty">불러오는 중...</span></div>
+  </section>
+
+  <section class="student-section">
+    <div class="student-section__title">외출 신청</div>
+    <form class="student-form" id="requestForm" novalidate>
+      <div class="field">
+        <label for="reasonInput">외출 사유</label>
+        <input id="reasonInput" type="text" maxlength="200" placeholder="예: 병원 진료" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="returnInput">예상 복귀 시각 (선택)</label>
+        <input id="returnInput" type="time">
+      </div>
+      <button type="submit" class="btn-primary" id="requestBtn" disabled>외출 신청</button>
+      <div class="field-hint" id="requestHint"></div>
+    </form>
+  </section>
+
+  <section class="student-section">
+    <div class="student-section__title">오늘 신청 내역</div>
+    <div class="student-form" id="requestList"><span class="student-empty">불러오는 중...</span></div>
+  </section>
+
+</div>
+
+<script type="module" src="./js/student.js"></script>
+</body>
+</html>

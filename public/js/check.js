@@ -29,6 +29,9 @@ const chipsEl = document.getElementById("filterChips");
 const listEl = document.getElementById("studentList");
 const dateSelectEl = document.getElementById("dateSelect");
 const pastDateNoticeEl = document.getElementById("pastDateNotice");
+const requestPanelEl = document.getElementById("requestPanel");
+const requestCountEl = document.getElementById("requestCount");
+const requestListEl = document.getElementById("requestList");
 
 // outings는 하루가 지나도 기록이 남도록 날짜별로 저장한다(outings 테이블의 date 열).
 // "조회 날짜"를 오늘이 아닌 값으로 바꾸면 그 날짜의 기록을 보고 고칠 수 있다(지난 기록 수정).
@@ -56,9 +59,12 @@ const state = {
   searchTerm: "",
   activeFilter: "all",
   selectedDate: TODAY_KEY,
+  pendingRequests: [], // 오늘 승인 대기 중인 학생 외출 신청(outing_requests)
 };
 
 let outingsLive = null;
+let requestsLive = null;
+let currentProfile = null;
 
 function escapeHtml(value) {
   return String(value)
@@ -116,6 +122,24 @@ function getRoomIdByStudentId() {
   return map;
 }
 
+// 외출 신청 승인 범위: 관리자·기숙사부 전체, 학년부장 담당 학년, 담임 담당 반(서버 can_manage_student와 같은 규칙)
+function canApprove(student) {
+  const p = currentProfile;
+  if (!p || !student) return false;
+  if (p.role === "admin" || p.role === "dormStaff") return true;
+  if (p.role === "gradeManager") return Boolean((p.managedGrades || {})[student.grade]);
+  if (p.role === "teacher") return Boolean(((p.managedClasses || {})[student.grade] || {})[student.cls]);
+  return false;
+}
+
+function findStudent(studentId) {
+  for (const grade of GRADES) {
+    const data = (state.studentsByGrade[grade] || {})[studentId];
+    if (data) return { id: studentId, grade, ...data };
+  }
+  return null;
+}
+
 const STATUS_META = {
   in: { badge: "재실", badgeClass: "status-badge--in", avatarClass: "student-avatar--in" },
   out: { badge: "외출중", badgeClass: "status-badge--out", avatarClass: "student-avatar--out" },
@@ -169,6 +193,8 @@ function renderList(filtered) {
         sinceText = `${formatTime(outing && outing.since)} ${meta.badge}${reasonText}${returnText}`;
       }
       const initial = (s.name || "?").charAt(0);
+      const hasPendingRequest =
+        state.selectedDate === TODAY_KEY && state.pendingRequests.some((r) => r.student_id === s.id);
 
       let actionsHtml;
       if (status === "in") {
@@ -189,7 +215,7 @@ function renderList(filtered) {
         <div class="student-card">
           <div class="student-avatar ${meta.avatarClass}">${escapeHtml(initial)}</div>
           <div class="student-info">
-            <div class="student-name">${escapeHtml(s.name || "이름 없음")}</div>
+            <div class="student-name">${escapeHtml(s.name || "이름 없음")}${hasPendingRequest ? ` <span class="pending-chip">외출 신청 대기</span>` : ""}</div>
             <div class="student-meta">학번 ${escapeHtml(s.sid || "-")} · ${escapeHtml(s.cls || "-")}</div>
           </div>
           <div class="student-status">
@@ -228,7 +254,82 @@ function render() {
   filtered.sort((a, b) => (a.sid || "").localeCompare(b.sid || ""));
 
   renderList(filtered);
+  renderRequestPanel();
 }
+
+// 내가 승인할 수 있는 오늘의 신청만 보여준다(범위 밖 신청은 서버도 거부함).
+function renderRequestPanel() {
+  const items = state.pendingRequests
+    .map((request) => ({ request, student: findStudent(request.student_id) }))
+    .filter(({ student }) => canApprove(student))
+    .sort((a, b) => String(a.request.created_at).localeCompare(String(b.request.created_at)));
+
+  requestPanelEl.hidden = items.length === 0;
+  requestCountEl.textContent = `${items.length}건`;
+  requestListEl.innerHTML = items
+    .map(({ request, student }) => {
+      const returnText = request.expected_return ? ` (~${request.expected_return})` : "";
+      return `
+        <div class="request-row">
+          <div class="request-row__who">
+            <div class="student-name">${escapeHtml(student.name || "이름 없음")}</div>
+            <div class="student-meta">학번 ${escapeHtml(student.sid || "-")} · ${escapeHtml(student.cls || "-")}</div>
+          </div>
+          <div class="request-row__what">
+            ${escapeHtml(request.reason)}${escapeHtml(returnText)}
+            <div class="since-text">${escapeHtml(formatTime(request.created_at))} 신청</div>
+          </div>
+          <div class="roster-actions">
+            <button type="button" class="btn-add btn-small" data-approve-request="${escapeHtml(request.id)}">승인</button>
+            <button type="button" class="btn-danger btn-small" data-reject-request="${escapeHtml(request.id)}">반려</button>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+}
+
+async function approveRequest(requestId, btn) {
+  const request = state.pendingRequests.find((r) => r.id === requestId);
+  if (!request) return;
+  btn.disabled = true;
+  const { error } = await supabase.rpc("approve_outing_request", { p_request_id: requestId });
+  if (error) {
+    alert(`승인하지 못했습니다: ${describeError(error)}`);
+    btn.disabled = false;
+    if (requestsLive) await requestsLive.refresh();
+    return;
+  }
+  await Promise.all([
+    requestsLive ? requestsLive.refresh() : null,
+    outingsLive && state.selectedDate === TODAY_KEY ? outingsLive.refresh() : null,
+  ]);
+  // 승인 = 외출 시작이므로 "외출 체크"와 같이 외출증 이메일을 보낸다(4단계에서 문자로 바뀜).
+  const student = findStudent(request.student_id);
+  if (student) sendOutingEmail(student, request.reason, request.expected_return);
+}
+
+async function rejectRequest(requestId, btn) {
+  const reason = window.prompt("반려 사유를 입력해 주세요 (학생 화면에 보입니다, 비워도 됩니다)", "");
+  if (reason === null) return;
+  btn.disabled = true;
+  const { error } = await supabase.rpc("reject_outing_request", { p_request_id: requestId, p_reason: reason.trim() || null });
+  if (error) {
+    alert(`반려하지 못했습니다: ${describeError(error)}`);
+    btn.disabled = false;
+  }
+  if (requestsLive) await requestsLive.refresh();
+}
+
+requestListEl.addEventListener("click", (event) => {
+  const approveBtn = event.target.closest("[data-approve-request]");
+  if (approveBtn) {
+    approveRequest(approveBtn.dataset.approveRequest, approveBtn);
+    return;
+  }
+  const rejectBtn = event.target.closest("[data-reject-request]");
+  if (rejectBtn) rejectRequest(rejectBtn.dataset.rejectRequest, rejectBtn);
+});
 
 function sendOutingEmail(student, reason, expectedReturn) {
   if (!student.email || !window.emailjs) return;
@@ -351,6 +452,7 @@ async function init() {
   if (!session) return;
   const { loginId, profile } = session;
   currentTeacherId = loginId;
+  currentProfile = profile;
 
   dateSelectEl.max = TODAY_KEY;
   dateSelectEl.value = state.selectedDate;
@@ -391,6 +493,17 @@ async function init() {
     order: ["created_at", "id"],
     onRows: (rows) => {
       state.rooms = roomsById(rows);
+      render();
+    },
+    onError: reportLoadError,
+  });
+
+  requestsLive = liveTable({
+    table: "outing_requests",
+    eq: { date: TODAY_KEY, status: "pending" },
+    order: ["created_at", "id"],
+    onRows: (rows) => {
+      state.pendingRequests = rows;
       render();
     },
     onError: reportLoadError,
