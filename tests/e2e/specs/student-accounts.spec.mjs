@@ -17,7 +17,9 @@ test.describe("학생 계정 관리(학생 명단 화면)", () => {
     answerDialogs(page, [true, true]);
     await openAs("homeroom01", "/students.html");
     await expect(rosterCard(page, "홍길동").locator(".account-chip")).toHaveText("계정 없음");
-    await expect(rosterCard(page, "홍길동")).toContainText("ID hong123 · 학생 010-1111-2222 · 학부모 010-3333-4444");
+    // 목록에는 학번·이름·반·번호만(연락처·이메일·ID는 수정 폼에서만)
+    await expect(rosterCard(page, "홍길동").locator(".student-meta")).toHaveText(["학번 10305 · 1학년 3반 5번"]);
+    await expect(rosterCard(page, "홍길동")).not.toContainText("010-1111-2222");
     await expect(rosterCard(page, "최하늘").locator(".account-chip")).toHaveText("ID 미등록");
     await expect(rosterCard(page, "최하늘").getByRole("button", { name: "계정 발급" })).toHaveCount(0);
 
