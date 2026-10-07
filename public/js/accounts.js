@@ -499,10 +499,11 @@ async function deleteAccount(uid, btn) {
   }
 }
 
-async function requestNewPassword(uid) {
+// password를 주면 그 값으로, 없으면 서버가 자동으로 만든다.
+async function requestNewPassword(uid, password) {
   const u = state.users[uid] || {};
   try {
-    const data = await callFunction("staff-accounts", { action: "reset-password", userId: uid });
+    const data = await callFunction("staff-accounts", { action: "reset-password", userId: uid, ...(password ? { password } : {}) });
     if (!data || typeof data.password !== "string") throw new Error("서버 응답을 확인하지 못했습니다.");
     return { kind: "reset", userId: u.id || uid, name: u.name, password: data.password, ok: true };
   } catch (err) {
@@ -511,13 +512,19 @@ async function requestNewPassword(uid) {
 }
 
 async function resetPassword(uid, btn) {
-  const confirmed = window.confirm(
-    `${accountLabel(uid)} 계정의 비밀번호를 새로 발급할까요?\n\n지금 쓰는 비밀번호로는 더 이상 로그인할 수 없게 됩니다.`
+  const answer = window.prompt(
+    `${accountLabel(uid)} 계정의 새 비밀번호를 입력해 주세요(6자 이상).\n비워 두고 확인을 누르면 자동으로 만듭니다.\n\n지금 쓰는 비밀번호로는 더 이상 로그인할 수 없게 됩니다.`,
+    ""
   );
-  if (!confirmed) return;
+  if (answer === null) return;
+  const password = answer.trim();
+  if (password && password.length < 6) {
+    alert("비밀번호는 6자 이상이어야 합니다.");
+    return;
+  }
   btn.disabled = true;
   btn.textContent = "발급 중...";
-  const result = await requestNewPassword(uid);
+  const result = await requestNewPassword(uid, password);
   btn.disabled = false;
   btn.textContent = "비밀번호 재발급";
   addPasswordResults([result]);

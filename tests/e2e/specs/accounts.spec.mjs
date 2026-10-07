@@ -119,6 +119,21 @@ test.describe("계정 관리", () => {
     expect(await tryLogin(openOtherAs, "gm01", PASSWORD)).toBe(WRONG_LOGIN);
   });
 
+  test("비밀번호 재발급: 관리자가 정한 비밀번호로 바꿀 수 있고, 6자 미만은 막는다", async ({ openAs, openOtherAs, page }) => {
+    const dialogs = answerDialogs(page, ["12345", null, "school2026"]); // null = 6자 미만 안내(alert)
+    await openAs("admin01", "/accounts.html");
+    const resetBtn = row(page, "teacher01").getByRole("button", { name: "비밀번호 재발급" });
+    await resetBtn.click();
+    await expect.poll(() => dialogs.map((d) => d.message)).toContain("비밀번호는 6자 이상이어야 합니다.");
+    await expect(page.locator("#resultList .student-card")).toHaveCount(0);
+    expect(await tryLogin(openOtherAs, "teacher01", PASSWORD)).toBe("ok");
+
+    await resetBtn.click();
+    await expect(page.locator("#resultList .student-card").first()).toContainText("비밀번호: school2026");
+    expect(await tryLogin(openOtherAs, "teacher01", PASSWORD)).toBe(WRONG_LOGIN);
+    expect(await tryLogin(openOtherAs, "teacher01", "school2026")).toBe("ok");
+  });
+
   test("서버 함수 호출에 쓰는 헤더가 함수의 CORS 허용 목록에 모두 들어 있다", async ({ env, openAs, page }) => {
     // Playwright는 가로챈 요청의 사전 요청(OPTIONS)을 직접 처리하므로, 실제 함수의 허용 목록과 따로 대조한다.
     answerDialogs(page, [true]);

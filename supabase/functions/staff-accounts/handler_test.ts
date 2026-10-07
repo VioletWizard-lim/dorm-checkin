@@ -166,6 +166,20 @@ Deno.test("reset-password issues a new password for another active staff account
   await assertHttpError(handleStaffAccounts({ action: "reset-password", userId: "missing" }, deps), 404);
 });
 
+Deno.test("reset-password uses the password the admin chose, if it is long enough", async () => {
+  const teacher = profile({ id: "u-t", login_id: "kim01", role: "teacher" });
+  const { deps, calls } = fakeDeps({ profiles: [teacher] });
+
+  assertEquals(await handleStaffAccounts({ action: "reset-password", userId: "u-t", password: "school2026" }, deps), {
+    password: "school2026",
+  });
+  assertEquals(calls.updatedUsers, [{ id: "u-t", attrs: { password: "school2026" } }]);
+
+  await assertHttpError(handleStaffAccounts({ action: "reset-password", userId: "u-t", password: "12345" }, deps), 400);
+  await assertHttpError(handleStaffAccounts({ action: "reset-password", userId: "u-t", password: "가".repeat(25) }, deps), 400);
+  assertEquals(calls.updatedUsers.length, 1);
+});
+
 Deno.test("disable bans the login and clears role and scopes", async () => {
   const gm = profile({ id: "u-gm", role: "gradeManager", managed_grades: [1], managed_rooms: ["r1"] });
   const { deps, calls } = fakeDeps({ profiles: [gm] });

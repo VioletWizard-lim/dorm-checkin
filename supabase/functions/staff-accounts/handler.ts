@@ -1,6 +1,6 @@
 // 교사(교직원) 계정 관리 — 관리자만 호출 가능.
 //   create          : 계정 일괄 생성(항상 teacher로 생성, 승급은 계정 관리 화면에서 profiles 수정)
-//   reset-password  : 새 비밀번호 발급(응답으로 한 번만 돌려줌)
+//   reset-password  : 새 비밀번호 발급(관리자가 정한 password가 있으면 그 값, 없으면 자동 생성. 응답으로 한 번만 돌려줌)
 //   disable         : 로그인 차단(ban) + 역할·담당 범위 비우기
 // 외부 호출(Auth Admin API, profiles 테이블)은 deps로 받아서 테스트에서 가짜로 바꿀 수 있게 한다.
 
@@ -10,6 +10,7 @@ import type { AuthLikeError, Profile } from "../_shared/types.ts";
 
 const MAX_ACCOUNTS_PER_REQUEST = 200;
 const MIN_PASSWORD_LENGTH = 6;
+const MAX_PASSWORD_LENGTH = 72; // bcrypt가 72바이트까지만 씀
 const BAN_FOREVER = "876000h";
 
 export type StaffAccountsDeps = {
@@ -45,7 +46,7 @@ export async function handleStaffAccounts(body: Record<string, unknown>, deps: S
     case "create":
       return { results: await createAccounts(body.accounts, deps) };
     case "reset-password":
-      return { password: await resetPassword(body.userId, deps) };
+      return { password: await resetPassword(body.userId, body.password, deps) };
     case "disable":
       await disableAccount(body.userId, deps);
       return { ok: true };
@@ -133,10 +134,17 @@ async function loadTargetStaff(rawUserId: unknown, deps: StaffAccountsDeps): Pro
   return target;
 }
 
-async function resetPassword(rawUserId: unknown, deps: StaffAccountsDeps): Promise<string> {
+async function resetPassword(rawUserId: unknown, rawPassword: unknown, deps: StaffAccountsDeps): Promise<string> {
   const target = await loadTargetStaff(rawUserId, deps);
   if (target.disabled) throw new HttpError(400, "삭제(비활성화)된 계정입니다.");
-  const password = deps.generatePassword();
+  const givenPassword = typeof rawPassword === "string" && rawPassword !== "" ? rawPassword : null;
+  if (givenPassword !== null && givenPassword.length < MIN_PASSWORD_LENGTH) {
+    throw new HttpError(400, `비밀번호는 ${MIN_PASSWORD_LENGTH}자 이상이어야 합니다.`);
+  }
+  if (givenPassword !== null && new TextEncoder().encode(givenPassword).length > MAX_PASSWORD_LENGTH) {
+    throw new HttpError(400, "비밀번호가 너무 깁니다.");
+  }
+  const password = givenPassword ?? deps.generatePassword();
   const { error } = await deps.auth.updateUserById(target.id, { password });
   if (error) throw new Error(`password reset failed: ${error.message}`);
   return password;
