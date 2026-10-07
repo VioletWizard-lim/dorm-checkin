@@ -190,7 +190,8 @@ function renderList(filtered) {
         const leave = s.leaveOfAbsence || {};
         sinceText = `${leave.from} ~ ${leave.to}${leave.reason ? ` · ${leave.reason}` : ""}`;
       } else if (status !== "in") {
-        sinceText = `${formatTime(outing && outing.since)} ${meta.badge}${reasonText}${returnText}`;
+        const timeText = (isOut && outing && outing.startTime) || formatTime(outing && outing.since);
+        sinceText = `${timeText} ${meta.badge}${reasonText}${returnText}`;
       }
       const initial = (s.name || "?").charAt(0);
       const hasPendingRequest =
@@ -268,7 +269,10 @@ function renderRequestPanel() {
   requestCountEl.textContent = `${items.length}건`;
   requestListEl.innerHTML = items
     .map(({ request, student }) => {
-      const returnText = request.expected_return ? ` (~${request.expected_return})` : "";
+      const timeText =
+        request.start_time || request.expected_return
+          ? ` (${request.start_time || ""}~${request.expected_return || ""})`
+          : "";
       return `
         <div class="request-row">
           <div class="request-row__who">
@@ -276,7 +280,7 @@ function renderRequestPanel() {
             <div class="student-meta">학번 ${escapeHtml(student.sid || "-")} · ${escapeHtml(student.cls || "-")}</div>
           </div>
           <div class="request-row__what">
-            ${escapeHtml(request.reason)}${escapeHtml(returnText)}
+            ${escapeHtml(request.reason)}${escapeHtml(timeText)}
             <div class="since-text">${escapeHtml(formatTime(request.created_at))} 신청</div>
           </div>
           <div class="roster-actions">
@@ -306,7 +310,7 @@ async function approveRequest(requestId, btn) {
   ]);
   // 승인 = 외출 시작이므로 "외출 체크"와 같이 외출증 이메일을 보낸다(4단계에서 문자로 바뀜).
   const student = findStudent(request.student_id);
-  if (student) sendOutingEmail(student, request.reason, request.expected_return);
+  if (student) sendOutingEmail(student, request.reason, request.expected_return, request.start_time);
 }
 
 async function rejectRequest(requestId, btn) {
@@ -331,7 +335,7 @@ requestListEl.addEventListener("click", (event) => {
   if (rejectBtn) rejectRequest(rejectBtn.dataset.rejectRequest, rejectBtn);
 });
 
-function sendOutingEmail(student, reason, expectedReturn) {
+function sendOutingEmail(student, reason, expectedReturn, startTime) {
   if (!student.email || !window.emailjs) return;
   const now = Date.now();
   window.emailjs
@@ -343,7 +347,7 @@ function sendOutingEmail(student, reason, expectedReturn) {
       seat_no: deriveSeatNoFromSid(student.sid),
       reason: reason || "사유 미기재",
       out_date: formatDate(now),
-      out_time: formatTime(now),
+      out_time: startTime || formatTime(now),
       return_time: expectedReturn || "미정",
       teacher_id: currentTeacherName || currentTeacherId || "관리자",
     })

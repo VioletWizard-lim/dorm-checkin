@@ -87,7 +87,7 @@
 - 실 필터: "전체" / 실 이름별 탭(실 목록은 `rooms`에서 동적으로 읽어옴)
 - 검색창(이름 검색)
 - **조회 날짜 선택**(`<input type="date">`, 기본값 오늘, 미래 날짜는 선택 불가): 오늘이 아닌 날짜를 고르면 그 날짜의 `outings` 기록을 보고 그 자리에서 고칠 수 있음("출석체크 변경") — 화면에 "지난 기록을 보는 중입니다" 안내가 뜨고, 이 상태에서 체크를 바꿔도 이메일은 발송되지 않음(실시간 외출이 아니라 사후 정정이므로)
-- **외출 신청 대기** 패널(맨 위, 승인할 신청이 있을 때만): 오늘 들어온 학생 신청 중 **내가 승인할 수 있는 것만**(담임은 담당 반, 학년부장은 담당 학년, 관리자·기숙사부는 전체 — 서버 `can_manage_student`와 같은 범위) 이름·학번·반·사유·예상 복귀·신청 시각과 [승인] / [반려] 버튼
+- **외출 신청 대기** 패널(맨 위, 승인할 신청이 있을 때만): 오늘 들어온 학생 신청 중 **내가 승인할 수 있는 것만**(담임은 담당 반, 학년부장은 담당 학년, 관리자·기숙사부는 전체 — 서버 `can_manage_student`와 같은 범위) 이름·학번·반·사유·외출 시각~예상 복귀·신청 시각과 [승인] / [반려] 버튼
   - 승인 → RPC `approve_outing_request`가 신청을 승인하고 그 학생을 바로 "외출중"으로 기록(담당 교사 = 승인한 교사). "외출 체크"와 같이 외출증 이메일 발송
   - 반려 → 사유를 묻는 프롬프트(비워도 됨, 취소하면 반려 안 함) → RPC `reject_outing_request`. 사유는 학생 화면에 보임
   - 신청이 있는 학생의 카드 이름 옆에 "외출 신청 대기" 표시(승인 범위와 상관없이 모두에게)
@@ -153,7 +153,9 @@
 ### 6. 학생 화면 (`student.html`, 휴대폰 기준)
 - 학생 계정 전용. 헤더에 이름·학번·반, 로그아웃
 - **오늘 내 상태**: 재실 / 외출중(시각·사유·예상 복귀·확인한 교사) / 자리 없음 / 명령퇴사(기간)
-- **외출 신청**: 사유(필수, 200자) + 예상 복귀 시각(선택, 시각 선택 칸) → RPC `create_outing_request`(학생 정보는 서버가 로그인 계정으로 찾으므로 다른 학생 이름으로 신청할 수 없음)
+- **외출 신청**: 사유(필수, 200자) + 외출 시각(필수, 기본값 지금) + 예상 복귀 시각(선택, 외출 시각보다 늦어야 함) → RPC `create_outing_request`
+  - 시각은 시(0~23)·분(00~59) `<select>` 두 칸으로 고름 — 브라우저 시간 선택기는 분 목록이 끝없이 돌아서 쓰지 않음
+  - 승인하면 바로 "외출중"이 되고(외출 시각이 나중이어도), 외출 시각은 화면·외출증에 표시용으로 쓰임(학생 정보는 서버가 로그인 계정으로 찾으므로 다른 학생 이름으로 신청할 수 없음)
   - 승인 대기 중인 신청이 있거나, 이미 외출 중이거나, 명령퇴사 기간이면 신청 칸이 잠기고 이유를 보여줌(서버도 같은 조건을 거부)
 - **오늘 신청 내역**: 승인 대기(→ [신청 취소], RPC `cancel_outing_request`) / 승인됨(교사·시각) / 반려됨(사유) / 취소함
 - 승인·반려·외출 상태가 실시간으로 바뀜. 학생은 자기 행만 읽을 수 있음(RLS)
@@ -217,15 +219,16 @@ rooms
 
 outings           -- PK (date, student_id). 레코드가 없으면 그 날 "재실"
   date date(학교 기준 날짜), student_id, status 'in'|'out'|'away'("자리 없음"),
-  since timestamptz, reason?, expected_return?(out일 때만),
+  since timestamptz, reason?, start_time?(신청한 외출 시각 "19:00", 승인한 외출만), expected_return?(out일 때만),
   checked_by, checked_by_name(서버 트리거가 채움), request_id?(3단계), notice jsonb?(4단계 문자 결과)
 
-outing_requests   -- 학생 외출 신청: date(KST), student_id, requested_by, reason, expected_return?,
+outing_requests   -- 학생 외출 신청: date(KST), student_id, requested_by, reason, start_time?(HH:MM), expected_return?,
                   -- status pending|approved|rejected|cancelled, decided_by(_name), decided_at, reject_reason?. RPC로만 씀
                   -- 학생·날짜별 대기 중 신청은 하나만(부분 unique 인덱스). 지난 날짜 신청은 승인 불가
 ```
 - 화면 코드는 `adapters.js`로 위 행을 예전 모양(`studentsByGrade[grade][id]`, `room.seatMap`, `outing.expectedReturn`, `user.managedClasses[grade][cls]` 등)으로 바꿔서 쓴다
 - "자리 없음"의 예전 값 `unauthorized`는 이전할 때 `away`로 바뀌었다
+- 외출 시각 표시: `start_time`이 있으면 그 값, 없으면(교사가 직접 "외출 체크") `since`
 - 날짜 키는 화면을 연 컴퓨터의 로컬 날짜(학교 PC는 KST), 서버 RPC는 `today_kst()`
 
 ## 보안 규칙 (RLS·RPC, `supabase/migrations/`)

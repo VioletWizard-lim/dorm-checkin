@@ -142,7 +142,7 @@ function renderOutingPanel(students, statuses, listEl, countEl, extraLabel, empt
             <div class="display-card__name">${escapeHtml(s.name || "이름 없음")}</div>
             <div class="display-card__meta">학번 ${escapeHtml(s.sid || "-")} · ${escapeHtml(s.cls || "-")}</div>
           </div>
-          <div class="display-card__extra">${escapeHtml(formatTime(outing && outing.since))} ${extraLabel}</div>
+          <div class="display-card__extra">${escapeHtml((outing && outing.startTime) || formatTime(outing && outing.since))} ${extraLabel}</div>
         </div>
       `;
     })
