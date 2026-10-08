@@ -6,6 +6,47 @@ const WIDTH = 640;
 const HEIGHT = 860;
 const MAX_BYTES = 190 * 1024;
 const FONT = '"Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif';
+// 가운데에 찍는 도장 문구(위·가운데). 아래 줄에는 외출 날짜가 들어간다.
+const STAMP_TOP = "기숙사";
+const STAMP_MAIN = "외출승인";
+const STAMP_COLOR = "#C0392B";
+
+// 빨간 도장: 이중 테두리 원 + 문구, 살짝 기울이고 반투명하게(글자 위에 찍은 것처럼)
+function drawStamp(ctx, cx, cy, bottomText) {
+  const r = 120;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate((-14 * Math.PI) / 180);
+  ctx.globalAlpha = 0.5;
+  ctx.strokeStyle = STAMP_COLOR;
+  ctx.fillStyle = STAMP_COLOR;
+  ctx.lineWidth = 7;
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.arc(0, 0, r - 12, 0, Math.PI * 2);
+  ctx.stroke();
+  // 가운데 띠
+  ctx.lineWidth = 2.5;
+  for (const y of [-34, 34]) {
+    const half = Math.sqrt((r - 12) ** 2 - y ** 2);
+    ctx.beginPath();
+    ctx.moveTo(-half, y);
+    ctx.lineTo(half, y);
+    ctx.stroke();
+  }
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = `700 28px ${FONT}`;
+  ctx.fillText(STAMP_TOP, 0, -64);
+  ctx.font = `900 46px ${FONT}`;
+  ctx.fillText(STAMP_MAIN, 0, 2);
+  ctx.font = `700 26px ${FONT}`;
+  ctx.fillText(bottomText, 0, 64);
+  ctx.restore();
+}
 
 // 그릴 글자가 든 글꼴 조각을 받아 둔다. Google Fonts의 한글 글꼴은 글자 범위별로 나뉘어 있어서
 // 실제로 쓸 글자를 넘겨야 그 조각을 받는다. 네트워크가 막혀 있어도 오래 붙잡지 않음.
@@ -64,7 +105,7 @@ export async function renderOutingPassJpeg(pass) {
     ["확인 교사", pass.teacher || "-"],
   ];
   const footer = "복귀하면 사감 선생님께 꼭 알려 주세요.";
-  await ensureFont(["외 출 증", "기숙사 외출 확인", footer, ...rows.flat()].join(""));
+  await ensureFont(["외 출 증", "기숙사 외출 확인", footer, STAMP_TOP, STAMP_MAIN, ...rows.flat()].join(""));
   const canvas = document.createElement("canvas");
   canvas.width = WIDTH;
   canvas.height = HEIGHT;
@@ -76,6 +117,8 @@ export async function renderOutingPassJpeg(pass) {
   ctx.strokeStyle = "#1C2230";
   ctx.lineWidth = 4;
   ctx.strokeRect(24, 24, WIDTH - 48, HEIGHT - 48);
+  // 도장은 내용 가운데에 먼저 찍고 그 위에 글자를 써서, 글자가 가려지지 않게 한다
+  drawStamp(ctx, WIDTH / 2, 430, pass.dateLabel);
 
   ctx.fillStyle = "#1C2230";
   ctx.textAlign = "center";
