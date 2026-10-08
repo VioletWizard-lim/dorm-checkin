@@ -272,7 +272,7 @@ test.describe("외출 예정(승인됐지만 외출 시각 전)", () => {
     await expect(seat).toContainText("00:40 외출 예정");
     await expect(seat).not.toHaveClass(/seat-cell--out/);
     await seat.click();
-    await expect(seat.locator(".seat-cell__action-btn")).toHaveText(["외출 취소", "취소"]);
+    await expect(seat.locator(".seat-cell__action-btn")).toHaveText(["외출증", "외출 취소", "취소"]);
     const dialogs = answerDialogs(page, [false, true]);
     await seat.locator(".seat-cell__action-btn", { hasText: "외출 취소" }).click();
     await expect.poll(() => dialogs.map((d) => d.message)).toEqual(["홍길동 학생의 외출을 취소할까요?"]);

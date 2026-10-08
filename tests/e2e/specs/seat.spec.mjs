@@ -41,7 +41,16 @@ test.describe("좌석 배치판 — 보기 모드", () => {
     await page.click("#roomTabs >> text=2·3학년실");
     await expect(cell(page, 0)).toHaveClass(/seat-cell--out/);
     await cell(page, 0).click();
-    await expect(cell(page, 0).locator(".seat-cell__action-btn")).toHaveText(["복귀", "취소"]);
+    await expect(cell(page, 0).locator(".seat-cell__action-btn")).toHaveText(["외출증", "복귀", "취소"]);
+    // [외출증] → 학생 화면과 같은 외출증 팝업(닫으면 좌석은 그대로)
+    await cell(page, 0).getByRole("button", { name: "외출증" }).click();
+    await expect(page.locator("#passDialogTitle")).toHaveText("이서연 외출증");
+    await expect.poll(() => page.locator("#passDialogCanvas").evaluate((c) => [c.width, c.height])).toEqual([640, 860]);
+    await page.locator("#passDialog").getByRole("button", { name: "닫기" }).click();
+    await expect(page.locator("#passDialog")).toBeHidden();
+    await expect(cell(page, 0)).toHaveClass(/seat-cell--out/);
+
+    await cell(page, 0).click();
     await cell(page, 0).getByRole("button", { name: "복귀" }).click();
     await expect(cell(page, 0)).not.toHaveClass(/seat-cell--out/);
     expect(await outingStatus(env, STUDENT.seoyeon)).toBe("in");

@@ -8,6 +8,8 @@ import {
   isScheduledOuting,
   createStartTimeTicker,
 } from "./adapters.js";
+import { outingPassData } from "./outing-pass.js";
+import { createPassDialog } from "./pass-dialog.js";
 
 const MIN_SIZE = 1;
 let currentTeacherName = "";
@@ -282,9 +284,9 @@ function renderGrid(room) {
           // "외출"(재실 -> 외출중)은 여기서 할 수 없다 — check.html에서만.
           actionButtonsHtml = `<button type="button" class="seat-cell__action-btn" data-seat-mark-away="${escapeHtml(studentId)}">자리없음</button>`;
         } else if (rawStatus === "scheduled") {
-          actionButtonsHtml = `<button type="button" class="seat-cell__action-btn" data-seat-restore="${escapeHtml(studentId)}" data-confirm-cancel="${escapeHtml(name)}">외출 취소</button>`;
+          actionButtonsHtml = `<button type="button" class="seat-cell__action-btn" data-seat-pass="${escapeHtml(studentId)}">외출증</button><button type="button" class="seat-cell__action-btn" data-seat-restore="${escapeHtml(studentId)}" data-confirm-cancel="${escapeHtml(name)}">외출 취소</button>`;
         } else if (rawStatus === "out") {
-          actionButtonsHtml = `<button type="button" class="seat-cell__action-btn" data-seat-restore="${escapeHtml(studentId)}">복귀</button>`;
+          actionButtonsHtml = `<button type="button" class="seat-cell__action-btn" data-seat-pass="${escapeHtml(studentId)}">외출증</button><button type="button" class="seat-cell__action-btn" data-seat-restore="${escapeHtml(studentId)}">복귀</button>`;
         } else {
           actionButtonsHtml = `<button type="button" class="seat-cell__action-btn" data-seat-restore="${escapeHtml(studentId)}">재실로</button>`;
         }
@@ -322,7 +324,19 @@ function render() {
   renderRoomSettingsPanel(activeRoom);
   renderGrid(activeRoom);
   updateStartTicker(Object.values(state.outings));
+  passDialog.refresh();
 }
+
+// 외출증 팝업(check.html과 같은 것): 외출중·외출 예정 학생 좌석을 누르면 나오는 [외출증]
+const passDialog = createPassDialog((studentId) => {
+  const student = getStudentsById()[studentId];
+  const status = student && !isOnLeave(student, TODAY_KEY) ? getRawOutingStatus(studentId) : "in";
+  if (status !== "out" && status !== "scheduled") return null;
+  return {
+    title: `${student.name || "이름 없음"} 외출증${status === "scheduled" ? " (외출 예정)" : ""}`,
+    pass: outingPassData(student, state.outings[studentId], TODAY_KEY),
+  };
+});
 
 // 외출 예정 학생의 외출 시각이 되면 다시 그려서 외출 색으로 바꾼다.
 const updateStartTicker = createStartTimeTicker(() => render());
@@ -497,6 +511,14 @@ seatGridEl.addEventListener("click", (event) => {
     }
     state.actionCellKey = null;
     render();
+    return;
+  }
+
+  const passBtn = event.target.closest("[data-seat-pass]");
+  if (passBtn) {
+    state.actionCellKey = null;
+    render();
+    passDialog.open(passBtn.dataset.seatPass);
     return;
   }
 
