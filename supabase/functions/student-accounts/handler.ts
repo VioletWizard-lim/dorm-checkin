@@ -1,10 +1,11 @@
 // 학생 계정 관리 — 발급·비밀번호 재발급·계정 삭제는 관리자만(사용자 요청).
 //   issue          : 계정 발급(여러 명). 아이디 = 학생 명단의 ID, 초기 비밀번호 = 6자리 숫자
 //   reset-password : 새 6자리 비밀번호 발급
-//   발급·재발급한 비밀번호는 문자(솔라피)가 설정돼 있고 학생 연락처가 있으면 학생에게 문자로 보내고,
-//   문자로 보내지 못한 경우에만 응답으로 한 번 돌려준다(화면에 띄워 직접 전달).
+//   발급·재발급한 비밀번호는 문자(솔라피)가 설정돼 있고 학생 연락처가 있으면 학생에게 문자로 보낸다.
+//   비밀번호는 서버에 저장하지 않고 응답으로 한 번만 돌려준다(관리자가 화면에서 파일로 받아 따로 보관 — 사용자 요청).
 //   delete         : 계정 삭제(로그인 정보 + 프로필). withStudent가 true면 학생 명단에서도 지운다.
 //                    담당 교사(그 학생의 명단을 관리할 수 있는 담임·학년부장)는 계정 없는 학생의 명단 삭제만
+//   delete-students: 여러 학생을 명단에서 한 번에 지운다(계정이 있으면 계정도). 관리자만 — 반 단위 삭제(테스트 데이터 정리 등)
 // 외부 호출(Auth Admin API, 테이블)은 deps로 받아서 테스트에서 가짜로 바꿀 수 있게 한다.
 
 import { HttpError } from "../_shared/http.ts";
@@ -52,6 +53,8 @@ export type StudentAccountsDeps = {
   appUrl: string | null; // 문자에 넣을 접속 주소(호출한 화면의 주소)
 };
 
+export type DeleteResult = { studentId: string; ok: true } | { studentId: string; ok: false; error: string };
+
 export type IssueResult =
   | { studentId: string; ok: true; loginId: string; password?: string; sms: SmsStatus; smsError?: string }
   | { studentId: string; ok: false; error: string };
@@ -75,6 +78,9 @@ export async function handleStudentAccounts(body: Record<string, unknown>, deps:
       await deleteAccount(body.studentId, withStudent, deps);
       return { ok: true };
     }
+    case "delete-students":
+      requireAdmin(caller, "여러 학생을 한 번에 삭제하는 것은 관리자만 할 수 있습니다.");
+      return { results: await deleteStudents(body.studentIds, deps) };
     default:
       throw new HttpError(400, "알 수 없는 요청입니다.");
   }
@@ -100,12 +106,17 @@ function describeAuthError(error: AuthLikeError): string {
   return "계정을 만들지 못했습니다.";
 }
 
-async function issueAccounts(raw: unknown, deps: StudentAccountsDeps): Promise<IssueResult[]> {
-  if (!Array.isArray(raw) || raw.length === 0) throw new HttpError(400, "발급할 학생 목록이 비어 있습니다.");
+// 요청의 학생 id 목록(중복·빈 값 제거). 비었거나 너무 많으면 400
+function readStudentIds(raw: unknown): string[] {
+  if (!Array.isArray(raw) || raw.length === 0) throw new HttpError(400, "학생 목록이 비어 있습니다.");
   if (raw.length > MAX_ACCOUNTS_PER_REQUEST) {
-    throw new HttpError(400, `한 번에 최대 ${MAX_ACCOUNTS_PER_REQUEST}명까지 발급할 수 있습니다.`);
+    throw new HttpError(400, `한 번에 최대 ${MAX_ACCOUNTS_PER_REQUEST}명까지 처리할 수 있습니다.`);
   }
-  const ids = [...new Set(raw.map((v) => String(v ?? "")))].filter(Boolean);
+  return [...new Set(raw.map((v) => String(v ?? "")))].filter(Boolean);
+}
+
+async function issueAccounts(raw: unknown, deps: StudentAccountsDeps): Promise<IssueResult[]> {
+  const ids = readStudentIds(raw);
   const students = new Map((await deps.students.getMany(ids)).map((s) => [s.id, s]));
   const existing = new Set((await deps.profiles.findByStudentIds(ids)).map((p) => p.student_id));
 
@@ -194,14 +205,9 @@ async function sendPasswords(issued: Issued[], deps: StudentAccountsDeps): Promi
   return delivery;
 }
 
-// 문자로 보냈으면 비밀번호는 응답에서 뺀다(화면에 남지 않게).
-function withDelivery<T extends { password?: string }>(result: T, delivery: Delivery | undefined): T & Delivery {
-  const d = delivery ?? { sms: "off" as const };
-  if (d.sms === "sent") {
-    const { password: _omit, ...rest } = result;
-    return { ...(rest as T), ...d };
-  }
-  return { ...result, ...d };
+// 비밀번호는 문자로 보냈어도 응답에 담는다(관리자만 부를 수 있고, 화면은 파일로 받을 때만 씀 — 사용자 요청).
+function withDelivery<T>(result: T, delivery: Delivery | undefined): T & Delivery {
+  return { ...result, ...(delivery ?? { sms: "off" as const }) };
 }
 
 // 대상 학생과 그 학생의 계정을 찾고 권한을 확인한다.
@@ -241,4 +247,36 @@ async function deleteAccount(rawStudentId: unknown, withStudent: boolean, deps: 
     const { error } = await deps.students.delete(student.id);
     if (error) throw new Error(`delete student failed: ${error.message}`);
   }
+}
+
+// 여러 학생을 명단에서 지운다(관리자만). 계정이 있으면 로그인 정보를 먼저 지우고 명단 행을 지운다.
+// 한 명이 실패해도 나머지는 계속하고, 학생마다 결과를 돌려준다.
+async function deleteStudents(raw: unknown, deps: StudentAccountsDeps): Promise<DeleteResult[]> {
+  const ids = readStudentIds(raw);
+  const students = new Set((await deps.students.getMany(ids)).map((s) => s.id));
+  const accounts = new Map((await deps.profiles.findByStudentIds(ids)).map((p) => [p.student_id, p]));
+  const results: DeleteResult[] = [];
+  for (const studentId of ids) {
+    if (!students.has(studentId)) {
+      results.push({ studentId, ok: false, error: "학생을 찾을 수 없습니다." });
+      continue;
+    }
+    const account = accounts.get(studentId);
+    if (account) {
+      const { error } = await deps.auth.deleteUser(account.id);
+      if (error) {
+        console.error(`delete user failed: ${error.message}`);
+        results.push({ studentId, ok: false, error: "학생 계정을 지우지 못했습니다." });
+        continue;
+      }
+    }
+    const { error } = await deps.students.delete(studentId);
+    if (error) {
+      console.error(`delete student failed: ${error.message}`);
+      results.push({ studentId, ok: false, error: "명단에서 지우지 못했습니다." });
+      continue;
+    }
+    results.push({ studentId, ok: true });
+  }
+  return results;
 }

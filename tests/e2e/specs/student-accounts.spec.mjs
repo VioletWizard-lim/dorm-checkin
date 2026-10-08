@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { test, expect } from "./fixtures.mjs";
 import { PASSWORD, STUDENT } from "../harness/seed.mjs";
 import { answerDialogs, collectAlerts, tryLogin, WRONG_LOGIN } from "./helpers.mjs";
@@ -6,6 +7,15 @@ const rosterCard = (page, name) => page.locator("#rosterList .student-card", { h
 
 async function studentRow(env, id) {
   return (await env.sql("select * from public.students where id = $1", [id]))[0] ?? null;
+}
+
+// [비밀번호 목록 파일로 받기]로 받은 CSV(BOM 제외)를 줄·칸으로
+async function downloadPasswordCsv(page) {
+  const [download] = await Promise.all([page.waitForEvent("download"), page.click("#accountResultDownloadBtn")]);
+  expect(download.suggestedFilename()).toMatch(/^student-passwords_\d{4}-\d{2}-\d{2}_\d{4}\.csv$/);
+  const text = await readFile(await download.path(), "utf8");
+  expect(text.startsWith("\ufeff")).toBe(true);
+  return text.slice(1).trim().split("\r\n").map((line) => line.split(","));
 }
 
 async function studentAccount(env, studentId) {
@@ -49,6 +59,14 @@ test.describe("학생 계정 관리(학생 명단 화면)", () => {
     await expect(page.locator("#accountResultCopy")).toHaveValue(`홍길동\t10305\thong123\t${newPin}`);
     expect(await tryLogin(openOtherAs, "hong123", pin, { student: true })).toBe(WRONG_LOGIN);
     expect(await tryLogin(openOtherAs, "hong123", newPin, { student: true })).toBe("ok");
+
+    // 비밀번호 목록 파일: 문자로 보낸 것까지 모두(서버에는 저장하지 않으므로 관리자가 따로 보관)
+    const rows = await downloadPasswordCsv(page);
+    expect(rows[0]).toEqual(["이름", "학번", "아이디", "비밀번호", "구분", "전달", "시각"]);
+    expect(rows.slice(1).map((r) => r.slice(0, 6))).toEqual([
+      ["홍길동", "10305", "hong123", newPin, "재발급", "직접 전달"],
+      ["홍길동", "10305", "hong123", pin, "발급", "문자 보냄"],
+    ]);
 
     await rosterCard(page, "홍길동").getByRole("button", { name: "계정 삭제" }).click();
     await expect(rosterCard(page, "홍길동").locator(".account-chip")).toHaveText("계정 없음");
@@ -158,6 +176,53 @@ test.describe("학생 계정 관리(학생 명단 화면)", () => {
     }, { haneul: STUDENT.haneul, hong: STUDENT.hong });
     expect(result).toEqual({ issue: "학생 계정 발급은 관리자만 할 수 있습니다.", del: "계정이 있는 학생은 관리자만 삭제할 수 있습니다." });
     expect(await studentRow(env, STUDENT.hong)).not.toBeNull();
+  });
+
+  test("관리자는 반 단위로 학생을 한 번에 지운다(계정도 함께, \"삭제\" 입력 확인)", async ({ env, openAs, page }) => {
+    const dialogs = answerDialogs(page, ["지워", true, "삭제"]);
+    await env.createStudentAccount(STUDENT.hong, "hong123");
+    await openAs("admin01", "/students.html");
+    await expect(rosterCard(page, "홍길동")).toBeVisible();
+    await page.click("#classDeleteBtn");
+    const chips = page.locator("#classDeleteChips [data-delete-cls]");
+    await expect(chips).toHaveText(["1학년 1반 (1명)", "1학년 3반 (2명)"]);
+    await expect(page.locator("#classDeleteSaveBtn")).toBeDisabled();
+    await chips.filter({ hasText: "1학년 3반" }).click();
+    await expect(page.locator("#classDeleteSaveBtn")).toHaveText("삭제 (2명)");
+
+    // "삭제"라고 입력하지 않으면 지우지 않는다
+    await page.click("#classDeleteSaveBtn");
+    await expect.poll(() => dialogs.length).toBe(2);
+    expect(dialogs[0].message).toContain("1학년 3반 학생 2명");
+    expect(dialogs[0].message).toContain("학생 계정 1개도 함께 지워집니다");
+    expect(dialogs[1].message).toContain("지우지 않았습니다");
+    expect(await studentRow(env, STUDENT.hong)).not.toBeNull();
+
+    await page.click("#classDeleteSaveBtn");
+    await expect(page.locator("#classDeleteWrap")).toBeHidden();
+    await expect(rosterCard(page, "홍길동")).toHaveCount(0);
+    await expect(rosterCard(page, "최하늘")).toHaveCount(0);
+    await expect(rosterCard(page, "김민준")).toBeVisible();
+    expect(await studentRow(env, STUDENT.hong)).toBeNull();
+    expect(await studentRow(env, STUDENT.haneul)).toBeNull();
+    expect(await studentRow(env, STUDENT.minjun)).not.toBeNull();
+    expect(env.auth.findByEmail("hong123@student.donghall.local")).toBeNull();
+  });
+
+  test("반 단위 삭제는 관리자만(버튼이 없고 서버도 거부)", async ({ openAs, page }) => {
+    await openAs("gm01", "/students.html");
+    await expect(rosterCard(page, "홍길동")).toBeVisible();
+    await expect(page.locator("#classDeleteBtn")).toBeHidden();
+    const message = await page.evaluate(async (id) => {
+      const { callFunction } = await import("/js/supabase-client.js");
+      try {
+        await callFunction("student-accounts", { action: "delete-students", studentIds: [id] });
+        return "deleted";
+      } catch (err) {
+        return err.message;
+      }
+    }, STUDENT.minjun);
+    expect(message).toBe("여러 학생을 한 번에 삭제하는 것은 관리자만 할 수 있습니다.");
   });
 });
 

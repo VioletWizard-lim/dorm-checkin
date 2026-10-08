@@ -40,6 +40,7 @@
   <div class="roster-toolbar">
     <div class="filter-chips" id="gradeTabs"><span class="loading-hint">불러오는 중...</span></div>
     <div class="roster-toolbar__actions">
+      <button type="button" class="btn-secondary" id="classDeleteBtn" hidden>반 단위 삭제</button>
       <button type="button" class="btn-secondary" id="bulkIssueBtn" disabled>계정 일괄 발급</button>
       <button type="button" class="btn-secondary" id="bulkAddBtn" disabled>여러 명 한번에 추가</button>
       <button type="button" class="btn-add" id="addStudentBtn" disabled>+ 학생 추가</button>
@@ -130,12 +131,30 @@
     </div>
   </div>
 
+  <!-- 관리자 전용: 고른 반의 학생을 한 번에 지운다(테스트로 넣은 반 정리 등) -->
+  <div class="roster-form-wrap" id="classDeleteWrap" hidden>
+    <div class="roster-form">
+      <div class="field">
+        <label>지울 반 고르기</label>
+        <span class="field-hint">고른 반의 학생을 명단에서 모두 지웁니다. 학생 계정·좌석 배정·외출 기록도 함께 지워지고 되돌릴 수 없습니다.</span>
+        <div class="filter-chips" id="classDeleteChips"></div>
+      </div>
+      <div class="roster-form__actions">
+        <button type="button" class="btn-secondary" id="cancelClassDeleteBtn">취소</button>
+        <button type="button" class="btn-danger" id="classDeleteSaveBtn" disabled>삭제 (0명)</button>
+      </div>
+    </div>
+  </div>
+
   <div class="roster-form-wrap" id="accountResultWrap" hidden>
     <div class="roster-form">
-      <div class="alert alert-notice">학생 연락처가 있으면 비밀번호를 학생에게 문자로 보냅니다. 문자로 보내지 못한 비밀번호만 여기 나오고, 새로고침하면 다시 볼 수 없으니 지금 복사해서 학생에게 전달해 주세요.</div>
+      <div class="alert alert-notice">비밀번호는 서버에 저장되지 않아 새로고침하면 다시 볼 수 없습니다. [비밀번호 목록 파일로 받기]로 내려받아 안전한 곳에 따로 보관해 주세요. 학생 연락처가 있으면 학생에게도 문자로 보냅니다.</div>
+      <div class="roster-form__actions">
+        <button type="button" class="btn-secondary" id="accountResultDownloadBtn">비밀번호 목록 파일로 받기 (CSV)</button>
+      </div>
       <div id="accountResultList"></div>
       <div class="field">
-        <label for="accountResultCopy">엑셀에 붙여넣기용 (이름 · 학번 · 아이디 · 비밀번호)</label>
+        <label for="accountResultCopy">문자로 못 보낸 학생 — 엑셀에 붙여넣기용 (이름 · 학번 · 아이디 · 비밀번호)</label>
         <textarea id="accountResultCopy" rows="4" readonly></textarea>
       </div>
     </div>
