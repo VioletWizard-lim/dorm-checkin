@@ -2,7 +2,7 @@ import { assertEquals, assertRejects } from "jsr:@std/assert@1";
 import { HttpError } from "../_shared/http.ts";
 import type { AuthLikeError, Profile } from "../_shared/types.ts";
 import type { SmsMessage, SmsResult } from "../_shared/solapi.ts";
-import { handleStudentAccounts, type StudentAccountsDeps, type StudentRow } from "./handler.ts";
+import { handleStudentAccounts, loginPageUrl, type StudentAccountsDeps, type StudentRow } from "./handler.ts";
 
 function staff(overrides: Partial<Profile> = {}): Profile {
   return {
@@ -244,4 +244,16 @@ Deno.test("homeroom teachers may remove a roster row with its login, but not the
 
 Deno.test("unknown actions are rejected", async () => {
   await assertHttpError(handleStudentAccounts({ action: "nope" }, fakeDeps().deps), 400, "알 수 없는 요청입니다.");
+});
+
+Deno.test("the login link in the text keeps the site path (GitHub Pages) but only the caller's origin", () => {
+  assertEquals(loginPageUrl("https://violetwizard-lim.github.io", "/dorm-checkin/"), "https://violetwizard-lim.github.io/dorm-checkin/login.html");
+  assertEquals(loginPageUrl("https://checkin.example.kr", "/"), "https://checkin.example.kr/login.html");
+  assertEquals(loginPageUrl("https://a.example", undefined), "https://a.example/login.html");
+  // 이상한 경로는 무시하고 도메인 바로 아래로
+  assertEquals(loginPageUrl("https://a.example", "//evil.example/"), "https://a.example/login.html");
+  assertEquals(loginPageUrl("https://a.example", "/../x/"), "https://a.example/login.html");
+  assertEquals(loginPageUrl("https://a.example", "/x?y=1/"), "https://a.example/login.html");
+  assertEquals(loginPageUrl(null, "/dorm-checkin/"), null);
+  assertEquals(loginPageUrl("javascript:alert(1)", "/"), null);
 });

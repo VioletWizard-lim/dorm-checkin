@@ -457,7 +457,7 @@ listEl.addEventListener("click", (event) => {
   let expectedReturn = "";
   if (currentStatus === "in") {
     reason = (window.prompt("외출 사유를 입력해 주세요 (취소해도 외출 체크는 진행됩니다)", "") || "").trim();
-    expectedReturn = (window.prompt("예상 복귀 시각을 입력해 주세요 (예: 17:00, 취소하면 미정으로 표시됩니다)", "") || "").trim();
+    expectedReturn = (window.prompt("예상 복귀 시각을 입력해 주세요 (예: 17:00 — 이 시각이 지나면 자동으로 복귀 처리됩니다. 취소하면 미정)", "") || "").trim();
   }
   btn.disabled = true;
   toggleOuting(btn.dataset.toggleId, btn.dataset.grade, currentStatus, reason, expectedReturn).finally(() => {

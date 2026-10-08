@@ -1,6 +1,4 @@
 node_modules/
-.firebase/
-firebase-debug.log
 .DS_Store
 deno.lock
 supabase/.temp/

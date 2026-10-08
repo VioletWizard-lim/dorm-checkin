@@ -78,6 +78,15 @@ export async function handleStudentAccounts(body: Record<string, unknown>, deps:
   }
 }
 
+// 문자에 넣을 로그인 주소: 호출한 화면의 주소(브라우저가 붙이는 Origin) + 화면이 보낸 경로 + login.html.
+// GitHub Pages는 https://사용자.github.io/저장소/ 처럼 경로가 붙으므로 경로를 함께 받는다.
+// 주소(도메인)는 Origin에서만 가져오므로 경로를 조작해도 다른 사이트 주소는 들어가지 않는다.
+export function loginPageUrl(origin: string | null, appPath: unknown): string | null {
+  if (!origin || !/^https?:\/\/[A-Za-z0-9.:-]+$/.test(origin)) return null;
+  const path = typeof appPath === "string" && /^\/(?:[A-Za-z0-9_-][A-Za-z0-9._-]*\/)*$/.test(appPath) ? appPath : "/";
+  return `${origin}${path}login.html`;
+}
+
 function requireAdmin(caller: Profile, message: string) {
   if (caller.role !== "admin") throw new HttpError(403, message);
 }

@@ -11,12 +11,15 @@
 - **Frontend**: 순수 HTML/CSS/JS (프레임워크·빌드 없음), PWA(홈 화면 추가 지원)
 - **Backend**: Supabase(서울 리전) — Postgres + RLS, Auth, Realtime(`postgres_changes`), Edge Functions(Deno)
   - 브라우저는 `supabase-js`를 CDN(jsdelivr `+esm`)에서 버전 고정으로 불러온다(`public/js/supabase-client.js`)
-- **Hosting**: Firebase Hosting(화면 파일만). GitHub Actions로 main 브랜치 push 시 자동 배포, PR마다 미리보기 URL
+- **Hosting**: GitHub Pages(화면 파일 `public/`만) — **https://violetwizard-lim.github.io/dorm-checkin/**. main에 `public/**`가 들어오면 `pages-deploy.yml`이 자동 배포(저장소 Settings → Pages → Source = GitHub Actions). PR 미리보기 주소는 없음(확인은 E2E 테스트·캡처로)
+  - 사이트가 `/dorm-checkin/` 아래에 있으므로 화면의 링크·스크립트·이미지는 모두 상대 경로(`./login.html`, `./js/...`)로 쓴다(절대 경로 `/...` 금지)
+  - GitHub Pages는 파일을 최대 10분 캐시하므로 배포 직후 잠깐 예전 화면이 보일 수 있다
+  - 예전에는 Firebase Hosting(`dorm-checkin-647d6.web.app`)을 썼다(사용자 요청으로 옮김). 그쪽 배포 설정은 지웠고, 사이트는 마지막 배포 그대로 남아 있으니 Firebase 콘솔에서 Hosting을 끄거나 프로젝트를 지울 것
 - **폰트**: Noto Sans KR (Google Fonts)
 - **대상 기기**: 교무실/사감실 PC(입력·현황판 화면), Android 기반 전자칠판(전체화면 PWA), 학생 휴대폰(학생 화면)
 
 ## Supabase 이전 (완료)
-백엔드를 Firebase(RTDB·Auth)에서 Supabase로 옮겼다. 이 문서의 화면·데이터 모델·보안 규칙 설명은 Supabase 기준이다. **Firebase는 이제 화면 파일 호스팅(Firebase Hosting)에만 쓴다.**
+백엔드를 Firebase(RTDB·Auth)에서 Supabase로 옮겼다. 이 문서의 화면·데이터 모델·보안 규칙 설명은 Supabase 기준이다. 화면 호스팅도 GitHub Pages로 옮겨서 **코드는 더 이상 Firebase를 쓰지 않는다.**
 - 이전 이유: 학생 계정(아이디 = 리로스쿨 ID), 외출 신청·승인, 외출 문자(솔라피)를 넣기 위해서
   - Supabase는 기존 유료 조직에 새 프로젝트(서울 리전)로 둔다
 - 단계(PR 단위, 모두 완료):
@@ -25,8 +28,8 @@
   3. 학생 계정 + 신청/승인
   4. 외출 문자(솔라피) + 학생 비밀번호 문자. 외출증 이메일 제거
   5. Firebase 코드 정리: `firebase-init.js`·`firebase-config.js`·`database.rules.json`·RTDB 규칙 배포 워크플로, 데이터 이전 스크립트(`scripts/migrate/`)와 그 워크플로를 지움(필요하면 git 기록에서 찾을 것)
-- Firebase에 남아 있는 것
-  - Hosting: `firebase.json`(hosting만), `.firebaserc`, `firebase-hosting-*.yml` 워크플로(시크릿 `FIREBASE_SERVICE_ACCOUNT_DORM_CHECKIN_647D6`)
+- Firebase에 남아 있는 것(코드와는 연결 없음)
+  - Hosting: 예전 주소(`dorm-checkin-647d6.web.app`)에 마지막 배포본이 남아 있음. 배포 워크플로·`firebase.json`·`.firebaserc`는 지움(GitHub Secrets의 `FIREBASE_SERVICE_ACCOUNT_DORM_CHECKIN_647D6`도 이제 안 씀)
   - RTDB: 이전 직전 데이터가 백업으로 남아 있음(마지막으로 배포한 규칙 그대로). 코드에서는 읽지도 쓰지도 않는다
   - Firebase Auth의 예전 교사 계정: 쓰이지 않음. 지금 로그인은 모두 Supabase Auth
 - 파일 위치:
@@ -46,6 +49,7 @@
   - main에 `supabase/**`가 들어오면 `supabase-deploy.yml`이 테스트 후 `db push`와 `functions deploy --use-api`를 실행한다
   - 시크릿 `SUPABASE_ACCESS_TOKEN`(프로젝트 하나로 범위를 좁힌 토큰), `SUPABASE_PROJECT_REF`, `SUPABASE_DB_PASSWORD`가 없으면 배포를 건너뛴다
   - 마이그레이션 SQL을 Supabase SQL 편집기에서 직접 실행하지 않는다(배포 워크플로가 적용하고 이력을 남김)
+- 화면: `pages-deploy.yml`이 main의 `public/`을 GitHub Pages에 올린다(위 "기술 스택")
 - 저장소가 공개(public)라서 키·비밀번호·학생 개인정보를 코드와 Actions 로그에 남기지 않는다
 
 ## 테스트
@@ -96,6 +100,7 @@
 - 저장은 `outings`에 (날짜, 학생) 기준 upsert. 시각(`since`)과 담당 교사(`checked_by`·`checked_by_name`)는 서버 트리거가 채운다. 저장 중에는 버튼을 잠가 두 번 눌리지 않게 함
 - **기숙사부(dormStaff)는 보기만**: 카드에 조작 버튼이 없고(외출중·외출 예정이면 [외출증 보기]만), 승인 패널도 안 보임. 서버도 외출 기록 쓰기를 막음(`private.can_write_outings`)
 - 로그인한 사용자 누구나(teacher 이상) 사용 가능. **studyHallSupervisor**(자습 감독용) 계정은 이 화면만 접근 가능 — 헤더의 "현황판 보기"/"좌석 배치판 보기"/"학생 명단 관리"/"계정 관리" 링크가 모두 숨겨지고, 다른 화면 URL로 직접 접속해도 이 화면으로 리다이렉트됨
+- **자동 복귀**(사용자 요청): 오늘 외출 중인 학생의 예상 복귀 시각("HH:MM")이 지나면 서버가 1분 안에 재실로 바꾼다(`private.auto_return_outings`, pg_cron `auto-return-outings` 1분마다 — 화면이 안 켜져 있어도 동작). 담당 교사 칸·외출 기록의 복귀 처리는 "자동 복귀". 예상 복귀가 없거나(미정) HH:MM이 아니면 교사가 복귀 체크
 - "외출 체크"를 누르면(재실→외출중) 사유·예상 복귀 시각을 입력받는 프롬프트가 순서대로 뜨고(둘 다 선택 입력, 취소해도 체크 자체는 진행), 저장에 성공하면 **외출 문자**를 보낸다(오늘 날짜일 때만, "복귀 체크" 때는 안 보냄)
   - 학부모(`parent_phone`): 외출 안내 문자(외출 시각·복귀 예정·사유·확인 교사)
   - 학생에게는 문자를 보내지 않는다 — 외출증은 학생 화면(student.html)에 뜬다(문자 비용 절약, 사용자 요청)
@@ -287,7 +292,7 @@ outing_requests   -- 학생 외출 신청: date(KST), student_id, requested_by, 
 - 보내는 문자
   - 학생 외출증: 문자로 보내지 않고 학생 화면에 띄움(예전 MMS는 1회 약 110원이라 뺐음)
   - 학부모 안내: "[기숙사 외출 안내] ○○ 학생이 ○월 ○일 HH:MM에 외출합니다. / 복귀 예정 / 사유 / 확인 교사" (길이에 따라 솔라피가 단문·장문 자동 선택)
-  - 학생 비밀번호: "[기숙사 외출체크] ○○ 학생 계정 / 아이디 / 비밀번호 / 접속 주소(화면 주소 + /login.html) / '학생' 탭 안내"
+  - 학생 비밀번호: "[기숙사 외출체크] ○○ 학생 계정 / 아이디 / 비밀번호 / 접속 주소 / '학생' 탭 안내" — 접속 주소는 호출한 화면의 Origin + 화면이 보낸 경로(`appPath`, 예 `/dorm-checkin/`) + `login.html`(`student-accounts/handler.ts`의 `loginPageUrl`, 도메인은 Origin에서만 가져옴)
 - 비용: 외출 1회 = 학부모 장문 1통(약 45원). 솔라피 하루 발송 한도(콘솔 "하루 발송 한도")는 하루 외출 건수보다 넉넉히
 - 학생 연락처(`phone`)는 이제 학생 비밀번호 문자에만 쓰인다(없으면 비밀번호를 화면에 표시)
 - 예전 외출증 이메일(EmailJS)은 4단계에서 없앴다. 학생 `email` 칸은 연락처 정보로만 남아 있다

@@ -3,18 +3,13 @@ import { createAdminClient, getCaller } from "../_shared/supabase.ts";
 import { randomPin } from "../_shared/accounts.ts";
 import { createSmsSender, smsConfigFromEnv } from "../_shared/solapi.ts";
 import type { Profile } from "../_shared/types.ts";
-import { handleStudentAccounts, type StudentRow } from "./handler.ts";
+import { handleStudentAccounts, loginPageUrl, type StudentRow } from "./handler.ts";
 
 // in.(...) 조건이 URL에 들어가므로 id가 많으면 나눠서 조회한다.
 async function inChunks<T>(ids: string[], load: (chunk: string[]) => Promise<T[]>): Promise<T[]> {
   const rows: T[] = [];
   for (let i = 0; i < ids.length; i += 50) rows.push(...(await load(ids.slice(i, i + 50))));
   return rows;
-}
-
-// 문자에 넣을 로그인 주소: 호출한 화면의 주소(Origin) + /login.html
-function loginPageUrl(origin: string | null): string | null {
-  return origin && /^https?:\/\/[A-Za-z0-9.:-]+$/.test(origin) ? `${origin}/login.html` : null;
 }
 
 serve(async (req) => {
@@ -52,7 +47,7 @@ serve(async (req) => {
     },
     generatePin: () => randomPin(6),
     sms: smsConfig ? createSmsSender(smsConfig) : null,
-    appUrl: loginPageUrl(req.headers.get("Origin")),
+    appUrl: loginPageUrl(req.headers.get("Origin"), body.appPath),
   });
   return jsonResponse(200, result);
 });
