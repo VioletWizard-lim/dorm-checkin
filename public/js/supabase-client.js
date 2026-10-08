@@ -152,3 +152,8 @@ export function showPageError(message) {
   box.textContent = message;
   container.prepend(box);
 }
+
+// live-table의 onError: 실시간 데이터를 불러오지 못했을 때(live-table이 알아서 다시 시도한다)
+export function reportLoadError(error) {
+  showPageError(`데이터를 불러오지 못했습니다(${describeError(error)}). 잠시 후 자동으로 다시 시도합니다.`);
+}

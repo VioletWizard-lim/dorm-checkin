@@ -1,16 +1,11 @@
 // 학생 화면: 오늘 내 상태 보기, 외출 신청·취소, 오늘 신청 내역(승인·반려 결과 실시간 반영).
 // 신청·취소는 RPC(create_outing_request·cancel_outing_request)로만 한다 — 학생 정보는 서버가 로그인 계정으로 찾는다.
-import { supabase, requireStudent, signOutTo, describeError, showPageError } from "./supabase-client.js";
+import { supabase, requireStudent, signOutTo, describeError, reportLoadError } from "./supabase-client.js";
+import { getDateKey, escapeHtml, formatTime } from "./util.js";
 import { liveTable } from "./live-table.js";
 import { studentFromRow, isScheduledOuting, createStartTimeTicker } from "./adapters.js";
 import { drawOutingPass, outingPassData } from "./outing-pass.js";
 
-function getDateKey(date = new Date()) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
 const TODAY_KEY = getDateKey();
 
 const nameEl = document.getElementById("studentName");
@@ -56,21 +51,6 @@ const state = {
 };
 let requestsLive = null;
 let outingsLive = null;
-
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
-
-function formatTime(value) {
-  if (!value) return "";
-  const d = new Date(value);
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-}
 
 // 시·분 선택 칸. 목록이 끝에서 멈추도록 <select>를 쓴다(브라우저 시간 선택기는 분이 계속 돌아감).
 function fillTimeSelect(select, count, unit, blankLabel) {
@@ -321,10 +301,6 @@ requestListEl.addEventListener("click", async (event) => {
 });
 
 logoutBtn.addEventListener("click", () => signOutTo());
-
-function reportLoadError(error) {
-  showPageError(`데이터를 불러오지 못했습니다(${describeError(error)}). 잠시 후 자동으로 다시 시도합니다.`);
-}
 
 async function init() {
   const session = await requireStudent();

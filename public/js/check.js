@@ -1,4 +1,5 @@
-import { supabase, requireStaff, signOutTo, describeError, showPageError, callFunction } from "./supabase-client.js";
+import { supabase, requireStaff, signOutTo, describeError, showPageError, callFunction, reportLoadError } from "./supabase-client.js";
+import { getDateKey, isOnLeave, escapeHtml, formatToday, formatTime } from "./util.js";
 import { liveTable } from "./live-table.js";
 import {
   GRADES,
@@ -35,24 +36,7 @@ const requestPanelEl = document.getElementById("requestPanel");
 const requestCountEl = document.getElementById("requestCount");
 const requestListEl = document.getElementById("requestList");
 
-// outings는 하루가 지나도 기록이 남도록 날짜별로 저장한다(outings 테이블의 date 열).
-// "조회 날짜"를 오늘이 아닌 값으로 바꾸면 그 날짜의 기록을 보고 고칠 수 있다(지난 기록 수정).
-function getDateKey(date = new Date()) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
 const TODAY_KEY = getDateKey();
-
-// "명령퇴사"는 students.html에서 설정하는 시작~종료일이 있는 기간제 상태다. 그 기간 동안은
-// "자리 없음" 판정에서 제외하고 조회 중인 날짜 기준으로 판단한다(지난 기록을 볼 때도 그 날짜 기준).
-function isOnLeave(student, dateKey) {
-  const leave = student && student.leaveOfAbsence;
-  if (!leave || !leave.from || !leave.to) return false;
-  return dateKey >= leave.from && dateKey <= leave.to;
-}
 
 const state = {
   studentsByGrade: { "1": {}, "2": {}, "3": {} },
@@ -67,29 +51,6 @@ const state = {
 let outingsLive = null;
 let requestsLive = null;
 let currentProfile = null;
-
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
-
-function formatToday() {
-  const days = ["일", "월", "화", "수", "목", "금", "토"];
-  const now = new Date();
-  return `${now.getFullYear()}년 ${now.getMonth() + 1}월 ${now.getDate()}일 (${days[now.getDay()]})`;
-}
-
-function formatTime(ts) {
-  if (!ts) return "";
-  const d = new Date(ts);
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  return `${hh}:${mm}`;
-}
 
 // 외출 문자 결과 한 줄(notify-outing이 outings.notice에 기록). 표시할 게 없으면 text가 ""
 // 학부모에게만 보낸다(학생 외출증은 학생 화면에 뜸).
@@ -496,10 +457,6 @@ searchInput.addEventListener("input", (event) => {
   state.searchTerm = event.target.value;
   render();
 });
-
-function reportLoadError(error) {
-  showPageError(`데이터를 불러오지 못했습니다(${describeError(error)}). 잠시 후 자동으로 다시 시도합니다.`);
-}
 
 function subscribeOutingsForSelectedDate() {
   if (outingsLive) outingsLive.stop();

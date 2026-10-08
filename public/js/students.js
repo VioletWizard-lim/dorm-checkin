@@ -1,4 +1,5 @@
 import { supabase, requireStaff, signOutTo, describeError, showPageError, callFunction } from "./supabase-client.js";
+import { getDateKey, isOnLeave, escapeHtml, insertTabOnKeydown } from "./util.js";
 import { liveTable } from "./live-table.js";
 import {
   GRADES as ALL_GRADES,
@@ -48,21 +49,7 @@ const accountResultWrap = document.getElementById("accountResultWrap");
 const accountResultList = document.getElementById("accountResultList");
 const accountResultCopy = document.getElementById("accountResultCopy");
 
-function getDateKey(date = new Date()) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
 const TODAY_KEY = getDateKey();
-
-// "명령퇴사"는 시작~종료일이 있는 기간제 상태다(예: 장기 결석). 그 기간 동안은
-// "자리 없음" 판정에서 제외하고 현황판 등에 별도로 표시한다(check.js/display.js/seat.js도 동일 로직 사용).
-function isOnLeave(student, dateKey) {
-  const leave = student && student.leaveOfAbsence;
-  if (!leave || !leave.from || !leave.to) return false;
-  return dateKey >= leave.from && dateKey <= leave.to;
-}
 
 const bulkAddBtn = document.getElementById("bulkAddBtn");
 const bulkFormWrap = document.getElementById("bulkFormWrap");
@@ -176,29 +163,6 @@ function parseBulkInput(text, classRestriction, studentsInGrade) {
     });
   });
   return { rows, errors };
-}
-
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
-
-// textarea 기본 동작은 Tab을 누르면 포커스가 다음 요소로 넘어가 버려서,
-// 엑셀 붙여넣기가 아니라 직접 타이핑할 때는 탭 구분자를 입력할 수 없다.
-// Tab(Shift 없이)을 가로채 실제 탭 문자를 커서 위치에 삽입한다.
-function insertTabOnKeydown(event) {
-  if (event.key !== "Tab" || event.shiftKey) return;
-  event.preventDefault();
-  const el = event.target;
-  const start = el.selectionStart;
-  const end = el.selectionEnd;
-  el.value = el.value.slice(0, start) + "\t" + el.value.slice(end);
-  el.selectionStart = el.selectionEnd = start + 1;
-  el.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
 function renderDayToggle() {

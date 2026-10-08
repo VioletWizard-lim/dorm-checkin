@@ -1,6 +1,7 @@
 // 외출 기록 화면: outing_log(외출할 때마다 한 줄, DB 트리거가 쌓음)를 기간·학년·이름으로 본다.
 // 볼 수 있는 범위는 서버(RLS)가 정한다 — 담임은 담당 반, 학년부장은 담당 학년, 관리자는 전체. 기숙사부·일반 교사·자습 감독은 못 들어옴.
 import { supabase, requireStaff, signOutTo, describeError, showPageError } from "./supabase-client.js";
+import { getDateKey, escapeHtml, formatTime } from "./util.js";
 import { GRADES, groupStudentsByGrade } from "./adapters.js";
 
 const navLoadingHint = document.getElementById("navLoadingHint");
@@ -18,28 +19,7 @@ const bodyEl = document.getElementById("historyBody");
 const MAX_ROWS = 2000;
 const DEFAULT_DAYS = 7; // 처음에는 최근 1주일
 
-function getDateKey(date = new Date()) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
 const TODAY_KEY = getDateKey();
-
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
-
-function formatTime(ts) {
-  if (!ts) return "";
-  const d = new Date(ts);
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-}
 
 function formatDateLabel(dateKey) {
   const [y, m, d] = dateKey.split("-").map(Number);
