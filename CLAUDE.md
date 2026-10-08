@@ -16,7 +16,7 @@
 - **Hosting**: GitHub Pages(화면 파일 `public/`만) — **https://violetwizard-lim.github.io/dorm-checkin/**. main에 `public/**`가 들어오면 `pages-deploy.yml`이 자동 배포(저장소 Settings → Pages → Source = GitHub Actions). PR 미리보기 주소는 없음(확인은 E2E 테스트·캡처로)
   - 사이트가 `/dorm-checkin/` 아래에 있으므로 화면의 링크·스크립트·이미지는 모두 상대 경로(`./login.html`, `./js/...`)로 쓴다(절대 경로 `/...` 금지)
   - GitHub Pages는 파일을 최대 10분 캐시하므로 배포 직후 잠깐 예전 화면이 보일 수 있다
-  - 예전에는 Firebase Hosting(`dorm-checkin-647d6.web.app`)을 썼다(사용자 요청으로 옮김). 예전 주소로 들어오면 새 주소로 넘겨 주는 페이지(`firebase-redirect/`)를 수동 워크플로 `firebase-redirect.yml`로 한 번 올린다(경로 유지 — `/check.html` → `/dorm-checkin/check.html`). Firebase 프로젝트를 지우면 이 워크플로도 지울 것
+  - 예전에는 Firebase Hosting(`dorm-checkin-647d6.web.app`)을 썼다(사용자 요청으로 옮김). 예전 주소로 들어오면 새 주소로 넘겨 주는 페이지(경로 유지 — `/check.html` → `/dorm-checkin/check.html`)를 한 번 올려 두었다. 그 페이지와 올리던 워크플로(`firebase-redirect/`, `firebase-redirect.yml`)는 저장소에서 지웠다(필요하면 git 기록에서 찾을 것)
 - **폰트**: Noto Sans KR (Google Fonts)
 - **아이콘**: `public/img/icon.svg`(남색 둥근 사각형 + 흰 기숙사 집 + 빨간 체크 배지)와 PNG(`favicon-32`·`icon-192`·`icon-512`·`apple-touch-icon` 180·`icon-maskable-512`). 모든 화면 `<head>`에 아이콘·`manifest.webmanifest`·`theme-color`를 넣어 홈 화면에 추가하면 앱처럼 열림(PNG는 SVG를 Chromium으로 그려 만든 것 — 바꾸면 PNG도 다시 만들 것)
 - **대상 기기**: 교무실/사감실 PC(입력·현황판 화면), Android 기반 전자칠판(전체화면 PWA), 학생 휴대폰(학생 화면)
@@ -32,7 +32,7 @@
   4. 외출 문자(솔라피) + 학생 비밀번호 문자. 외출증 이메일 제거
   5. Firebase 코드 정리: `firebase-init.js`·`firebase-config.js`·`database.rules.json`·RTDB 규칙 배포 워크플로, 데이터 이전 스크립트(`scripts/migrate/`)와 그 워크플로를 지움(필요하면 git 기록에서 찾을 것)
 - Firebase에 남아 있는 것(코드와는 연결 없음)
-  - Hosting: 예전 주소(`dorm-checkin-647d6.web.app`)에 마지막 배포본이 남아 있음. 배포 워크플로·`firebase.json`·`.firebaserc`는 지움(GitHub Secrets의 `FIREBASE_SERVICE_ACCOUNT_DORM_CHECKIN_647D6`도 이제 안 씀)
+  - Hosting: 예전 주소(`dorm-checkin-647d6.web.app`)에는 새 주소로 넘겨 주는 페이지가 올라가 있음. 배포 워크플로·`firebase.json`·`.firebaserc`는 모두 지움(GitHub Secrets의 `FIREBASE_SERVICE_ACCOUNT_DORM_CHECKIN_647D6`도 이제 안 쓰니 지워도 됨)
   - RTDB: 이전 직전 데이터가 백업으로 남아 있음(마지막으로 배포한 규칙 그대로). 코드에서는 읽지도 쓰지도 않는다
   - Firebase Auth의 예전 교사 계정: 쓰이지 않음. 지금 로그인은 모두 Supabase Auth
 - 파일 위치:
@@ -47,6 +47,7 @@
     - `supabase-config.js`: 프로젝트 URL·publishable 키(공개돼도 안전한 값)·가짜 이메일 도메인
     - `supabase-client.js`: 클라이언트, `requireStaff()`(세션·프로필 확인, 비활성화 계정 로그아웃, 학생 계정은 student.html로, 2시간 자동 로그아웃 시작 — `idle-logout.js`), `requireStudent()`(교직원 계정은 check.html로), `signOutTo()`(이 기기만 로그아웃), `describeError()`, `callFunction()`, `showPageError()`
     - `live-table.js`: 테이블 하나를 "전체 조회 + Realtime 변경 알림이 오면 다시 조회"로 화면에 맞춰 둔다. 1000행씩 나눠 읽고, 구독이 다시 연결될 때·화면이 다시 보일 때 다시 조회하며, Realtime이 안 되면 15초마다 조회한다. `refresh()`는 다시 읽기가 끝나면 풀리는 Promise
+    - `util.js`: 화면 공통 도우미(`escapeHtml`·`getDateKey`·`formatTime`·`formatToday`·`isOnLeave`·`todayWeekdayIndex`·`insertTabOnKeydown`). 화면마다 같은 함수를 복사하지 말고 여기서 가져온다. 데이터 로드 오류 안내는 `supabase-client.js`의 `reportLoadError`
     - `adapters.js`: DB 행(snake_case) ↔ 화면 코드가 쓰는 예전 Firebase 모양(`studentsByGrade`, `seatMap`, `managedClasses` 등) 변환. 화면 렌더링 코드는 예전 모양을 그대로 쓴다
 - 배포
   - main에 `supabase/**`가 들어오면 `supabase-deploy.yml`이 테스트 후 `db push`와 `functions deploy --use-api`를 실행한다
@@ -62,7 +63,7 @@
 - 화면 E2E: `cd tests/e2e && npm ci && bash fetch-postgrest.sh && npx playwright test`
   - 실제 supabase-js가 가짜 게이트웨이(`harness/gateway.mjs`)를 거쳐 로컬 PostgREST + 마이그레이션이 적용된 Postgres(진짜 RLS)에 붙는다
   - Auth(로그인·토큰 갱신·관리자 API)와 Realtime(Phoenix 웹소켓, `postgres_changes`)은 하네스가 흉내내고, Edge Function(`staff-accounts`·`student-accounts`·`notify-outing`)은 Deno로 실제 코드를 띄운다
-  - 문자는 가짜 솔라피 서버(`harness/solapi.mjs`, HMAC 인증까지 확인)로 보내고 `env.sms.messages`·`env.sms.uploads`로 확인한다. `env.sms.failTo`에 번호를 넣으면 그 번호는 실패로 답함
+  - 문자는 가짜 솔라피 서버(`harness/solapi.mjs`, HMAC 인증까지 확인)로 보내고 `env.sms.messages`로 확인한다. `env.sms.failTo`에 번호를 넣으면 그 번호는 실패로 답함
   - 필요한 것: Postgres 16 서버 바이너리(`PG_BIN`), Deno(`DENO_BIN`, 기본 `deno`), Chromium(Playwright)
   - `public/js/supabase-client.js`의 supabase-js 버전과 `tests/e2e/package.json`의 버전이 다르면 테스트가 바로 실패한다(같이 올릴 것)
   - 기본 데이터는 `harness/seed.mjs`(모든 테스트 계정 비밀번호 `pass1234`). 학생 계정은 테스트마다 `env.createStudentAccount()`로 만든다
@@ -82,7 +83,7 @@
   - 교사: 영문+숫자 → 내부적으로 `${아이디(소문자)}@donghall.local`
   - 학생: 리로스쿨 ID(영문·숫자와 `. _ -`) → `${아이디(소문자)}@student.donghall.local`
 - 로그인하면 교사는 `check.html`, 학생은 `student.html`로. 틀리면 "교사/학생 탭이 맞는지도 확인해 주세요" 안내
-- 회원가입 화면 없음 — 교사 계정은 관리자가, 학생 계정은 담임 등이 학생 명단 화면에서 발급(Supabase Auth의 공개 가입은 꺼 둠)
+- 회원가입 화면 없음 — 교사 계정은 관리자가, 학생 계정은 관리자가 학생 명단 화면에서 발급(Supabase Auth의 공개 가입은 꺼 둠)
 - accounts.html에서 "삭제"된 계정은 로그인 자체가 차단(ban)되어 "삭제(비활성화)된 계정입니다" 안내가 뜸. 이미 로그인돼 있던 세션은 화면을 여는 즉시(프로필의 `disabled` 확인) 로그아웃되어 `login.html?disabled=1`로 돌아옴
 
 ### 2. 외출 체크 입력 화면 (`check.html`)
@@ -162,7 +163,7 @@
   - [계정 발급]: 리로스쿨 ID가 있고 계정이 없을 때. 6자리 숫자 비밀번호를 만들어 **학생 연락처로 문자 발송**(아이디·비밀번호·접속 주소). 문자로 보냈으면 비밀번호는 화면에 나오지 않고, 연락처가 없거나 문자가 실패했거나 솔라피 키가 없으면 아래 결과 목록에 비밀번호를 표시
   - [계정 일괄 발급 (N명)]: 지금 학년 탭(담임은 담당 반)에서 ID가 있고 계정이 없는 학생 전부
   - [비번 재발급]: 새 6자리 비밀번호(전달 방식은 발급과 같음). 예전 비밀번호는 더 이상 안 됨 — **관리자만**(사용자 요청, 다른 역할에는 버튼이 없고 함수도 거부)
-  - [계정 삭제]: 로그인 정보만 지우고 명단은 남김 — **관리자만**. 계정이 있는 학생을 명단에서 "삭제"하면 계정도 함께 지움(이건 담임·학년부장도 가능, 로그인 정보가 남지 않게 서버 함수가 처리)
+  - [계정 삭제]: 로그인 정보만 지우고 명단은 남김 — **관리자만**. 계정이 있는 학생을 명단에서 "삭제"하면 계정도 함께 지움(이것도 관리자만, 로그인 정보가 남지 않게 서버 함수가 처리)
   - 계정이 있으면 리로스쿨 ID 입력칸이 잠김(서버 트리거도 막음) — 바꾸려면 계정을 삭제하고 다시 발급
   - 결과 목록은 화면에 비밀번호가 나온 학생만 "이름[탭]학번[탭]아이디[탭]비밀번호" 줄로도 모아 엑셀에 붙여넣기 쉽게 보여줌(새로고침하면 사라짐) — 이 학생들에게는 직접 전달
   - 발급·재발급·삭제는 Edge Function `student-accounts`가 하고, 서버가 담당 범위를 다시 확인함
@@ -194,8 +195,8 @@
   - 본인 계정 행에는 버튼이 없음(관리자가 실수로 자기 자신을 강등·삭제해 잠기는 것을 방지 — 서버 RLS·함수도 본인 대상은 거부)
   - "정보 수정" 클릭 시 그 계정 행이 인라인 편집 폼으로 바뀜: 이름 입력란, 역할 토글(teacher/gradeManager/admin/studyHallSupervisor/dormStaff) → 저장 시 `profiles` 수정. 역할에서 쓰지 않는 담당 범위는 비운다. 이름은 매년 같은 아이디를 다른 담당자가 이어받는 경우(예: "1학년부장" 계정)를 대비해 언제든 바꿀 수 있게 함
   - **역할 = gradeManager**(예: "1학년부장", 한 학년 전체 담당): 담당 학년(1/2/3학년 토글)·담당 실(rooms 목록에서 토글) 노출 → `managed_grades`/`managed_rooms`에 반영. 반 단위로 더 좁힐 수 없음(학년 전체가 기본 단위)
-  - **역할 = teacher**(예: 담임교사, 반 하나만 담당): "담당 반" 섹션이 학년 구분 없이 바로 노출됨 — 1/2/3학년별로 그 학년에 실제 등록된 학생들의 `cls` 값을 모아 토글로 보여줌(학생이 없으면 "등록된 학생이 없습니다"). 하나 이상 고르면 `managed_classes`에 반영되고, 그 teacher는 `students.html`에서 고른 반만 명단 관리를 할 수 있게 됨. 아무 반도 안 고르면(기본값) 그냥 일반 teacher — 외출 체크·현황판만 쓸 수 있고 명단 관리 권한은 없음
-  - **역할 = studyHallSupervisor**(자습 감독, 예: 그날 야간자습 감독 교사): 추가 필드 없음 — 이 역할이면 `check.html`(외출/출석 체크 화면)만 접근 가능하고 다른 화면 링크는 모두 숨겨짐(check.html 참고)
+  - **역할 = teacher**(예: 담임교사, 반 하나만 담당): "담당 반" 섹션이 학년 구분 없이 바로 노출됨 — 1/2/3학년별로 그 학년에 실제 등록된 학생들의 `cls` 값을 모아 토글로 보여줌(학생이 없으면 "등록된 학생이 없습니다"). 하나 이상 고르면 `managed_classes`에 반영되고, 그 teacher는 `students.html`에서 고른 반만 명단 관리를 할 수 있게 됨. 아무 반도 안 고르면(기본값) 그냥 일반 teacher — 화면은 볼 수 있지만 외출 처리·명단 관리 권한은 없음(자리 없음 표시·해제만)
+  - **역할 = studyHallSupervisor**(자습 감독, 예: 그날 야간자습 감독 교사): 추가 필드 없음 — 체크 화면·현황판·좌석 배치판만 접근 가능. 외출 처리는 복귀 체크(확인 창)와 자리 없음 표시·해제만(check.html 참고)
   - **역할 = dormStaff**(기숙사부, 예: 명령퇴사를 입력하는 기숙사 담당 교사): 추가 필드 없음 — 체크 화면·현황판·좌석 배치판은 **보기만**(외출증 보기 가능), 학생 명단 화면에서 **명령퇴사 기간만** 입력·해제. 외출 체크·복귀·외출 취소·승인·좌석 편집·학생 정보 수정·학생 계정 관리는 못 함(사용자 요청으로 축소). `accounts.html`은 접근 시 `check.html`로 리다이렉트
   - 저장 실패 시(권한 문제 등) alert로 실패 사유를 보여주고 편집 폼을 그대로 유지 — 조용히 실패해서 관리자가 바뀐 줄 착각하는 일이 없도록 함(서버가 행을 건너뛴 경우도 실패로 처리)
   - "비밀번호 재발급"(본인 계정 행에는 없음): 새 비밀번호를 묻는 입력창 — 관리자가 정한 값(6자 이상)을 넣으면 그 값으로, 비워 두고 확인하면 자동 생성. 취소하면 바꾸지 않음. 결과는 아래 결과 목록에 표시. 예전 비밀번호로는 더 이상 로그인할 수 없음
@@ -244,7 +245,6 @@ students
   id uuid, grade smallint(1~3), name, sid(학번, 예 "10305"), cls(반, 예 "1학년 3반"),
   login_id(학생 아이디 = 리로스쿨 ID, 소문자, 계정이 있으면 못 바꿈), phone, parent_phone(숫자만), email?,
   afterschool_days bool[5](월~금), leave_from date?, leave_to date?, leave_reason?   -- 명령퇴사(둘 다 있어야 유효)
-  legacy_key(예전 RTDB 키)
 
 rooms
   id uuid, name, grades smallint[](배정 가능한 학년), rows, cols(1~50),

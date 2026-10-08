@@ -1,4 +1,5 @@
-import { supabase, requireStaff, signOutTo, describeError, showPageError } from "./supabase-client.js";
+import { supabase, requireStaff, signOutTo, describeError, reportLoadError } from "./supabase-client.js";
+import { getDateKey, isOnLeave, escapeHtml, formatToday, todayWeekdayIndex } from "./util.js";
 import { liveTable } from "./live-table.js";
 import {
   GRADES,
@@ -16,21 +17,7 @@ let currentTeacherName = "";
 let outingsLive = null;
 let roomsLive = null;
 
-// outings는 날짜별로 저장된다(check.js 참고). 좌석 배치판은 항상 "오늘"만 보여준다.
-function getDateKey(date = new Date()) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
 const TODAY_KEY = getDateKey();
-
-// "명령퇴사"(기간제 상태)는 students.html에서 설정하며 "자리 없음"보다 우선한다.
-function isOnLeave(student, dateKey) {
-  const leave = student && student.leaveOfAbsence;
-  if (!leave || !leave.from || !leave.to) return false;
-  return dateKey >= leave.from && dateKey <= leave.to;
-}
 
 const dateEl = document.getElementById("todayDate");
 const roomTabsEl = document.getElementById("roomTabs");
@@ -68,27 +55,6 @@ const state = {
   editingCellKey: null,
   actionCellKey: null, // 보기 모드에서 좌석을 눌러 출석 상태를 바꿀 때 쓰는, editingCellKey와 별개인 상태
 };
-
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
-
-function formatToday() {
-  const days = ["일", "월", "화", "수", "목", "금", "토"];
-  const now = new Date();
-  return `${now.getFullYear()}년 ${now.getMonth() + 1}월 ${now.getDate()}일 (${days[now.getDay()]})`;
-}
-
-// 월=0 ... 금=4 로 매핑, 토·일이면 null (afterschoolDays는 월~금 5칸)
-function todayWeekdayIndex() {
-  const idx = new Date().getDay() - 1;
-  return idx >= 0 && idx <= 4 ? idx : null;
-}
 
 function getStudentsById() {
   const map = {};
@@ -595,10 +561,6 @@ seatGridEl.addEventListener("change", (event) => {
   assignStudent(select.dataset.assignSelect, studentId);
   render();
 });
-
-function reportLoadError(error) {
-  showPageError(`데이터를 불러오지 못했습니다(${describeError(error)}). 잠시 후 자동으로 다시 시도합니다.`);
-}
 
 async function init() {
   const session = await requireStaff();

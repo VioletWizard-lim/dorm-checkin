@@ -1,4 +1,5 @@
-import { supabase, requireStaff, signOutTo, describeError, showPageError, callFunction } from "./supabase-client.js";
+import { supabase, requireStaff, signOutTo, describeError, callFunction, reportLoadError } from "./supabase-client.js";
+import { escapeHtml, insertTabOnKeydown } from "./util.js";
 import { liveTable } from "./live-table.js";
 import { GRADES, groupStudentsByGrade, managedClassesToRows, roomsById, userFromProfile } from "./adapters.js";
 
@@ -44,29 +45,6 @@ function getClassesInGrade(grade) {
   return Array.from(set).sort();
 }
 let bulkPreviewRows = [];
-
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
-
-// textarea 기본 동작은 Tab을 누르면 포커스가 다음 요소로 넘어가 버려서,
-// 엑셀 붙여넣기가 아니라 직접 타이핑할 때는 탭 구분자를 입력할 수 없다.
-// Tab(Shift 없이)을 가로채 실제 탭 문자를 커서 위치에 삽입한다.
-function insertTabOnKeydown(event) {
-  if (event.key !== "Tab" || event.shiftKey) return;
-  event.preventDefault();
-  const el = event.target;
-  const start = el.selectionStart;
-  const end = el.selectionEnd;
-  el.value = el.value.slice(0, start) + "\t" + el.value.slice(end);
-  el.selectionStart = el.selectionEnd = start + 1;
-  el.dispatchEvent(new Event("input", { bubbles: true }));
-}
 
 function generatePassword() {
   const values = crypto.getRandomValues(new Uint32Array(8));
@@ -571,10 +549,6 @@ async function resetAllPasswords() {
 }
 
 logoutBtn.addEventListener("click", () => signOutTo());
-
-function reportLoadError(error) {
-  showPageError(`데이터를 불러오지 못했습니다(${describeError(error)}). 잠시 후 자동으로 다시 시도합니다.`);
-}
 
 function initAccountsPage() {
   // 학생 계정(3단계에서 추가)은 이 목록에 넣지 않는다 — 교직원만.

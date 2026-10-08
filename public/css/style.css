@@ -86,17 +86,6 @@ input {
   height: 64px;
 }
 
-.login-brand__logo {
-  width: 52px;
-  height: 52px;
-  border-radius: var(--radius-logo);
-  background: var(--color-active);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
 .login-brand__title {
   font-size: 22px;
   font-weight: 800;
