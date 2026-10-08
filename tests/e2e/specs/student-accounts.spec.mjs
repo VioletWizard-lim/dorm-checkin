@@ -13,7 +13,7 @@ async function studentAccount(env, studentId) {
 }
 
 test.describe("학생 계정 관리(학생 명단 화면)", () => {
-  test("계정 발급 → 화면에 뜬 비밀번호로 학생이 로그인 → 비번 재발급 → 계정 삭제", async ({ env, openAs, openOtherAs, page }) => {
+  test("계정 발급(비밀번호는 학생에게 문자로) → 학생 로그인 → 비번 재발급(문자 실패면 화면에) → 계정 삭제", async ({ env, openAs, openOtherAs, page }) => {
     answerDialogs(page, [true, true]);
     await openAs("homeroom01", "/students.html");
     await expect(rosterCard(page, "홍길동").locator(".account-chip")).toHaveText("계정 없음");
@@ -26,16 +26,27 @@ test.describe("학생 계정 관리(학생 명단 화면)", () => {
     await rosterCard(page, "홍길동").getByRole("button", { name: "계정 발급" }).click();
     const result = page.locator("#accountResultList .student-card").first();
     await expect(result).toContainText("발급됨");
-    const pin = /비밀번호: (\d{6})/.exec(await result.textContent())[1];
-    await expect(page.locator("#accountResultCopy")).toHaveValue(`홍길동\t10305\thong123\t${pin}`);
+    // 학생 연락처가 있으므로 비밀번호는 문자로만 가고 화면에는 나오지 않는다
+    await expect(result).toContainText("비밀번호를 학생에게 문자로 보냈습니다");
+    await expect(page.locator("#accountResultCopy")).toHaveValue("");
+    expect(env.sms.messages).toHaveLength(1);
+    expect(env.sms.messages[0]).toMatchObject({ to: "01011112222", from: "0212345678" });
+    expect(env.sms.messages[0].text).toContain("아이디: hong123");
+    expect(env.sms.messages[0].text).toContain("접속: http://dorm.test/login.html");
+    const pin = /비밀번호: (\d{6})/.exec(env.sms.messages[0].text)[1];
     await expect(rosterCard(page, "홍길동").locator(".account-chip")).toHaveText("계정 있음");
     expect(await studentAccount(env, STUDENT.hong)).toMatchObject({ kind: "student", role: "student", login_id: "hong123" });
 
     expect(await tryLogin(openOtherAs, "Hong123", pin, { student: true })).toBe("ok");
 
+    // 문자가 실패하면 비밀번호를 화면에 보여 준다
+    env.sms.failTo.add("01011112222");
     await rosterCard(page, "홍길동").getByRole("button", { name: "비번 재발급" }).click();
-    await expect(page.locator("#accountResultList .student-card").first()).toContainText("재발급됨");
-    const newPin = /비밀번호: (\d{6})/.exec(await page.locator("#accountResultList .student-card").first().textContent())[1];
+    const reset = page.locator("#accountResultList .student-card").first();
+    await expect(reset).toContainText("재발급됨");
+    await expect(reset).toContainText("문자 실패(수신번호 오류)");
+    const newPin = /비밀번호: (\d{6})/.exec(await reset.textContent())[1];
+    await expect(page.locator("#accountResultCopy")).toHaveValue(`홍길동\t10305\thong123\t${newPin}`);
     expect(await tryLogin(openOtherAs, "hong123", pin, { student: true })).toBe(WRONG_LOGIN);
     expect(await tryLogin(openOtherAs, "hong123", newPin, { student: true })).toBe("ok");
 
@@ -53,11 +64,12 @@ test.describe("학생 계정 관리(학생 명단 화면)", () => {
     await expect(page.locator("#bulkIssueBtn")).toHaveText("계정 일괄 발급 (2명)"); // 1학년: 홍길동·김민준(최하늘은 ID 없음)
     await page.click("#bulkIssueBtn");
     await expect(page.locator("#accountResultList .student-card")).toHaveCount(2);
+    // 연락처가 있는 홍길동은 문자로 받고, 연락처가 없는 김민준만 비밀번호가 화면(엑셀 붙여넣기용)에 나온다
     const lines = (await page.locator("#accountResultCopy").inputValue()).split("\n");
-    expect(lines.map((l) => l.split("\t").slice(0, 3))).toEqual([
-      ["김민준", "10101", "minjun.kim"],
-      ["홍길동", "10305", "hong123"],
-    ]);
+    expect(lines.map((l) => l.split("\t").slice(0, 3))).toEqual([["김민준", "10101", "minjun.kim"]]);
+    await expect(page.locator("#accountResultList .student-card", { hasText: "김민준" })).toContainText("학생 연락처 없음 — 비밀번호:");
+    await expect(page.locator("#accountResultList .student-card", { hasText: "홍길동" })).toContainText("문자로 보냈습니다");
+    expect(env.sms.messages.map((m) => m.to)).toEqual(["01011112222"]);
     await expect(page.locator("#bulkIssueBtn")).toHaveText("계정 일괄 발급 (0명)");
     await page.click("#gradeTabs >> text=2학년");
     await expect(page.locator("#bulkIssueBtn")).toHaveText("계정 일괄 발급 (1명)");

@@ -1,17 +1,30 @@
 // 학생 계정 관리 — 그 학생의 명단을 관리할 수 있는 교직원만(관리자·기숙사부 전체, 학년부장 담당 학년, 담임 담당 반).
-//   issue          : 계정 발급(여러 명). 아이디 = 학생 명단의 ID, 초기 비밀번호 = 6자리 숫자(응답으로 한 번만 돌려줌)
-//   reset-password : 새 6자리 비밀번호 발급(응답으로 한 번만 돌려줌)
+//   issue          : 계정 발급(여러 명). 아이디 = 학생 명단의 ID, 초기 비밀번호 = 6자리 숫자
+//   reset-password : 새 6자리 비밀번호 발급
+//   발급·재발급한 비밀번호는 문자(솔라피)가 설정돼 있고 학생 연락처가 있으면 학생에게 문자로 보내고,
+//   문자로 보내지 못한 경우에만 응답으로 한 번 돌려준다(화면에 띄워 직접 전달).
 //   delete         : 계정 삭제(로그인 정보 + 프로필). withStudent가 true면 학생 명단에서도 지운다
 // 외부 호출(Auth Admin API, 테이블)은 deps로 받아서 테스트에서 가짜로 바꿀 수 있게 한다.
 
 import { HttpError } from "../_shared/http.ts";
 import { normalizeStudentId, studentEmail } from "../_shared/accounts.ts";
 import { canManageStudent } from "../_shared/scope.ts";
+import type { SmsMessage, SmsSender } from "../_shared/solapi.ts";
 import type { AuthLikeError, Profile } from "../_shared/types.ts";
 
 const MAX_ACCOUNTS_PER_REQUEST = 200;
 
-export type StudentRow = { id: string; grade: number; cls: string; name: string; login_id: string | null };
+export type StudentRow = {
+  id: string;
+  grade: number;
+  cls: string;
+  name: string;
+  login_id: string | null;
+  phone: string | null;
+};
+
+// 비밀번호 전달 방법: sent = 학생에게 문자로 보냄, failed = 문자 실패, no-phone = 학생 연락처 없음, off = 문자 미설정
+export type SmsStatus = "sent" | "failed" | "no-phone" | "off";
 
 export type StudentAccountsDeps = {
   caller: Profile;
@@ -34,10 +47,12 @@ export type StudentAccountsDeps = {
     insert(row: Record<string, unknown>): Promise<{ error: { message: string } | null }>;
   };
   generatePin(): string;
+  sms: SmsSender | null;
+  appUrl: string | null; // 문자에 넣을 접속 주소(호출한 화면의 주소)
 };
 
 export type IssueResult =
-  | { studentId: string; ok: true; loginId: string; password: string }
+  | { studentId: string; ok: true; loginId: string; password?: string; sms: SmsStatus; smsError?: string }
   | { studentId: string; ok: false; error: string };
 
 export async function handleStudentAccounts(body: Record<string, unknown>, deps: StudentAccountsDeps): Promise<unknown> {
@@ -75,6 +90,7 @@ async function issueAccounts(raw: unknown, deps: StudentAccountsDeps): Promise<I
   const existing = new Set((await deps.profiles.findByStudentIds(ids)).map((p) => p.student_id));
 
   const results: IssueResult[] = [];
+  const issued: Issued[] = [];
   for (const studentId of ids) {
     const student = students.get(studentId);
     if (!student) {
@@ -119,9 +135,53 @@ async function issueAccounts(raw: unknown, deps: StudentAccountsDeps): Promise<I
       results.push({ studentId, ok: false, error: "계정 정보를 저장하지 못했습니다." });
       continue;
     }
-    results.push({ studentId, ok: true, loginId, password });
+    results.push({ studentId, ok: true, loginId, password, sms: "off" }); // sms는 아래에서 채움
+    issued.push({ student, loginId, password });
   }
-  return results;
+  const delivery = await sendPasswords(issued, deps);
+  return results.map((r) => (r.ok ? withDelivery(r, delivery.get(r.studentId)) : r));
+}
+
+type Issued = { student: StudentRow; loginId: string; password: string };
+type Delivery = { sms: SmsStatus; smsError?: string };
+
+export function passwordText(issued: Issued, appUrl: string | null): string {
+  return [
+    `[기숙사 외출체크] ${issued.student.name} 학생 계정`,
+    `아이디: ${issued.loginId}`,
+    `비밀번호: ${issued.password}`,
+    ...(appUrl ? [`접속: ${appUrl}`] : []),
+    "로그인 화면에서 '학생' 탭을 골라 주세요.",
+  ].join("\n");
+}
+
+// 학생 연락처로 비밀번호 문자를 한 번에 보낸다. 학생 id → 결과
+async function sendPasswords(issued: Issued[], deps: StudentAccountsDeps): Promise<Map<string, Delivery>> {
+  const delivery = new Map<string, Delivery>();
+  const messages: SmsMessage[] = [];
+  for (const item of issued) {
+    if (!deps.sms) delivery.set(item.student.id, { sms: "off" });
+    else if (!item.student.phone) delivery.set(item.student.id, { sms: "no-phone" });
+    else messages.push({ key: item.student.id, to: item.student.phone, text: passwordText(item, deps.appUrl) });
+  }
+  if (deps.sms && messages.length > 0) {
+    const results = await deps.sms.send(messages);
+    for (const m of messages) {
+      const r = results.get(m.key);
+      delivery.set(m.key, r?.ok ? { sms: "sent" } : { sms: "failed", smsError: (r && !r.ok && r.error) || "발송 실패" });
+    }
+  }
+  return delivery;
+}
+
+// 문자로 보냈으면 비밀번호는 응답에서 뺀다(화면에 남지 않게).
+function withDelivery<T extends { password?: string }>(result: T, delivery: Delivery | undefined): T & Delivery {
+  const d = delivery ?? { sms: "off" as const };
+  if (d.sms === "sent") {
+    const { password: _omit, ...rest } = result;
+    return { ...(rest as T), ...d };
+  }
+  return { ...result, ...d };
 }
 
 // 대상 학생과 그 학생의 계정을 찾고 권한을 확인한다.
@@ -135,13 +195,17 @@ async function loadTarget(rawStudentId: unknown, deps: StudentAccountsDeps): Pro
   return { student, account: account ?? null };
 }
 
-async function resetPassword(rawStudentId: unknown, deps: StudentAccountsDeps): Promise<{ loginId: string; password: string }> {
-  const { account } = await loadTarget(rawStudentId, deps);
+async function resetPassword(
+  rawStudentId: unknown,
+  deps: StudentAccountsDeps,
+): Promise<{ loginId: string; password?: string } & Delivery> {
+  const { student, account } = await loadTarget(rawStudentId, deps);
   if (!account) throw new HttpError(404, "계정이 아직 발급되지 않았습니다.");
   const password = deps.generatePin();
   const { error } = await deps.auth.updateUserById(account.id, { password });
   if (error) throw new Error(`password reset failed: ${error.message}`);
-  return { loginId: account.login_id, password };
+  const delivery = await sendPasswords([{ student, loginId: account.login_id, password }], deps);
+  return withDelivery({ loginId: account.login_id, password }, delivery.get(student.id));
 }
 
 async function deleteAccount(rawStudentId: unknown, withStudent: boolean, deps: StudentAccountsDeps): Promise<void> {

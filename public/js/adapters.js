@@ -71,7 +71,8 @@ export function roomsById(rows) {
   return rooms;
 }
 
-// { [studentId]: { status, since(ms), reason, startTime, expectedReturn } }
+// { [studentId]: { status, since(ms), reason, startTime, expectedReturn, checkedByName, notice } }
+// notice = 외출 문자 결과(notify-outing이 기록): { status: "sending" | "not-configured" | "done", student, parent }
 // startTime = 학생이 신청한 외출 시각("19:00", 승인한 외출만). 교사가 직접 체크한 외출은 ""(since를 씀)
 export function outingsByStudent(rows) {
   const outings = {};
@@ -82,6 +83,8 @@ export function outingsByStudent(rows) {
       reason: row.reason || "",
       startTime: row.start_time || "",
       expectedReturn: row.expected_return || "",
+      checkedByName: row.checked_by_name || "",
+      notice: row.notice && typeof row.notice === "object" ? row.notice : null,
     };
   }
   return outings;

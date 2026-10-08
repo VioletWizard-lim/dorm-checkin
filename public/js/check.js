@@ -1,4 +1,4 @@
-import { supabase, requireStaff, signOutTo, describeError, showPageError } from "./supabase-client.js";
+import { supabase, requireStaff, signOutTo, describeError, showPageError, callFunction } from "./supabase-client.js";
 import { liveTable } from "./live-table.js";
 import {
   GRADES,
@@ -8,15 +8,7 @@ import {
   isScheduledOuting,
   createStartTimeTicker,
 } from "./adapters.js";
-import {
-  EMAILJS_PUBLIC_KEY,
-  EMAILJS_SERVICE_ID,
-  EMAILJS_OUTING_TEMPLATE_ID,
-} from "./emailjs-config.js";
-
-if (window.emailjs) {
-  window.emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY });
-}
+import { renderOutingPassJpeg } from "./outing-pass.js";
 
 let currentTeacherId = "";
 let currentTeacherName = "";
@@ -99,6 +91,25 @@ function formatTime(ts) {
 function formatDate(ts) {
   const d = new Date(ts);
   return `${d.getMonth() + 1}월 ${d.getDate()}일`;
+}
+
+// 외출 문자 결과 한 줄(notify-outing이 outings.notice에 기록). 표시할 게 없으면 ""
+const NOTICE_TARGET_LABEL = { sent: "✓", failed: "실패", "no-phone": "번호 없음" };
+function describeNotice(notice) {
+  if (!notice) return { text: "", failed: false, title: "" };
+  if (notice.status === "sending") return { text: "문자 보내는 중", failed: false, title: "" };
+  if (notice.status === "not-configured") return { text: "문자 설정 전", failed: false, title: "" };
+  const student = (notice.student && notice.student.result) || "no-phone";
+  const parent = (notice.parent && notice.parent.result) || "no-phone";
+  const errors = [
+    notice.student && notice.student.error ? `학생: ${notice.student.error}` : "",
+    notice.parent && notice.parent.error ? `학부모: ${notice.parent.error}` : "",
+  ].filter(Boolean);
+  return {
+    text: `문자 학생 ${NOTICE_TARGET_LABEL[student] || "-"} · 학부모 ${NOTICE_TARGET_LABEL[parent] || "-"}`,
+    failed: student === "failed" || parent === "failed",
+    title: errors.join("\n"),
+  };
 }
 
 // 학번 마지막 2자리 = 번호 (예: "10305" -> 5번)
@@ -206,6 +217,7 @@ function renderList(filtered) {
         const timeText = (isOut && outing && outing.startTime) || formatTime(outing && outing.since);
         sinceText = `${timeText} ${meta.badge}${reasonText}${returnText}`;
       }
+      const notice = isOut && state.selectedDate === TODAY_KEY ? describeNotice(outing && outing.notice) : null;
       const initial = (s.name || "?").charAt(0);
       const hasPendingRequest =
         state.selectedDate === TODAY_KEY && state.pendingRequests.some((r) => r.student_id === s.id);
@@ -233,6 +245,11 @@ function renderList(filtered) {
           <div class="student-info">
             <div class="student-name">${escapeHtml(s.name || "이름 없음")}${hasPendingRequest ? ` <span class="pending-chip">외출 신청 대기</span>` : ""}</div>
             <div class="student-meta">학번 ${escapeHtml(s.sid || "-")} · ${escapeHtml(s.cls || "-")}</div>
+            ${
+              notice && notice.text
+                ? `<div class="notice-text${notice.failed ? " notice-text--failed" : ""}" title="${escapeHtml(notice.title)}">${escapeHtml(notice.text)}</div>`
+                : ""
+            }
           </div>
           <div class="student-status">
             <div class="status-badge ${meta.badgeClass}">${meta.badge}</div>
@@ -327,9 +344,8 @@ async function approveRequest(requestId, btn) {
     requestsLive ? requestsLive.refresh() : null,
     outingsLive && state.selectedDate === TODAY_KEY ? outingsLive.refresh() : null,
   ]);
-  // 승인 = 외출 시작이므로 "외출 체크"와 같이 외출증 이메일을 보낸다(4단계에서 문자로 바뀜).
-  const student = findStudent(request.student_id);
-  if (student) sendOutingEmail(student, request.reason, request.expected_return, request.start_time);
+  // 승인 = 외출 시작이므로 "외출 체크"와 같이 학생·학부모에게 문자를 보낸다.
+  sendOutingNotice(request.student_id);
 }
 
 async function rejectRequest(requestId, btn) {
@@ -354,23 +370,37 @@ requestListEl.addEventListener("click", (event) => {
   if (rejectBtn) rejectRequest(rejectBtn.dataset.rejectRequest, rejectBtn);
 });
 
-function sendOutingEmail(student, reason, expectedReturn, startTime) {
-  if (!student.email || !window.emailjs) return;
-  const now = Date.now();
-  window.emailjs
-    .send(EMAILJS_SERVICE_ID, EMAILJS_OUTING_TEMPLATE_ID, {
-      to_email: student.email,
-      student_name: student.name || "",
-      sid: student.sid || "",
-      cls: student.cls || "",
-      seat_no: deriveSeatNoFromSid(student.sid),
-      reason: reason || "사유 미기재",
-      out_date: formatDate(now),
-      out_time: startTime || formatTime(now),
-      return_time: expectedReturn || "미정",
-      teacher_id: currentTeacherName || currentTeacherId || "관리자",
-    })
-    .catch((err) => console.error("외출증 이메일 발송 실패:", err));
+// 오늘 외출이 시작되면(외출 체크·신청 승인) 학생에게 외출증 문자(MMS), 학부모에게 안내 문자를 보낸다.
+// 실제 발송과 중복 방지는 서버(notify-outing)가 하고, 결과는 outings.notice로 카드에 실시간 표시된다.
+// 외출증 이미지는 여기서 만들어 함께 보낸다(못 만들면 서버가 장문 문자로 보냄).
+async function sendOutingNotice(studentId) {
+  const student = findStudent(studentId);
+  const outing = state.outings[studentId];
+  let image = null;
+  if (student && outing && outing.status === "out") {
+    try {
+      image = await renderOutingPassJpeg({
+        name: student.name || "",
+        cls: student.cls || "",
+        number: deriveSeatNoFromSid(student.sid),
+        sid: student.sid || "",
+        dateLabel: formatDate(Date.now()),
+        start: outing.startTime || formatTime(outing.since),
+        back: outing.expectedReturn || "미정",
+        reason: outing.reason,
+        teacher: outing.checkedByName || currentTeacherName || currentTeacherId,
+      });
+    } catch (err) {
+      console.warn("외출증 이미지를 만들지 못했습니다:", err);
+    }
+  }
+  try {
+    await callFunction("notify-outing", { date: TODAY_KEY, studentId, ...(image ? { image } : {}) });
+  } catch (err) {
+    console.warn("외출 문자 요청 실패:", err);
+    showPageError(`외출 문자를 보내지 못했습니다(${err.message}).`);
+  }
+  if (outingsLive && state.selectedDate === TODAY_KEY) await outingsLive.refresh();
 }
 
 // 외출 상태 저장. 시각(since)과 담당 교사는 서버 트리거가 채운다.
@@ -394,11 +424,8 @@ async function toggleOuting(studentId, grade, currentStatus, reason, expectedRet
   const dateWhenClicked = state.selectedDate;
   const saved = await saveOuting(studentId, nextStatus, reason, expectedReturn);
 
-  // 지난 날짜 기록을 고치는 중이면(오늘이 아니면) 외출증 이메일을 보내지 않는다 — 실시간 외출이 아니라 사후 정정이기 때문.
-  if (saved && nextStatus === "out" && dateWhenClicked === TODAY_KEY) {
-    const student = (state.studentsByGrade[grade] || {})[studentId];
-    if (student) sendOutingEmail(student, reason, expectedReturn);
-  }
+  // 지난 날짜 기록을 고치는 중이면(오늘이 아니면) 문자를 보내지 않는다 — 실시간 외출이 아니라 사후 정정이기 때문.
+  if (saved && nextStatus === "out" && dateWhenClicked === TODAY_KEY) sendOutingNotice(studentId);
 }
 
 function restoreToIn(studentId) {

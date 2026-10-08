@@ -10,6 +10,7 @@ import { build } from "esbuild";
 import { startPostgres } from "./postgres.mjs";
 import { AuthStore, createGateway, JWT_SECRET, SECRET_KEY } from "./gateway.mjs";
 import { RealtimeHub } from "./realtime.mjs";
+import { FakeSolapi, SOLAPI_TEST_ENV } from "./solapi.mjs";
 import { PASSWORD, SEED_SQL, STAFF } from "./seed.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -33,18 +34,6 @@ const CONTENT_TYPES = {
   ".png": "image/png",
   ".svg": "image/svg+xml",
 };
-
-// 외출증 이메일(EmailJS) 대신: 보낸 내용을 window.__emailjsSends에 쌓는다.
-const EMAILJS_MOCK = `
-window.__emailjsSends = [];
-window.emailjs = {
-  init() {},
-  send(serviceId, templateId, params) {
-    window.__emailjsSends.push({ serviceId, templateId, params });
-    return Promise.resolve({ status: 200, text: "OK" });
-  },
-};
-`;
 
 function freePort() {
   return new Promise((resolvePort, reject) => {
@@ -124,8 +113,8 @@ export async function startEnv() {
     throw new Error(`PostgREST 실행 파일이 없습니다(${postgrestBin}). bash tests/e2e/fetch-postgrest.sh를 먼저 실행하세요.`);
   }
   const denoBin = process.env.DENO_BIN || "deno";
-  const [pgPort, restPort, gatewayPort] = await Promise.all([freePort(), freePort(), freePort()]);
-  const FUNCTION_NAMES = ["staff-accounts", "student-accounts"];
+  const [pgPort, restPort, gatewayPort, solapiPort] = await Promise.all([freePort(), freePort(), freePort(), freePort()]);
+  const FUNCTION_NAMES = ["staff-accounts", "student-accounts", "notify-outing"];
   const functionPorts = Object.fromEntries(await Promise.all(FUNCTION_NAMES.map(async (name) => [name, await freePort()])));
 
   const stops = [];
@@ -164,6 +153,11 @@ export async function startEnv() {
     const gatewayUrl = await gateway.listen(gatewayPort);
     stops.push(() => gateway.close());
 
+    // 문자는 가짜 솔라피 서버로 보낸다
+    const sms = new FakeSolapi();
+    const solapiUrl = await sms.listen(solapiPort);
+    stops.push(() => sms.close());
+
     for (const name of FUNCTION_NAMES) {
       const fn = startProcess(
         denoBin,
@@ -182,6 +176,8 @@ export async function startEnv() {
             DENO_SERVE_ADDRESS: `tcp:127.0.0.1:${functionPorts[name]}`,
             SUPABASE_URL: gatewayUrl,
             SUPABASE_SECRET_KEYS: JSON.stringify({ default: SECRET_KEY }),
+            ...SOLAPI_TEST_ENV,
+            SOLAPI_BASE_URL: solapiUrl,
           },
         },
         name
@@ -205,11 +201,13 @@ export async function startEnv() {
       gateway,
       realtime,
       functionUrls,
+      sms,
       stop: stopAll,
 
       // 기본 데이터로 되돌린다(계정·학생·실·외출 기록 전부).
       async reset() {
         realtime.setPaused(false);
+        sms.reset();
         await db.pool.query(`
           delete from public.outings;
           delete from public.outing_requests;
@@ -263,9 +261,6 @@ export async function startEnv() {
         );
         await context.route(/^https:\/\/cdn\.jsdelivr\.net\/npm\/@supabase\/supabase-js@[^/]+\/\+esm$/, (route) =>
           route.fulfill({ status: 200, contentType: "text/javascript", body: bundle })
-        );
-        await context.route("https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js", (route) =>
-          route.fulfill({ status: 200, contentType: "text/javascript", body: EMAILJS_MOCK })
         );
         await context.route(`${SUPABASE_URL}/**`, async (route) => {
           const request = route.request();
