@@ -1682,3 +1682,11 @@ input {
   max-width: 100%;
   margin: 0 auto;
 }
+
+/* 기숙사부의 [명령퇴사 설정] 폼 제목(학생 정보 칸 대신) */
+.leave-only-title {
+  margin-bottom: 12px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text);
+}

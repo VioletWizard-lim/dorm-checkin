@@ -43,6 +43,9 @@
   <div class="roster-form-wrap" id="formWrap" hidden>
     <form class="roster-form" id="studentForm">
       <input type="hidden" id="editingId" value="">
+      <!-- 기숙사부의 [명령퇴사 설정]: 학생 정보 칸은 숨기고 이 제목과 명령퇴사 칸만 보인다 -->
+      <div class="leave-only-title" id="leaveOnlyTitle" hidden></div>
+      <div id="studentInfoFields">
       <div class="roster-form__row">
         <div class="field">
           <label for="inputName">이름</label>
@@ -81,6 +84,7 @@
       <div class="field">
         <label>방과후 요일</label>
         <div class="day-toggle-row" id="dayToggleRow"></div>
+      </div>
       </div>
       <div class="roster-form__row">
         <div class="field">

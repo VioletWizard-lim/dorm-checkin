@@ -129,7 +129,7 @@
 
 ### 5. 학생 명단 관리·학생 계정 (`students.html`)
 - admin·gradeManager·dormStaff는 항상 접근 가능. teacher는 담임(담당 반, `managed_classes`)이 배정되어 있을 때만 접근 가능 — 아무 반도 배정 안 된 일반 teacher는 접근 시 `check.html`로 리다이렉트
-- **기숙사부(dormStaff)는 명령퇴사 기간만**: 1/2/3학년 전체 명단을 보지만, 카드 버튼은 [명령퇴사 설정] 하나뿐(폼에서 명령퇴사 칸 말고는 잠김). 학생 추가·여러 명 추가·삭제·다른 정보 수정·학생 계정 발급/재발급/삭제 불가 — 서버도 막음(`students_update` 정책 + 트리거 `private.students_leave_only`가 명령퇴사 칸 말고 다른 칸이 바뀌면 거부, `student-accounts`의 `canManageStudent`에서 제외)
+- **기숙사부(dormStaff)는 명령퇴사 기간만**: 1/2/3학년 전체 명단을 보지만, 카드 버튼은 [명령퇴사 설정] 하나뿐이고 계정 상태 표시도 없음. 폼에는 "이름 (학번) 명령퇴사 기간" 제목과 명령퇴사 칸만 보임(ID·연락처·이메일·방과후 칸은 숨김, 사용자 요청). 학생 추가·여러 명 추가·삭제·다른 정보 수정·학생 계정 발급/재발급/삭제 불가 — 서버도 막음(`students_update` 정책 + 트리거 `private.students_leave_only`가 명령퇴사 칸 말고 다른 칸이 바뀌면 거부, `student-accounts`의 `canManageStudent`에서 제외)
 - 학년 탭: admin·dormStaff는 1/2/3학년 전체, gradeManager는 자기 `managed_grades`에 속한 학년 전체(반 구분 없음), teacher는 자기 담당 반이 있는 학년만(그 학년 탭 안에서도 담당 반 학생만 보임)
 - teacher가 담당 반이 정확히 하나면 "+ 학생 추가" 폼의 반 입력란이 자동으로 채워짐. 담당 반이 아닌 값으로 저장하려 하면 alert로 막음. 서버(RLS)도 반 단위까지 막는다(화면을 우회해도 다른 반 학생은 추가·수정·삭제 불가). gradeManager·admin은 이 제한이 없음(학년 전체 대상)
 - "+ 학생 추가" → 이름/학번/반/리로스쿨 ID/학생 연락처/학부모 연락처/이메일/방과후 요일(월~금 토글) 입력 폼 → `students`에 저장
