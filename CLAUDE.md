@@ -16,7 +16,7 @@
 - **Hosting**: GitHub Pages(화면 파일 `public/`만) — **https://violetwizard-lim.github.io/dorm-checkin/**. main에 `public/**`가 들어오면 `pages-deploy.yml`이 자동 배포(저장소 Settings → Pages → Source = GitHub Actions). PR 미리보기 주소는 없음(확인은 E2E 테스트·캡처로)
   - 사이트가 `/dorm-checkin/` 아래에 있으므로 화면의 링크·스크립트·이미지는 모두 상대 경로(`./login.html`, `./js/...`)로 쓴다(절대 경로 `/...` 금지)
   - GitHub Pages는 파일을 최대 10분 캐시하므로 배포 직후 잠깐 예전 화면이 보일 수 있다
-  - 예전에는 Firebase Hosting(`dorm-checkin-647d6.web.app`)을 썼다(사용자 요청으로 옮김). 예전 주소로 들어오면 새 주소로 넘겨 주는 페이지(`firebase-redirect/`)를 수동 워크플로 `firebase-redirect.yml`로 한 번 올린다(경로 유지 — `/check.html` → `/dorm-checkin/check.html`). Firebase 프로젝트를 지우면 이 워크플로도 지울 것
+  - 예전에는 Firebase Hosting(`dorm-checkin-647d6.web.app`)을 썼다(사용자 요청으로 옮김). 예전 주소로 들어오면 새 주소로 넘겨 주는 페이지(경로 유지 — `/check.html` → `/dorm-checkin/check.html`)를 한 번 올려 두었다. 그 페이지와 올리던 워크플로(`firebase-redirect/`, `firebase-redirect.yml`)는 저장소에서 지웠다(필요하면 git 기록에서 찾을 것)
 - **폰트**: Noto Sans KR (Google Fonts)
 - **아이콘**: `public/img/icon.svg`(남색 둥근 사각형 + 흰 기숙사 집 + 빨간 체크 배지)와 PNG(`favicon-32`·`icon-192`·`icon-512`·`apple-touch-icon` 180·`icon-maskable-512`). 모든 화면 `<head>`에 아이콘·`manifest.webmanifest`·`theme-color`를 넣어 홈 화면에 추가하면 앱처럼 열림(PNG는 SVG를 Chromium으로 그려 만든 것 — 바꾸면 PNG도 다시 만들 것)
 - **대상 기기**: 교무실/사감실 PC(입력·현황판 화면), Android 기반 전자칠판(전체화면 PWA), 학생 휴대폰(학생 화면)
@@ -32,7 +32,7 @@
   4. 외출 문자(솔라피) + 학생 비밀번호 문자. 외출증 이메일 제거
   5. Firebase 코드 정리: `firebase-init.js`·`firebase-config.js`·`database.rules.json`·RTDB 규칙 배포 워크플로, 데이터 이전 스크립트(`scripts/migrate/`)와 그 워크플로를 지움(필요하면 git 기록에서 찾을 것)
 - Firebase에 남아 있는 것(코드와는 연결 없음)
-  - Hosting: 예전 주소(`dorm-checkin-647d6.web.app`)에 마지막 배포본이 남아 있음. 배포 워크플로·`firebase.json`·`.firebaserc`는 지움(GitHub Secrets의 `FIREBASE_SERVICE_ACCOUNT_DORM_CHECKIN_647D6`도 이제 안 씀)
+  - Hosting: 예전 주소(`dorm-checkin-647d6.web.app`)에는 새 주소로 넘겨 주는 페이지가 올라가 있음. 배포 워크플로·`firebase.json`·`.firebaserc`는 모두 지움(GitHub Secrets의 `FIREBASE_SERVICE_ACCOUNT_DORM_CHECKIN_647D6`도 이제 안 쓰니 지워도 됨)
   - RTDB: 이전 직전 데이터가 백업으로 남아 있음(마지막으로 배포한 규칙 그대로). 코드에서는 읽지도 쓰지도 않는다
   - Firebase Auth의 예전 교사 계정: 쓰이지 않음. 지금 로그인은 모두 Supabase Auth
 - 파일 위치:
@@ -245,7 +245,6 @@ students
   id uuid, grade smallint(1~3), name, sid(학번, 예 "10305"), cls(반, 예 "1학년 3반"),
   login_id(학생 아이디 = 리로스쿨 ID, 소문자, 계정이 있으면 못 바꿈), phone, parent_phone(숫자만), email?,
   afterschool_days bool[5](월~금), leave_from date?, leave_to date?, leave_reason?   -- 명령퇴사(둘 다 있어야 유효)
-  legacy_key(예전 RTDB 키)
 
 rooms
   id uuid, name, grades smallint[](배정 가능한 학년), rows, cols(1~50),
