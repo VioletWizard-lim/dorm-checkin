@@ -15,23 +15,20 @@
 - **폰트**: Noto Sans KR (Google Fonts)
 - **대상 기기**: 교무실/사감실 PC(입력·현황판 화면), Android 기반 전자칠판(전체화면 PWA), 학생 휴대폰(학생 화면)
 
-## Supabase 이전 (진행 중)
-백엔드를 Firebase(RTDB·Auth)에서 Supabase로 옮기는 중이다. **2단계부터 화면은 Supabase만 쓴다.** 이 문서의 화면·데이터 모델·보안 규칙 설명은 Supabase 기준이다. Firebase RTDB에는 이전 직전 데이터가 백업처럼 남아 있고, 5단계에서 Firebase 코드·규칙을 정리한다.
-- 이전 이유: 학생 계정(아이디 = 리로스쿨 ID), 외출 신청·승인, 외출증 문자(솔라피)를 넣기 위해서
+## Supabase 이전 (완료)
+백엔드를 Firebase(RTDB·Auth)에서 Supabase로 옮겼다. 이 문서의 화면·데이터 모델·보안 규칙 설명은 Supabase 기준이다. **Firebase는 이제 화면 파일 호스팅(Firebase Hosting)에만 쓴다.**
+- 이전 이유: 학생 계정(아이디 = 리로스쿨 ID), 외출 신청·승인, 외출 문자(솔라피)를 넣기 위해서
   - Supabase는 기존 유료 조직에 새 프로젝트(서울 리전)로 둔다
-  - 화면 파일은 계속 Firebase Hosting에서 서비스한다
-- 단계(PR 단위):
-  1. Supabase 기반(스키마·RLS·RPC, 교사 계정 Edge Function, 배포·이전 워크플로) ← 완료
-  2. 화면을 Supabase로 전환(기능은 동일, 교사 비밀번호 재발급, 화면 E2E 테스트) ← 완료(전환까지 끝남)
-  3. 학생 계정 + 신청/승인 ← 완료. 학생 비밀번호는 화면에 띄워 전달(문자 발송은 4단계)
-  4. 외출증 문자(솔라피) + 학생 비밀번호 문자. 외출증 이메일 제거 ← 코드 완료. 솔라피 키를 Edge Function 시크릿에 넣으면 문자가 나감(아래 "외부 서비스 연동")
-  5. Firebase 코드 정리(`firebase-init.js`·`firebase-config.js`·`database.rules.json`·규칙 배포 워크플로)
-- 전환 절차(2단계 PR을 머지할 때 한 번)
-  1. GitHub Secrets에 `SUPABASE_SECRET_KEY` 등록 → Actions의 "Migrate Firebase → Supabase (manual)"을 `MIGRATE`로 실행
-  2. Supabase SQL 편집기에서 관리자 비밀번호 설정: `update auth.users set encrypted_password = extensions.crypt('새 비밀번호', extensions.gen_salt('bf')) where email = '관리자아이디@donghall.local';`
-  3. PR 미리보기 URL에서 관리자로 로그인해 데이터 확인
-  4. 머지 직전에 이전 워크플로를 한 번 더 실행(그 사이 Firebase에 입력된 내용 반영) → 머지
-  5. 관리자가 계정 관리의 "비밀번호 일괄 재발급"으로 교사 비밀번호를 새로 나눠 줌. 열려 있던 화면(전자칠판 등)은 새로고침
+- 단계(PR 단위, 모두 완료):
+  1. Supabase 기반(스키마·RLS·RPC, 교사 계정 Edge Function, 배포·이전 워크플로)
+  2. 화면을 Supabase로 전환(기능은 동일, 교사 비밀번호 재발급, 화면 E2E 테스트) — 데이터 이전 후 머지로 전환
+  3. 학생 계정 + 신청/승인
+  4. 외출 문자(솔라피) + 학생 비밀번호 문자. 외출증 이메일 제거
+  5. Firebase 코드 정리: `firebase-init.js`·`firebase-config.js`·`database.rules.json`·RTDB 규칙 배포 워크플로, 데이터 이전 스크립트(`scripts/migrate/`)와 그 워크플로를 지움(필요하면 git 기록에서 찾을 것)
+- Firebase에 남아 있는 것
+  - Hosting: `firebase.json`(hosting만), `.firebaserc`, `firebase-hosting-*.yml` 워크플로(시크릿 `FIREBASE_SERVICE_ACCOUNT_DORM_CHECKIN_647D6`)
+  - RTDB: 이전 직전 데이터가 백업으로 남아 있음(마지막으로 배포한 규칙 그대로). 코드에서는 읽지도 쓰지도 않는다
+  - Firebase Auth의 예전 교사 계정: 쓰이지 않음. 지금 로그인은 모두 Supabase Auth
 - 파일 위치:
   - `supabase/migrations/`: 테이블(`profiles`·`students`·`rooms`·`outings`·`outing_requests`), 권한 함수(`private.is_staff`·`private.can_manage_student`·`private.can_edit_room` 등), RLS, RPC(좌석 배정·크기 변경·외출 신청/취소/승인/반려 — 본체는 `private`, `public`에는 껍데기)
   - `supabase/functions/`: Edge Functions(Deno)
@@ -40,10 +37,6 @@
     - `notify-outing`: 오늘 외출이 시작되면(외출 체크·신청 승인) 학부모에게 안내 문자(장문). 학생 외출증은 문자 대신 학생 화면에 띄움(문자 비용: MMS를 빼서 1회 약 155원 → 약 45원). 교직원만 호출, 같은 외출에는 한 번만(`outings.notice`가 빈 'out' 기록을 먼저 차지), 결과를 `outings.notice`에 기록
     - `_shared/solapi.ts`: 솔라피 REST(HMAC 인증·여러 건 발송, 같은 번호 중복 허용). 키가 없으면 문자만 건너뜀
     - `config.toml`에서 `verify_jwt`를 끄고, 함수 안(`_shared/supabase.ts`의 `getCaller`)에서 호출자를 확인한다
-  - `scripts/migrate/`: Firebase → Supabase 데이터 이전. 수동 워크플로 `migrate-firebase-to-supabase.yml`로 실행하고 입력란에 `MIGRATE`를 넣는다
-    - 예전 RTDB 키는 UUIDv5로 바꾸므로 다시 돌려도 같은 id가 나온다
-    - 교직원 계정은 없으면 만들고(비밀번호는 아무도 모르는 임의 값) 있으면 프로필만 덮어쓴다 — 재발급한 비밀번호는 그대로 유지
-    - 학생 계정이나 외출 신청이 생긴 뒤에는 실행을 거부한다(전환 후 덮어쓰기 방지)
   - `public/js/`의 공통 모듈
     - `supabase-config.js`: 프로젝트 URL·publishable 키(공개돼도 안전한 값)·가짜 이메일 도메인
     - `supabase-client.js`: 클라이언트, `requireStaff()`(세션·프로필 확인, 비활성화 계정 로그아웃, 학생 계정은 student.html로), `requireStudent()`(교직원 계정은 check.html로), `signOutTo()`(이 기기만 로그아웃), `describeError()`, `callFunction()`, `showPageError()`
@@ -51,15 +44,14 @@
     - `adapters.js`: DB 행(snake_case) ↔ 화면 코드가 쓰는 예전 Firebase 모양(`studentsByGrade`, `seatMap`, `managedClasses` 등) 변환. 화면 렌더링 코드는 예전 모양을 그대로 쓴다
 - 배포
   - main에 `supabase/**`가 들어오면 `supabase-deploy.yml`이 테스트 후 `db push`와 `functions deploy --use-api`를 실행한다
-  - 시크릿 `SUPABASE_ACCESS_TOKEN`(프로젝트 하나로 범위를 좁힌 토큰), `SUPABASE_PROJECT_REF`, `SUPABASE_DB_PASSWORD`가 없으면 배포를 건너뛴다. 이전 워크플로는 `SUPABASE_SECRET_KEY`도 필요하다
+  - 시크릿 `SUPABASE_ACCESS_TOKEN`(프로젝트 하나로 범위를 좁힌 토큰), `SUPABASE_PROJECT_REF`, `SUPABASE_DB_PASSWORD`가 없으면 배포를 건너뛴다
   - 마이그레이션 SQL을 Supabase SQL 편집기에서 직접 실행하지 않는다(배포 워크플로가 적용하고 이력을 남김)
-- 저장소가 공개(public)라서 키·비밀번호·학생 개인정보를 코드와 Actions 로그에 남기지 않는다. 이전 스크립트도 건수만 출력한다
+- 저장소가 공개(public)라서 키·비밀번호·학생 개인정보를 코드와 Actions 로그에 남기지 않는다
 
 ## 테스트
-- PR마다 자동 실행: `supabase-test.yml`(DB·함수·이전 스크립트), `web-e2e.yml`(화면)
+- PR마다 자동 실행: `supabase-test.yml`(DB·함수), `web-e2e.yml`(화면)
 - DB: `bash tests/db/run.sh` — 로컬 Postgres 16으로 마이그레이션 + RLS·RPC(`shim.sql`이 Supabase의 역할과 `auth.uid()`를 흉내냄)
 - 함수: `deno test --node-modules-dir=none --no-lock --allow-env supabase/functions/`
-- 이전 스크립트: `cd scripts/migrate && npm test`
 - 화면 E2E: `cd tests/e2e && npm ci && bash fetch-postgrest.sh && npx playwright test`
   - 실제 supabase-js가 가짜 게이트웨이(`harness/gateway.mjs`)를 거쳐 로컬 PostgREST + 마이그레이션이 적용된 Postgres(진짜 RLS)에 붙는다
   - Auth(로그인·토큰 갱신·관리자 API)와 Realtime(Phoenix 웹소켓, `postgres_changes`)은 하네스가 흉내내고, Edge Function(`staff-accounts`·`student-accounts`·`notify-outing`)은 Deno로 실제 코드를 띄운다
@@ -299,5 +291,6 @@ outing_requests   -- 학생 외출 신청: date(KST), student_id, requested_by, 
 - [x] 전환 실행: 데이터 이전 → 관리자 비밀번호 설정 → 미리보기 확인 → 머지
 - [x] Supabase 이전 3단계: 학생 계정(리로스쿨 ID) + 외출 신청/승인(`student.html`, 승인 패널), 명단에 ID·연락처, 붙여넣기로 정보 갱신
 - [x] Supabase 이전 4단계: 외출증 문자(학생 MMS·학부모 문자, 솔라피) + 학생 비밀번호 문자 발송 + 외출증 이메일 제거(코드)
-- [ ] 솔라피 키·발신번호를 Edge Function 시크릿에 넣고 본인 번호로 시험 → 학교 번호로 교체
-- [ ] Supabase 이전 5단계: Firebase Auth·RTDB 코드와 규칙 배포 워크플로 정리
+- [x] 솔라피 키·발신번호를 Edge Function 시크릿에 넣고 본인 번호로 시험
+- [ ] 발신번호를 학교 번호로 교체(솔라피 심사 후 `SMS_SENDER`만 바꿈)
+- [x] Supabase 이전 5단계: Firebase Auth·RTDB 코드와 규칙 배포 워크플로, 데이터 이전 스크립트 정리
