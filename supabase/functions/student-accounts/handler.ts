@@ -63,14 +63,23 @@ export async function handleStudentAccounts(body: Record<string, unknown>, deps:
   switch (body.action) {
     case "issue":
       return { results: await issueAccounts(body.studentIds, deps) };
+    // 비밀번호 재발급·계정만 삭제는 관리자만(사용자 요청). 발급과, 명단에서 학생을 지울 때 계정을 함께 지우는 건 담당 교사도 가능
     case "reset-password":
+      requireAdmin(caller, "비밀번호 재발급은 관리자만 할 수 있습니다.");
       return await resetPassword(body.studentId, deps);
-    case "delete":
-      await deleteAccount(body.studentId, body.withStudent === true, deps);
+    case "delete": {
+      const withStudent = body.withStudent === true;
+      if (!withStudent) requireAdmin(caller, "계정 삭제는 관리자만 할 수 있습니다.");
+      await deleteAccount(body.studentId, withStudent, deps);
       return { ok: true };
+    }
     default:
       throw new HttpError(400, "알 수 없는 요청입니다.");
   }
+}
+
+function requireAdmin(caller: Profile, message: string) {
+  if (caller.role !== "admin") throw new HttpError(403, message);
 }
 
 function describeAuthError(error: AuthLikeError): string {

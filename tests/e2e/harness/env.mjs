@@ -209,6 +209,7 @@ export async function startEnv() {
         realtime.setPaused(false);
         sms.reset();
         await db.pool.query(`
+          delete from public.outing_log;
           delete from public.outings;
           delete from public.outing_requests;
           delete from public.rooms;

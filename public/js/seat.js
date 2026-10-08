@@ -51,6 +51,7 @@ const seatGridEl = document.getElementById("seatGrid");
 const logoutBtn = document.getElementById("logoutBtn");
 const manageLink = document.getElementById("manageLink");
 const accountsLink = document.getElementById("accountsLink");
+const historyLink = document.getElementById("historyLink");
 const navLoadingHint = document.getElementById("navLoadingHint");
 const currentUserNameEl = document.getElementById("currentUserName");
 const currentUserRoleBadgeEl = document.getElementById("currentUserRoleBadge");
@@ -598,6 +599,7 @@ async function init() {
   manageLink.hidden =
     state.role !== "admin" && state.role !== "gradeManager" && state.role !== "dormStaff" && !hasManagedClasses;
   accountsLink.hidden = state.role !== "admin";
+  historyLink.hidden = state.role !== "admin" && state.role !== "gradeManager" && !hasManagedClasses;
   render();
 
   liveTable({

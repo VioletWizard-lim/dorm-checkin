@@ -1690,3 +1690,82 @@ input {
   font-weight: 700;
   color: var(--color-text);
 }
+
+/* 외출 기록 화면(history.html) */
+.history-summary {
+  padding: 0 40px 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+}
+
+.history-wrap {
+  margin: 0 40px 40px;
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  overflow-x: auto;
+}
+
+.history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.history-table th,
+.history-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.history-table th {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  background: var(--color-bg, #F3F4F7);
+}
+
+.history-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.history-name {
+  font-weight: 700;
+}
+
+.history-sub {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.history-tag {
+  margin-left: 4px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #EAF1FB;
+  color: #2B6CB0;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.history-end--out {
+  color: var(--color-out);
+  font-weight: 700;
+}
+
+.history-end--missing {
+  color: var(--color-text-faint);
+}
+
+.history-end--cancel {
+  color: var(--color-text-muted);
+}
+
+.history-empty {
+  padding: 32px 14px;
+  text-align: center;
+  color: var(--color-text-muted);
+}

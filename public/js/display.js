@@ -30,6 +30,7 @@ const currentUserNameEl = document.getElementById("currentUserName");
 const currentUserRoleBadgeEl = document.getElementById("currentUserRoleBadge");
 const manageLink = document.getElementById("manageLink");
 const accountsLink = document.getElementById("accountsLink");
+const historyLink = document.getElementById("historyLink");
 const navLoadingHint = document.getElementById("navLoadingHint");
 const dateEl = document.getElementById("todayDate");
 const gradeChipsEl = document.getElementById("gradeChips");
@@ -293,6 +294,7 @@ async function init() {
   navLoadingHint.hidden = true;
   manageLink.hidden = role !== "admin" && role !== "gradeManager" && role !== "dormStaff" && !hasManagedClasses;
   accountsLink.hidden = role !== "admin";
+  historyLink.hidden = role !== "admin" && role !== "gradeManager" && !hasManagedClasses;
 
   liveTable({
     table: "students",

@@ -21,6 +21,7 @@
       <a href="./check.html" class="back-link">← 체크 화면으로</a>
       <a href="./display.html" class="back-link">현황판 보기</a>
       <a href="./seat.html" class="back-link">좌석 배치판 보기</a>
+      <a href="./history.html" class="back-link" id="historyLink" hidden>외출 기록</a>
       <span class="loading-hint" id="navLoadingHint">메뉴 확인 중...</span>
       <a href="./accounts.html" class="back-link" id="accountsLink" hidden>계정 관리</a>
       <div class="current-user" id="currentUserBox">
@@ -86,7 +87,7 @@
         <div class="day-toggle-row" id="dayToggleRow"></div>
       </div>
       </div>
-      <div class="roster-form__row">
+      <div class="roster-form__row" id="leaveFields">
         <div class="field">
           <label for="inputLeaveFrom">명령퇴사 시작일 (선택)</label>
           <input id="inputLeaveFrom" type="date">
