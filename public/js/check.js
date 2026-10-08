@@ -126,14 +126,19 @@ function getRoomIdByStudentId() {
   return map;
 }
 
-// 외출 신청 승인 범위: 관리자·기숙사부 전체, 학년부장 담당 학년, 담임 담당 반(서버 can_manage_student와 같은 규칙)
+// 외출 신청 승인 범위: 관리자 전체, 학년부장 담당 학년, 담임 담당 반(서버 can_manage_student와 같은 규칙)
 function canApprove(student) {
   const p = currentProfile;
   if (!p || !student) return false;
-  if (p.role === "admin" || p.role === "dormStaff") return true;
+  if (p.role === "admin") return true;
   if (p.role === "gradeManager") return Boolean((p.managedGrades || {})[student.grade]);
   if (p.role === "teacher") return Boolean(((p.managedClasses || {})[student.grade] || {})[student.cls]);
   return false;
+}
+
+// 기숙사부는 보기만 한다 — 외출 체크·복귀·외출 취소·자리 없음 해제 버튼이 없음(서버 can_write_outings도 막음)
+function isReadOnly() {
+  return Boolean(currentProfile && currentProfile.role === "dormStaff");
 }
 
 function findStudent(studentId) {
@@ -209,7 +214,11 @@ function renderList(filtered) {
         state.selectedDate === TODAY_KEY && state.pendingRequests.some((r) => r.student_id === s.id);
 
       let actionsHtml;
-      if (status === "in") {
+      if (isReadOnly()) {
+        actionsHtml = isOut
+          ? `<div class="roster-actions"><button type="button" class="btn-secondary btn-small" data-pass-id="${escapeHtml(s.id)}">외출증 보기</button></div>`
+          : `<div class="ml-auto"></div>`;
+      } else if (status === "in") {
         actionsHtml = `<button type="button" class="toggle-btn toggle-btn--mark-out" data-toggle-id="${escapeHtml(s.id)}" data-grade="${escapeHtml(s.grade)}" data-current-status="in">외출 체크</button>`;
       } else if (isOut) {
         // 외출중·외출 예정: 학생 화면과 같은 외출증을 볼 수 있다
@@ -500,7 +509,7 @@ async function init() {
     (classes) => Object.keys(classes || {}).length > 0
   );
   navLoadingHint.hidden = true;
-  // 기숙사부는 계정 관리만 빼고 admin과 동일한 권한을 가진다.
+  // 기숙사부는 학생 명단 화면에서 명령퇴사 기간만 설정한다.
   manageLink.hidden =
     profile.role !== "admin" && profile.role !== "gradeManager" && profile.role !== "dormStaff" && !hasManagedClasses;
   accountsLink.hidden = profile.role !== "admin";

@@ -124,7 +124,7 @@ test.describe("좌석 배치판 — 편집 모드", () => {
 
   test("대상 학년이 없는 실의 빈 좌석을 누르면 안내한다", async ({ openAs, page }) => {
     const alerts = collectAlerts(page);
-    await openAs("dorm01", "/seat.html");
+    await openAs("admin01", "/seat.html");
     await page.click("#editModeToggle");
     await page.click("#addRoomBtn");
     await expect(page.locator("#roomTabs .filter-chip.is-active")).toHaveText("새 실");

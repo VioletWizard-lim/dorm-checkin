@@ -78,7 +78,7 @@ test.describe("학생 계정 관리(학생 명단 화면)", () => {
   test("계정이 있으면 ID를 바꿀 수 없고, 형식·중복은 저장 전에 막는다", async ({ env, openAs, page }) => {
     const alerts = collectAlerts(page);
     await env.createStudentAccount(STUDENT.hong, "hong123");
-    await openAs("dorm01", "/students.html");
+    await openAs("admin01", "/students.html");
     await rosterCard(page, "홍길동").getByRole("button", { name: "수정" }).click();
     await expect(page.locator("#inputLoginId")).toBeDisabled();
     await expect(page.locator("#loginIdHint")).toContainText("계정이 발급되어 있어 바꿀 수 없습니다");

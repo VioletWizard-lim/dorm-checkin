@@ -180,20 +180,45 @@ select tests.expect_affected(format($$update public.rooms set name = 'x' where i
 select tests.expect_error(format($$select public.resize_room(%L, 1, 1)$$, :room1), 'grade manager cannot resize rooms', '%권한%');
 reset role;
 
--- ─────────────────────────── 기숙사부 ───────────────────────────
-select tests.login(:dorm);
+-- ─────────────────────────── 관리자: 실·좌석 ───────────────────────────
+select tests.login(:admin);
 set role authenticated;
 select public.assign_seat(:room1, 'r1c1', :st3);
-select tests.expect_true(format($$(select seat_map ? 'r1c1' from public.rooms where id = %L)$$, :room1), 'dorm staff assigns any seat');
+select tests.expect_true(format($$(select seat_map ? 'r1c1' from public.rooms where id = %L)$$, :room1), 'admin assigns any seat');
 select public.resize_room(:room1, 1, 2);
 select tests.expect_true(format($$(select seat_map ? 'r0c0' and not seat_map ? 'r1c1' and rows = 1 from public.rooms where id = %L)$$, :room1),
   'shrinking a room drops seats outside the new grid');
 select public.assign_seat(:room1, 'r0c1', :st1);
 select tests.expect_true(format($$(select not seat_map ? 'r0c0' and seat_map ->> 'r0c1' = %L from public.rooms where id = %L)$$, :st1, :room1),
   'reassigning a student moves them instead of duplicating');
-select tests.expect_affected($$insert into public.rooms (name) values ('임시실')$$, 1, 'dorm staff adds a room');
-select tests.expect_affected($$delete from public.rooms where name = '임시실'$$, 1, 'dorm staff deletes a room');
-select tests.expect_affected(format($$update public.students set sid = sid where id = %L$$, :st2), 1, 'dorm staff edits any student');
+select tests.expect_affected($$insert into public.rooms (name) values ('임시실')$$, 1, 'admin adds a room');
+select tests.expect_affected($$delete from public.rooms where name = '임시실'$$, 1, 'admin deletes a room');
+select tests.expect_affected(format($$update public.students set sid = sid where id = %L$$, :st2), 1, 'admin edits any student');
+reset role;
+
+-- ─────────────────── 기숙사부: 보기 + 명령퇴사 기간만 ───────────────────
+select tests.login(:dorm);
+set role authenticated;
+select tests.expect_count('select * from public.students', 3, 'dorm staff reads all students');
+select tests.expect_count('select * from public.rooms', 2, 'dorm staff reads rooms');
+select tests.expect_affected(format($$update public.students set leave_from = current_date, leave_to = current_date + 3, leave_reason = '명령퇴사' where id = %L$$, :st2),
+  1, 'dorm staff sets a leave period on any student');
+select tests.expect_affected(format($$update public.students set leave_from = null, leave_to = null, leave_reason = null where id = %L$$, :st2),
+  1, 'dorm staff clears a leave period');
+select tests.expect_error(format($$update public.students set name = '바뀐 이름' where id = %L$$, :st2),
+  'dorm staff cannot edit other student fields', '%명령퇴사 기간만%');
+select tests.expect_error(format($$update public.students set leave_reason = 'x', phone = '01099998888' where id = %L$$, :st2),
+  'dorm staff cannot sneak other fields into a leave update', '%명령퇴사 기간만%');
+select tests.expect_error($$insert into public.students (grade, name, sid, cls) values (1, '새학생', '10199', '1학년 1반')$$,
+  'dorm staff cannot add students', '%row-level security%');
+select tests.expect_affected(format($$delete from public.students where id = %L$$, :st2), 0, 'dorm staff cannot delete students');
+select tests.expect_error(format($$insert into public.outings (date, student_id, status) values (public.today_kst(), %L, 'out')$$, :st2),
+  'dorm staff cannot check outings', '%row-level security%');
+select tests.expect_affected($$update public.outings set status = 'in'$$, 0, 'dorm staff cannot return or cancel outings');
+select tests.expect_error(format($$select public.assign_seat(%L, 'r0c0', %L)$$, :room1, :st2), 'dorm staff cannot assign seats', '%권한%');
+select tests.expect_error(format($$select public.resize_room(%L, 2, 2)$$, :room1), 'dorm staff cannot resize rooms', '%권한%');
+select tests.expect_error($$insert into public.rooms (name) values ('임시실')$$, 'dorm staff cannot add rooms', '%row-level security%');
+select tests.expect_affected($$update public.rooms set name = '바뀐 실'$$, 0, 'dorm staff cannot rename rooms');
 select tests.expect_affected(format($$update public.profiles set name = 'x' where id = %L$$, :tplain), 0, 'dorm staff cannot edit accounts');
 reset role;
 
@@ -286,11 +311,17 @@ reset role;
 
 select tests.login(:dorm);
 set role authenticated;
+select tests.expect_error(format($$select public.approve_outing_request(%L)$$, :'req2'), 'dorm staff cannot approve', '%권한%');
+select tests.expect_error(format($$select public.reject_outing_request(%L)$$, :'req2'), 'dorm staff cannot reject', '%권한%');
+reset role;
+
+select tests.login(:admin);
+set role authenticated;
 select public.reject_outing_request(:'req2', '사유를 구체적으로');
 reset role;
 select tests.logout();
 select tests.expect_true(format($$(select status = 'rejected' and reject_reason = '사유를 구체적으로' from public.outing_requests where id = %L)$$, :'req2'),
-  'dorm staff rejects with a reason');
+  'admin rejects with a reason');
 
 select tests.login(:s2);
 set role authenticated;
@@ -338,7 +369,7 @@ select tests.expect_error(format($$update public.students set login_id = 'Bad Id
 select tests.expect_error(format($$update public.students set phone = '02-123-4567' where id = %L$$, :st3),
   'phone format is enforced', '%students_phone_check%');
 
-select tests.login(:dorm);
+select tests.login(:admin);
 set role authenticated;
 select public.assign_seat(:room1, 'r0c0', :st3);
 reset role;

@@ -203,12 +203,15 @@ test.describe("외출 신청 승인", () => {
     }, request.id);
     expect(error).toBe("이 학생의 신청을 처리할 권한이 없습니다.");
 
-    // 자습 감독도 안 보임, 기숙사부는 보임
+    // 자습 감독·기숙사부도 안 보임(승인 권한 없음), 관리자는 보임
     const supervisor = await openOtherAs("super01", "/check.html");
     await expect(supervisor.locator(".student-card").first()).toBeVisible();
     await expect(supervisor.locator("#requestPanel")).toBeHidden();
     const dorm = await openOtherAs("dorm01", "/check.html");
-    await expect(requestRow(dorm, "이서연")).toContainText("학원");
+    await expect(dorm.locator(".student-card").first()).toBeVisible();
+    await expect(dorm.locator("#requestPanel")).toBeHidden();
+    const admin = await openOtherAs("admin01", "/check.html");
+    await expect(requestRow(admin, "이서연")).toContainText("학원");
   });
 });
 

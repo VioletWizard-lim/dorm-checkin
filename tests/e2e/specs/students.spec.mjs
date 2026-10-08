@@ -57,7 +57,7 @@ test.describe("학생 명단 관리", () => {
 
   test("명령퇴사 기간 검증", async ({ openAs, page }) => {
     const alerts = collectAlerts(page);
-    await openAs("dorm01", "/students.html");
+    await openAs("admin01", "/students.html");
     await rosterCard(page, "홍길동").getByRole("button", { name: "수정" }).click();
     await page.fill("#inputLeaveFrom", kstDatePlus(1));
     await page.click("#submitFormBtn");
