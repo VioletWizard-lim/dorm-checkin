@@ -16,9 +16,9 @@ const base: Profile = {
 };
 const student = { grade: 1, cls: "1학년 3반" };
 
-Deno.test("admin and dorm staff manage everyone", () => {
+Deno.test("admin manages everyone; dorm staff manages no roster or accounts", () => {
   assertEquals(canManageStudent({ ...base, role: "admin" }, student), true);
-  assertEquals(canManageStudent({ ...base, role: "dormStaff" }, student), true);
+  assertEquals(canManageStudent({ ...base, role: "dormStaff" }, student), false); // 명령퇴사 기간만 가능
 });
 
 Deno.test("grade managers manage their grades only", () => {

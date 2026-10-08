@@ -139,7 +139,7 @@ test.describe("외출 체크 화면", () => {
     await openAs("teacher01", "/check.html");
     await expect(card(page, "이서연").locator(".status-badge")).toHaveText("재실");
 
-    const other = await openOtherAs("dorm01", "/check.html");
+    const other = await openOtherAs("admin01", "/check.html");
     answerDialogs(other, ["학원", ""]);
     await card(other, "이서연").getByRole("button", { name: "외출 체크" }).click();
     await expect(card(other, "이서연").locator(".status-badge")).toHaveText("외출중");

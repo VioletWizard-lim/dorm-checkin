@@ -80,6 +80,9 @@ const state = {
   accounts: {}, // { [studentId]: { loginId } } — 학생 계정(profiles, kind = 'student')
   accountsLoaded: false,
   accountResults: [], // 이 화면에서 발급·재발급한 비밀번호(새로고침 전까지만 보여줌)
+  // 기숙사부(dormStaff): 명단은 모두 보지만 바꿀 수 있는 건 명령퇴사 기간뿐(서버 트리거도 막음).
+  // 학생 추가·삭제·다른 정보 수정·학생 계정 발급/재발급/삭제는 할 수 없다.
+  leaveOnly: false,
 };
 
 // 해당 학년에 반 단위 제한이 있으면 허용된 반 목록을, 없으면(학년 전체 담당) null을 반환
@@ -190,7 +193,7 @@ function insertTabOnKeydown(event) {
 function renderDayToggle() {
   dayToggleRow.innerHTML = DAY_LABELS.map((label, i) => {
     const active = state.dayFlags[i];
-    return `<button type="button" class="day-toggle${active ? " is-active" : ""}" data-day-index="${i}">${label}</button>`;
+    return `<button type="button" class="day-toggle${active ? " is-active" : ""}" data-day-index="${i}"${state.leaveOnly ? " disabled" : ""}>${label}</button>`;
   }).join("");
 }
 
@@ -237,7 +240,9 @@ function renderRoster() {
       const accountChip = hasAccount
         ? `<span class="account-chip account-chip--active">계정 있음</span>`
         : `<span class="account-chip">${s.loginId ? "계정 없음" : "ID 미등록"}</span>`;
-      const accountButtons = hasAccount
+      const accountButtons = state.leaveOnly
+        ? ""
+        : hasAccount
         ? `<button type="button" class="btn-secondary btn-small" data-reset-account="${escapeHtml(id)}">비번 재발급</button>
            <button type="button" class="btn-secondary btn-small" data-delete-account="${escapeHtml(id)}">계정 삭제</button>`
         : s.loginId
@@ -255,8 +260,12 @@ function renderRoster() {
           ${accountChip}
           <div class="roster-actions">
             ${accountButtons}
-            <button type="button" class="btn-secondary btn-small" data-edit-id="${escapeHtml(id)}">수정</button>
-            <button type="button" class="btn-danger btn-small" data-delete-id="${escapeHtml(id)}">삭제</button>
+            ${
+              state.leaveOnly
+                ? `<button type="button" class="btn-secondary btn-small" data-edit-id="${escapeHtml(id)}">명령퇴사 설정</button>`
+                : `<button type="button" class="btn-secondary btn-small" data-edit-id="${escapeHtml(id)}">수정</button>
+            <button type="button" class="btn-danger btn-small" data-delete-id="${escapeHtml(id)}">삭제</button>`
+            }
           </div>
         </div>
       `;
@@ -314,8 +323,11 @@ function openFormForEdit(id) {
   // 기존 학생은 이미 반이 저장되어 있으니, 학번을 고치더라도 자동으로 덮어쓰지 않는다.
   state.clsManuallyEdited = true;
   renderDayToggle();
+  // 기숙사부는 명령퇴사 칸만 고칠 수 있다(나머지는 보이기만)
+  for (const el of [inputName, inputSid, inputCls, inputEmail, inputPhone, inputParentPhone]) el.disabled = state.leaveOnly;
+  if (state.leaveOnly) inputLoginId.disabled = true;
   formWrap.hidden = false;
-  inputName.focus();
+  (state.leaveOnly ? inputLeaveFrom : inputName).focus();
 }
 
 function setLoginIdLocked(locked) {
@@ -484,7 +496,7 @@ inputCls.addEventListener("input", () => {
 
 dayToggleRow.addEventListener("click", (event) => {
   const btn = event.target.closest("[data-day-index]");
-  if (!btn) return;
+  if (!btn || state.leaveOnly) return;
   const i = Number(btn.dataset.dayIndex);
   state.dayFlags[i] = !state.dayFlags[i];
   renderDayToggle();
@@ -698,8 +710,46 @@ async function deleteStudent(id) {
   await afterWrite(error);
 }
 
+// 명령퇴사 기간 검사(학생 추가·수정 폼, 기숙사부의 명령퇴사 설정이 같이 씀). 문제가 있으면 alert하고 null
+function readLeaveInputs() {
+  const leaveFrom = inputLeaveFrom.value;
+  const leaveTo = inputLeaveTo.value;
+  if ((leaveFrom && !leaveTo) || (!leaveFrom && leaveTo)) {
+    alert("명령퇴사 기간은 시작일과 종료일을 모두 입력해 주세요.");
+    return null;
+  }
+  if (leaveFrom && leaveTo && leaveFrom > leaveTo) {
+    alert("명령퇴사 종료일은 시작일보다 빠를 수 없습니다.");
+    return null;
+  }
+  return leaveFrom && leaveTo ? { from: leaveFrom, to: leaveTo, reason: inputLeaveReason.value.trim() } : {};
+}
+
+// 기숙사부: 명령퇴사 칸만 저장한다(서버도 다른 칸이 바뀌면 거부)
+async function saveLeaveOnly(id) {
+  const leave = readLeaveInputs();
+  if (!leave) return;
+  submitFormBtn.disabled = true;
+  const { data: saved, error } = await supabase
+    .from("students")
+    .update({ leave_from: leave.from || null, leave_to: leave.to || null, leave_reason: leave.from ? leave.reason || null : null })
+    .eq("id", id)
+    .select("id");
+  submitFormBtn.disabled = false;
+  if (!error && saved.length === 0) {
+    alert("저장하지 못했습니다: 권한이 없거나 이미 삭제된 학생입니다.");
+    return;
+  }
+  if (!(await afterWrite(error))) return;
+  closeForm();
+}
+
 studentForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (state.leaveOnly) {
+    if (editingIdInput.value) await saveLeaveOnly(editingIdInput.value);
+    return;
+  }
   const name = inputName.value.trim();
   const sid = inputSid.value.trim();
   const cls = inputCls.value.trim();
@@ -728,16 +778,8 @@ studentForm.addEventListener("submit", async (event) => {
     return;
   }
 
-  const leaveFrom = inputLeaveFrom.value;
-  const leaveTo = inputLeaveTo.value;
-  if ((leaveFrom && !leaveTo) || (!leaveFrom && leaveTo)) {
-    alert("명령퇴사 기간은 시작일과 종료일을 모두 입력해 주세요.");
-    return;
-  }
-  if (leaveFrom && leaveTo && leaveFrom > leaveTo) {
-    alert("명령퇴사 종료일은 시작일보다 빠를 수 없습니다.");
-    return;
-  }
+  const leave = readLeaveInputs();
+  if (!leave) return;
 
   const data = {
     name,
@@ -749,9 +791,7 @@ studentForm.addEventListener("submit", async (event) => {
     parentPhone,
     afterschoolDays: state.dayFlags.slice(),
   };
-  if (leaveFrom && leaveTo) {
-    data.leaveOfAbsence = { from: leaveFrom, to: leaveTo, reason: inputLeaveReason.value.trim() };
-  }
+  if (leave.from) data.leaveOfAbsence = leave;
 
   const row = studentToRow(state.activeGrade, data);
   const editingId = editingIdInput.value;
@@ -782,6 +822,9 @@ function initForGrades(allowedGrades) {
 
   addStudentBtn.disabled = false;
   bulkAddBtn.disabled = false;
+  addStudentBtn.hidden = state.leaveOnly;
+  bulkAddBtn.hidden = state.leaveOnly;
+  bulkIssueBtn.hidden = state.leaveOnly;
 
   const reportLoadError = (error) => {
     showPageError(`데이터를 불러오지 못했습니다(${describeError(error)}). 잠시 후 자동으로 다시 시도합니다.`);
@@ -827,6 +870,7 @@ async function init() {
 
   if (role === "admin" || role === "dormStaff") {
     showCurrentUser();
+    state.leaveOnly = role === "dormStaff";
     initForGrades(ALL_GRADES);
   } else if (role === "gradeManager") {
     showCurrentUser();

@@ -44,6 +44,8 @@ export async function handleNotifyOuting(body: Record<string, unknown>, deps: No
   if (caller.kind !== "staff" || caller.disabled || !caller.role) {
     throw new HttpError(403, "교직원만 사용할 수 있습니다.");
   }
+  // 기숙사부는 외출 기록을 쓸 수 없다(DB can_write_outings와 같은 규칙)
+  if (caller.role === "dormStaff") throw new HttpError(403, "기숙사부는 외출 문자를 보낼 수 없습니다.");
   const date = typeof body.date === "string" ? body.date : "";
   const studentId = typeof body.studentId === "string" ? body.studentId : "";
   if (!studentId) throw new HttpError(400, "대상 학생이 지정되지 않았습니다.");

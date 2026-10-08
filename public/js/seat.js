@@ -138,13 +138,13 @@ function getRawOutingStatus(studentId) {
 
 function canEditRoom(roomId) {
   if (!state.editMode || !roomId) return false;
-  if (state.role === "admin" || state.role === "dormStaff") return true;
+  if (state.role === "admin") return true;
   if (state.role === "gradeManager") return state.managedRoomIds.includes(roomId);
   return false;
 }
 
 function canManageRoomsGlobally() {
-  return state.editMode && (state.role === "admin" || state.role === "dormStaff");
+  return state.editMode && state.role === "admin";
 }
 
 function ensureActiveRoom() {
@@ -175,7 +175,7 @@ function renderRoomTabs() {
 
 function renderEditToggle() {
   editControlsLoadingHint.hidden = state.roleResolved;
-  const showToggle = state.role === "admin" || state.role === "gradeManager" || state.role === "dormStaff";
+  const showToggle = state.role === "admin" || state.role === "gradeManager";
   editModeToggle.hidden = !showToggle;
   editModeToggle.textContent = state.editMode ? "보기 모드로 전환" : "편집 모드";
   addRoomBtn.hidden = !canManageRoomsGlobally();
@@ -275,12 +275,17 @@ function renderGrid(room) {
       // 보기 모드에서는(편집 모드가 아니고, 학생 데이터가 남아있고, 명령퇴사 중이 아니면)
       // 좌석을 눌러 바로 출석 상태를 바꿀 수 있다 — 명령퇴사는 students.html에서만 설정.
       const onLeave = isOnLeave(student, TODAY_KEY);
-      const canAct = !state.editMode && !!student && !onLeave;
+      const rawStatus = getRawOutingStatus(studentId);
+      // 기숙사부는 보기만 — 외출중·외출 예정 좌석에서 외출증만 볼 수 있다(서버 can_write_outings도 막음)
+      const readOnly = state.role === "dormStaff";
+      const canAct =
+        !state.editMode && !!student && !onLeave && (!readOnly || rawStatus === "out" || rawStatus === "scheduled");
 
       if (state.actionCellKey === cellKey && canAct) {
-        const rawStatus = getRawOutingStatus(studentId);
         let actionButtonsHtml;
-        if (rawStatus === "in") {
+        if (readOnly) {
+          actionButtonsHtml = `<button type="button" class="seat-cell__action-btn" data-seat-pass="${escapeHtml(studentId)}">외출증</button>`;
+        } else if (rawStatus === "in") {
           // "외출"(재실 -> 외출중)은 여기서 할 수 없다 — check.html에서만.
           actionButtonsHtml = `<button type="button" class="seat-cell__action-btn" data-seat-mark-away="${escapeHtml(studentId)}">자리없음</button>`;
         } else if (rawStatus === "scheduled") {

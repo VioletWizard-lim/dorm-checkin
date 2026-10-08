@@ -185,7 +185,7 @@ function renderForm() {
   for (const select of timeSelects) select.disabled = Boolean(blocked);
   requestBtn.disabled = !ready || Boolean(blocked);
   requestBtn.textContent = state.submitting ? "신청 중..." : "외출 신청";
-  requestHint.textContent = blocked || "담임 선생님(또는 학년부장·기숙사부 선생님)이 승인하면 바로 외출로 처리됩니다.";
+  requestHint.textContent = blocked || "담임 선생님(또는 학년부장 선생님)이 승인하면 바로 외출로 처리됩니다.";
 }
 
 function renderRequests() {
