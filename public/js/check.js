@@ -7,6 +7,7 @@ import {
   roomsById,
   isScheduledOuting,
   createStartTimeTicker,
+  currentHHMM,
 } from "./adapters.js";
 import { outingPassData } from "./outing-pass.js";
 import { createPassDialog } from "./pass-dialog.js";
@@ -457,13 +458,30 @@ listEl.addEventListener("click", (event) => {
   let expectedReturn = "";
   if (currentStatus === "in") {
     reason = (window.prompt("외출 사유를 입력해 주세요 (취소해도 외출 체크는 진행됩니다)", "") || "").trim();
-    expectedReturn = (window.prompt("예상 복귀 시각을 입력해 주세요 (예: 17:00 — 이 시각이 지나면 자동으로 복귀 처리됩니다. 취소하면 미정)", "") || "").trim();
+    // 예상 복귀 시각은 꼭 넣어야 한다(사용자 요청 — 이 시각이 지나면 자동 복귀). 취소하면 외출 체크도 하지 않음
+    const answer = window.prompt("예상 복귀 시각을 입력해 주세요 (예: 17:00 — 이 시각이 지나면 자동으로 복귀 처리됩니다)", "");
+    if (answer === null) return;
+    expectedReturn = normalizeHHMM(answer);
+    if (!expectedReturn) {
+      alert("예상 복귀 시각을 17:00처럼 입력해 주세요. 외출 체크는 하지 않았습니다.");
+      return;
+    }
+    if (expectedReturn <= currentHHMM()) {
+      alert("예상 복귀 시각은 지금보다 늦어야 합니다(지난 시각이면 바로 자동 복귀됩니다). 외출 체크는 하지 않았습니다.");
+      return;
+    }
   }
   btn.disabled = true;
   toggleOuting(btn.dataset.toggleId, btn.dataset.grade, currentStatus, reason, expectedReturn).finally(() => {
     btn.disabled = false;
   });
 });
+
+// "9:30" · "09:30" · "0930" → "09:30", 시각이 아니면 ""
+function normalizeHHMM(value) {
+  const m = /^\s*([01]?\d|2[0-3])\s*[:시]?\s*([0-5]\d)\s*분?\s*$/.exec(String(value || ""));
+  return m ? `${m[1].padStart(2, "0")}:${m[2]}` : "";
+}
 
 searchInput.addEventListener("input", (event) => {
   state.searchTerm = event.target.value;

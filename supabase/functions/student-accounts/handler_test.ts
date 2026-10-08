@@ -137,7 +137,7 @@ Deno.test("issue texts the password to the student and leaves it out of the resp
   assertEquals(calls.sms, [{
     key: "s-hong",
     to: "01011112222",
-    text: "[기숙사 외출체크] 홍길동 학생 계정\n아이디: hong.gd\n비밀번호: 123451\n접속: https://dorm.example/login.html\n" +
+    text: "[기숙사 면학 시스템] 홍길동 학생 계정\n아이디: hong.gd\n비밀번호: 123451\n접속: https://dorm.example/login.html\n" +
       "로그인 화면에서 '학생' 탭을 골라 주세요.",
   }]);
 });

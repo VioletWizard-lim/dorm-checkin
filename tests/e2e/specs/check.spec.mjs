@@ -26,16 +26,16 @@ test.describe("외출 체크 화면", () => {
   });
 
   test("외출 체크 → 사유·복귀 시각 저장, 담당 교사 기록, 학부모 문자 → 복귀 체크", async ({ env, openAs, page }) => {
-    answerDialogs(page, ["병원 진료", "18:00"]);
+    answerDialogs(page, ["병원 진료", "23:59"]);
     await openAs("homeroom01", "/check.html");
     await card(page, "홍길동").getByRole("button", { name: "외출 체크" }).click();
 
     await expect(card(page, "홍길동").locator(".status-badge")).toHaveText("외출중");
-    await expect(card(page, "홍길동")).toContainText("병원 진료 (~18:00)");
+    await expect(card(page, "홍길동")).toContainText("병원 진료 (~23:59)");
     await expect(page.locator("#outCountText")).toHaveText("외출중 1명");
 
     const row = await outingRow(env, todayKst(), STUDENT.hong);
-    expect(row).toMatchObject({ status: "out", reason: "병원 진료", expected_return: "18:00", checked_by_name: "김담임" });
+    expect(row).toMatchObject({ status: "out", reason: "병원 진료", expected_return: "23:59", checked_by_name: "김담임" });
 
     // 학부모에게만 안내 문자(학생 외출증은 학생 화면에 뜸 — 문자 비용 절약)
     await expect(card(page, "홍길동").locator(".notice-text")).toHaveText("문자 학부모 ✓");
@@ -43,7 +43,7 @@ test.describe("외출 체크 화면", () => {
     const [toParent] = env.sms.messages;
     expect(toParent).toMatchObject({ to: "01033334444", from: "0212345678", subject: "외출 안내" });
     expect(toParent.text).toContain("홍길동 학생이");
-    expect(toParent.text).toContain("복귀 예정: 18:00");
+    expect(toParent.text).toContain("복귀 예정: 23:59");
     expect(toParent.text).toContain("사유: 병원 진료");
     expect(toParent.text).toContain("확인 교사: 김담임");
     expect((await outingRow(env, todayKst(), STUDENT.hong)).notice).toMatchObject({ status: "done", parent: { result: "sent" } });
@@ -67,7 +67,7 @@ test.describe("외출 체크 화면", () => {
 
   test("문자 실패는 카드에 빨갛게 보인다", async ({ env, openAs, page }) => {
     env.sms.failTo.add("01033334444");
-    answerDialogs(page, ["병원", ""]);
+    answerDialogs(page, ["병원", "23:59"]);
     await openAs("homeroom01", "/check.html");
     await card(page, "홍길동").getByRole("button", { name: "외출 체크" }).click();
     const notice = card(page, "홍길동").locator(".notice-text");
@@ -77,14 +77,32 @@ test.describe("외출 체크 화면", () => {
   });
 
   test("사유 입력을 취소해도 외출 체크는 된다(학부모 연락처가 없으면 문자 없음)", async ({ env, openAs, page }) => {
-    answerDialogs(page, [null, null]);
+    answerDialogs(page, [null, "9:30 "]);
+    await page.clock.install({ time: new Date(`${todayKst()}T08:00:00+09:00`) });
     await openAs("teacher01", "/check.html");
     await card(page, "최하늘").getByRole("button", { name: "외출 체크" }).click();
     await expect(card(page, "최하늘").locator(".status-badge")).toHaveText("외출중");
     const row = await outingRow(env, todayKst(), STUDENT.haneul);
-    expect(row).toMatchObject({ status: "out", reason: null, expected_return: null });
+    expect(row).toMatchObject({ status: "out", reason: null, expected_return: "09:30" }); // "9:30" → "09:30"
     await expect(card(page, "최하늘").locator(".notice-text")).toHaveText("학부모 번호 없음");
     expect(env.sms.messages).toHaveLength(0);
+  });
+
+  test("예상 복귀 시각은 꼭 넣어야 한다(취소·잘못된 값·지난 시각이면 외출 체크 안 함)", async ({ env, openAs, page }) => {
+    const seen = answerDialogs(page, ["병원", null, "병원", "모름", null, "병원", "00:00", null]);
+    await openAs("teacher01", "/check.html");
+    const btn = card(page, "최하늘").getByRole("button", { name: "외출 체크" });
+    await btn.click(); // 예상 복귀 입력을 취소
+    await btn.click(); // 시각이 아닌 값
+    await expect.poll(() => seen.filter((d) => d.type === "alert").length).toBe(1);
+    await btn.click(); // 이미 지난 시각
+    await expect.poll(() => seen.filter((d) => d.type === "alert").length).toBe(2);
+    expect(seen.filter((d) => d.type === "alert").map((d) => d.message)).toEqual([
+      "예상 복귀 시각을 17:00처럼 입력해 주세요. 외출 체크는 하지 않았습니다.",
+      "예상 복귀 시각은 지금보다 늦어야 합니다(지난 시각이면 바로 자동 복귀됩니다). 외출 체크는 하지 않았습니다.",
+    ]);
+    await expect(card(page, "최하늘").locator(".status-badge")).toHaveText("재실");
+    expect(await outingRow(env, todayKst(), STUDENT.haneul)).toBeNull();
   });
 
   test("자리 없음 → 재실로 되돌리기", async ({ env, openAs, page }) => {
@@ -144,7 +162,7 @@ test.describe("외출 체크 화면", () => {
     await expect(card(page, "이서연").locator(".status-badge")).toHaveText("재실");
 
     const other = await openOtherAs("admin01", "/check.html");
-    answerDialogs(other, ["학원", ""]);
+    answerDialogs(other, ["학원", "23:59"]);
     await card(other, "이서연").getByRole("button", { name: "외출 체크" }).click();
     await expect(card(other, "이서연").locator(".status-badge")).toHaveText("외출중");
 
@@ -166,7 +184,7 @@ test.describe("외출 체크 화면", () => {
   });
 
   test("저장이 거부되면 알림을 띄우고 화면은 그대로 둔다", async ({ env, openAs, page }) => {
-    const seen = answerDialogs(page, ["사유", "", true]);
+    const seen = answerDialogs(page, ["사유", "23:59", true]);
     await openAs("teacher01", "/check.html");
     await expect(card(page, "홍길동").locator(".status-badge")).toHaveText("재실");
     // 실시간 연결 직후의 다시 읽기까지 끝난 뒤에 비활성화한다(그 전에 바꾸면 목록이 빈 채로 다시 그려짐)

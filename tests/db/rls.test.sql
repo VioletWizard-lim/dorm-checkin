@@ -235,6 +235,8 @@ select tests.expect_error(format($$insert into public.outing_requests (date, stu
   'student cannot insert requests directly', '%permission denied%');
 select tests.expect_error($$select public.create_outing_request('   ')$$, 'empty reason is rejected', '%사유%');
 select tests.expect_error($$select public.create_outing_request('병원', '17:00', '25:00')$$, 'bad start time is rejected', '%외출 시각%');
+select tests.expect_error($$select public.create_outing_request('병원')$$, 'a request needs an expected return time', '%예상 복귀 시각%');
+select tests.expect_error($$select public.create_outing_request('병원', '15:00', '15:30')$$, 'expected return must be after the start time', '%외출 시각보다 늦어야%');
 select public.create_outing_request('병원 진료', '17:00', '15:30');
 select tests.expect_count('select * from public.outing_requests', 1, 'student sees own request');
 select tests.expect_error($$select public.create_outing_request('또 나가요')$$, 'second pending request is rejected', '%기다리는%');
@@ -292,9 +294,13 @@ set role authenticated;
 select tests.expect_affected(format($$update public.outings set status = 'in' where student_id = %L and date = public.today_kst()$$, :st1), 1, 'teacher marks return');
 select tests.expect_true(format($$(select start_time is null and reason is null and expected_return is null and request_id is null
   from public.outings where student_id = %L and date = public.today_kst())$$, :st1), 'return clears start time and request fields');
-select tests.expect_affected(format($$update public.outings set status = 'out' where student_id = %L and date = public.today_kst()$$, :st1), 1, 'teacher marks out again');
+select tests.expect_error(format($$update public.outings set status = 'out' where student_id = %L and date = public.today_kst()$$, :st1),
+  'checking out needs an expected return time', '%예상 복귀 시각%');
+select tests.expect_affected(format($$update public.outings set status = 'out', expected_return = '9:30' where student_id = %L and date = public.today_kst()$$, :st1), 1, 'teacher marks out again');
+select tests.expect_true(format($$(select expected_return = '09:30' from public.outings where student_id = %L and date = public.today_kst())$$, :st1),
+  'expected return is normalized to HH:MM');
 -- 다른 학년 학생(2학년 1반)의 외출·복귀
-select tests.expect_affected(format($$insert into public.outings (date, student_id, status, reason) values (public.today_kst(), %L, 'out', '학원')$$, :st2), 1, 'teacher checks out a student of another grade');
+select tests.expect_affected(format($$insert into public.outings (date, student_id, status, reason, expected_return) values (public.today_kst(), %L, 'out', '학원', '23:00')$$, :st2), 1, 'teacher checks out a student of another grade');
 select tests.expect_affected(format($$update public.outings set status = 'in' where student_id = %L and date = public.today_kst()$$, :st2), 1, 'and marks the return');
 reset role;
 select tests.logout();
@@ -367,7 +373,7 @@ select tests.logout();
 -- ─────────────────────────── 반려 · 취소 ───────────────────────────
 select tests.login(:s2);
 set role authenticated;
-select public.create_outing_request('집에 다녀올게요');
+select public.create_outing_request('집에 다녀올게요', '23:00');
 reset role;
 select tests.logout();
 select id as req2 from public.outing_requests where student_id = :st2 and status = 'pending' \gset
@@ -393,7 +399,7 @@ select tests.expect_true(format($$(select status = 'rejected' and reject_reason 
 
 select tests.login(:s2);
 set role authenticated;
-select public.create_outing_request('다시 신청');
+select public.create_outing_request('다시 신청', '23:00');
 reset role;
 select tests.logout();
 select id as req3 from public.outing_requests where student_id = :st2 and status = 'pending' \gset
@@ -424,13 +430,14 @@ select tests.expect_true(format($$(select checked_by = %L and checked_by_name = 
 -- ─────────────────────────── 자동 복귀(복귀 예정 시각이 지나면) ───────────────────────────
 update public.outings set status = 'out', expected_return = '0:00', reason = '자동 복귀 시험'
  where student_id = :st3 and date = public.today_kst();
+update public.outings set expected_return = '23:59' where student_id = :st1 and date = public.today_kst();
 select tests.expect_true('(select private.auto_return_outings() >= 1)', 'auto return runs');
 select tests.expect_true(format($$(select status = 'in' and checked_by_name = '자동 복귀' and expected_return is null
   from public.outings where student_id = %L and date = public.today_kst())$$, :st3), 'an outing past its expected return becomes 재실');
 select tests.expect_true(format($$(select ended_by_name = '자동 복귀' and ended_at is not null
   from public.outing_log where student_id = %L and reason = '자동 복귀 시험')$$, :st3), 'outing log records the automatic return');
 select tests.expect_true(format($$(select status = 'out' from public.outings where student_id = %L and date = public.today_kst())$$, :st1),
-  'an outing without an expected return stays out');
+  'an outing before its expected return stays out');
 select tests.login(:admin);
 set role authenticated;
 select tests.expect_error('select private.auto_return_outings()', 'clients cannot run the auto return', '%permission denied%');

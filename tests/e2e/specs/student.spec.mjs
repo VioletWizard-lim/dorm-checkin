@@ -68,6 +68,8 @@ test.describe("학생 화면", () => {
     await expect.poll(() => alerts).toEqual(["외출 사유를 입력해 주세요."]);
 
     await page.fill("#reasonInput", "편의점");
+    await page.click("#requestBtn");
+    await expect.poll(() => alerts.at(-1)).toBe("예상 복귀 시각을 골라 주세요.");
     await page.selectOption("#startHour", "18");
     await page.selectOption("#startMinute", "00");
     await page.selectOption("#returnHour", "17");
@@ -168,6 +170,8 @@ test.describe("외출 신청 승인", () => {
     await env.createStudentAccount(STUDENT.hong, "hong123");
     const studentPage = await openOtherAs("hong123", "/student.html");
     await studentPage.fill("#reasonInput", "편의점");
+    await studentPage.selectOption("#returnHour", "23");
+    await studentPage.selectOption("#returnMinute", "59");
     await studentPage.click("#requestBtn");
     await expect(studentPage.locator("#requestList .request-chip")).toHaveText(["승인 대기"]);
 
@@ -188,6 +192,8 @@ test.describe("외출 신청 승인", () => {
     await env.createStudentAccount(STUDENT.seoyeon, "seoyeon.lee");
     const studentPage = await openOtherAs("seoyeon.lee", "/student.html");
     await studentPage.fill("#reasonInput", "학원");
+    await studentPage.selectOption("#returnHour", "23");
+    await studentPage.selectOption("#returnMinute", "59");
     await studentPage.click("#requestBtn");
     await expect(studentPage.locator("#requestList .request-chip")).toHaveText(["승인 대기"]);
     const [request] = await requestsOf(env, STUDENT.seoyeon);

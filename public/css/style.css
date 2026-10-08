@@ -80,6 +80,12 @@ input {
   text-align: center;
 }
 
+.login-brand__icon {
+  display: block;
+  width: 64px;
+  height: 64px;
+}
+
 .login-brand__logo {
   width: 52px;
   height: 52px;
