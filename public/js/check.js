@@ -383,7 +383,6 @@ async function sendOutingNotice(studentId) {
         name: student.name || "",
         cls: student.cls || "",
         number: deriveSeatNoFromSid(student.sid),
-        sid: student.sid || "",
         dateLabel: formatDate(Date.now()),
         start: outing.startTime || formatTime(outing.since),
         back: outing.expectedReturn || "미정",

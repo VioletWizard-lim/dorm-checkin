@@ -54,12 +54,11 @@ function wrapText(ctx, text, maxWidth, maxLines) {
   return lines;
 }
 
-// pass: { name, cls, number, sid, dateLabel, start, back, reason, teacher }
+// pass: { name, cls, number, dateLabel, start, back, reason, teacher }
 export async function renderOutingPassJpeg(pass) {
   const rows = [
     ["이름", pass.name],
     ["학년·반·번호", `${pass.cls}${pass.number ? ` ${pass.number}번` : ""}`],
-    ["학번", pass.sid || "-"],
     ["외출 일시", `${pass.dateLabel} ${pass.start} ~ ${pass.back}`],
     ["사유", pass.reason || "사유 미기재"],
     ["확인 교사", pass.teacher || "-"],
