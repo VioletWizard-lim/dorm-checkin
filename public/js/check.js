@@ -8,7 +8,8 @@ import {
   isScheduledOuting,
   createStartTimeTicker,
 } from "./adapters.js";
-import { drawOutingPass, outingPassData } from "./outing-pass.js";
+import { outingPassData } from "./outing-pass.js";
+import { createPassDialog } from "./pass-dialog.js";
 
 let currentTeacherId = "";
 let currentTeacherName = "";
@@ -31,10 +32,6 @@ const pastDateNoticeEl = document.getElementById("pastDateNotice");
 const requestPanelEl = document.getElementById("requestPanel");
 const requestCountEl = document.getElementById("requestCount");
 const requestListEl = document.getElementById("requestList");
-const passDialogEl = document.getElementById("passDialog");
-const passDialogTitleEl = document.getElementById("passDialogTitle");
-const passDialogCanvas = document.getElementById("passDialogCanvas");
-const passDialogCloseBtn = document.getElementById("passDialogClose");
 
 // outings는 하루가 지나도 기록이 남도록 날짜별로 저장한다(outings 테이블의 date 열).
 // "조회 날짜"를 오늘이 아닌 값으로 바꾸면 그 날짜의 기록을 보고 고칠 수 있다(지난 기록 수정).
@@ -285,45 +282,18 @@ function render() {
 
   renderList(filtered);
   renderRequestPanel();
-  refreshPassDialog();
+  passDialog.refresh();
 }
 
-// 외출증 팝업: 학생 화면(student.html)과 같은 외출증을 교사 화면에서도 본다.
-// 열려 있는 동안 기록이 바뀌면 다시 그리고, 복귀·취소로 외출이 끝나면 닫는다.
-let passStudentId = "";
-let drawnPassKey = "";
-
-function refreshPassDialog() {
-  if (!passStudentId || !passDialogEl.open) return;
-  const student = getAllStudents().find((s) => s.id === passStudentId);
+// 외출증 팝업: 학생 화면(student.html)과 같은 외출증을 교사 화면에서도 본다(외출중·외출 예정일 때만).
+const passDialog = createPassDialog((studentId) => {
+  const student = getAllStudents().find((s) => s.id === studentId);
   const status = student ? getOutingStatus(student) : "in";
-  if (status !== "out" && status !== "scheduled") {
-    passDialogEl.close();
-    return;
-  }
-  const pass = outingPassData(student, state.outings[student.id], state.selectedDate);
-  passDialogTitleEl.textContent = `${student.name || "이름 없음"} 외출증${status === "scheduled" ? " (외출 예정)" : ""}`;
-  const key = JSON.stringify(pass);
-  if (key === drawnPassKey) return;
-  drawnPassKey = key;
-  drawOutingPass(passDialogCanvas, pass);
-}
-
-function openPassDialog(studentId) {
-  passStudentId = studentId;
-  drawnPassKey = "";
-  passDialogEl.showModal();
-  refreshPassDialog();
-}
-
-passDialogEl.addEventListener("close", () => {
-  passStudentId = "";
-  drawnPassKey = "";
-});
-passDialogCloseBtn.addEventListener("click", () => passDialogEl.close());
-// 바깥(어두운 부분)을 눌러도 닫힘
-passDialogEl.addEventListener("click", (event) => {
-  if (event.target === passDialogEl) passDialogEl.close();
+  if (status !== "out" && status !== "scheduled") return null;
+  return {
+    title: `${student.name || "이름 없음"} 외출증${status === "scheduled" ? " (외출 예정)" : ""}`,
+    pass: outingPassData(student, state.outings[student.id], state.selectedDate),
+  };
 });
 
 // 내가 승인할 수 있는 오늘의 신청만 보여준다(범위 밖 신청은 서버도 거부함).
@@ -453,7 +423,7 @@ chipsEl.addEventListener("click", (event) => {
 listEl.addEventListener("click", (event) => {
   const passBtn = event.target.closest("[data-pass-id]");
   if (passBtn) {
-    openPassDialog(passBtn.dataset.passId);
+    passDialog.open(passBtn.dataset.passId);
     return;
   }
 
