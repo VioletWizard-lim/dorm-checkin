@@ -5,9 +5,25 @@ const WIDTH = 640;
 const HEIGHT = 860;
 const FONT = '"Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif';
 // 가운데에 찍는 도장 문구(위·가운데). 아래 줄에는 외출 날짜가 들어간다.
-const STAMP_TOP = "기숙사";
+const STAMP_TOP = "강화고 기숙사";
 const STAMP_MAIN = "외출승인";
 const STAMP_COLOR = "#C0392B";
+// 맨 아래에 넣는 학교 로고(마크 + 학교 이름). 원본이 작아서(163×55) 1.6배로 그림
+const SCHOOL_LOGO_URL = new URL("../img/school-logo.png", import.meta.url).href;
+const LOGO_SCALE = 1.6;
+
+let logoPromise = null;
+function loadSchoolLogo() {
+  if (!logoPromise) {
+    logoPromise = new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => resolve(null); // 로고를 못 불러와도 외출증은 그린다
+      img.src = SCHOOL_LOGO_URL;
+    });
+  }
+  return logoPromise;
+}
 
 // 빨간 도장: 이중 테두리 원 + 문구, 살짝 기울이고 반투명하게(글자 위에 찍은 것처럼)
 function drawStamp(ctx, cx, cy, bottomText) {
@@ -37,7 +53,7 @@ function drawStamp(ctx, cx, cy, bottomText) {
   }
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.font = `700 28px ${FONT}`;
+  ctx.font = `700 22px ${FONT}`;
   ctx.fillText(STAMP_TOP, 0, -64);
   ctx.font = `900 46px ${FONT}`;
   ctx.fillText(STAMP_MAIN, 0, 2);
@@ -103,7 +119,10 @@ export async function drawOutingPass(canvas, pass) {
     ["확인 교사", pass.teacher || "-"],
   ];
   const footer = "복귀하면 사감 선생님께 꼭 알려 주세요.";
-  await ensureFont(["외 출 증", "기숙사 외출 확인", footer, STAMP_TOP, STAMP_MAIN, ...rows.flat()].join(""));
+  const [logo] = await Promise.all([
+    loadSchoolLogo(),
+    ensureFont(["외 출 증", "기숙사 외출 확인", footer, STAMP_TOP, STAMP_MAIN, ...rows.flat()].join("")),
+  ]);
   canvas.width = WIDTH;
   canvas.height = HEIGHT;
   const ctx = canvas.getContext("2d");
@@ -154,5 +173,13 @@ export async function drawOutingPass(canvas, pass) {
   ctx.textAlign = "center";
   ctx.fillStyle = "#C0392B";
   ctx.font = `700 24px ${FONT}`;
-  ctx.fillText(footer, WIDTH / 2, HEIGHT - 80);
+  ctx.fillText(footer, WIDTH / 2, HEIGHT - 150);
+
+  // 맨 아래 가운데에 학교 로고
+  if (logo) {
+    const w = logo.naturalWidth * LOGO_SCALE;
+    const h = logo.naturalHeight * LOGO_SCALE;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(logo, (WIDTH - w) / 2, HEIGHT - 44 - h, w, h);
+  }
 }
