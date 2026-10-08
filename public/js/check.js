@@ -8,6 +8,7 @@ import {
   isScheduledOuting,
   createStartTimeTicker,
 } from "./adapters.js";
+import { drawOutingPass, outingPassData } from "./outing-pass.js";
 
 let currentTeacherId = "";
 let currentTeacherName = "";
@@ -30,6 +31,10 @@ const pastDateNoticeEl = document.getElementById("pastDateNotice");
 const requestPanelEl = document.getElementById("requestPanel");
 const requestCountEl = document.getElementById("requestCount");
 const requestListEl = document.getElementById("requestList");
+const passDialogEl = document.getElementById("passDialog");
+const passDialogTitleEl = document.getElementById("passDialogTitle");
+const passDialogCanvas = document.getElementById("passDialogCanvas");
+const passDialogCloseBtn = document.getElementById("passDialogClose");
 
 // outings는 하루가 지나도 기록이 남도록 날짜별로 저장한다(outings 테이블의 date 열).
 // "조회 날짜"를 오늘이 아닌 값으로 바꾸면 그 날짜의 기록을 보고 고칠 수 있다(지난 기록 수정).
@@ -209,10 +214,14 @@ function renderList(filtered) {
       let actionsHtml;
       if (status === "in") {
         actionsHtml = `<button type="button" class="toggle-btn toggle-btn--mark-out" data-toggle-id="${escapeHtml(s.id)}" data-grade="${escapeHtml(s.grade)}" data-current-status="in">외출 체크</button>`;
-      } else if (status === "out") {
-        actionsHtml = `<button type="button" class="toggle-btn toggle-btn--mark-in" data-toggle-id="${escapeHtml(s.id)}" data-grade="${escapeHtml(s.grade)}" data-current-status="out">복귀 체크</button>`;
-      } else if (status === "scheduled") {
-        actionsHtml = `<button type="button" class="toggle-btn toggle-btn--mark-in" data-toggle-id="${escapeHtml(s.id)}" data-grade="${escapeHtml(s.grade)}" data-current-status="out" data-confirm-cancel="${escapeHtml(s.name || "이 학생")}">외출 취소</button>`;
+      } else if (isOut) {
+        // 외출중·외출 예정: 학생 화면과 같은 외출증을 볼 수 있다
+        const passBtn = `<button type="button" class="btn-secondary btn-small" data-pass-id="${escapeHtml(s.id)}">외출증 보기</button>`;
+        const toggleBtn =
+          status === "out"
+            ? `<button type="button" class="toggle-btn toggle-btn--mark-in" data-toggle-id="${escapeHtml(s.id)}" data-grade="${escapeHtml(s.grade)}" data-current-status="out">복귀 체크</button>`
+            : `<button type="button" class="toggle-btn toggle-btn--mark-in" data-toggle-id="${escapeHtml(s.id)}" data-grade="${escapeHtml(s.grade)}" data-current-status="out" data-confirm-cancel="${escapeHtml(s.name || "이 학생")}">외출 취소</button>`;
+        actionsHtml = `<div class="roster-actions">${passBtn}${toggleBtn}</div>`;
       } else if (status === "leave") {
         actionsHtml = `<div class="since-text ml-auto">학생 명단 관리에서 설정</div>`;
       } else {
@@ -276,7 +285,46 @@ function render() {
 
   renderList(filtered);
   renderRequestPanel();
+  refreshPassDialog();
 }
+
+// 외출증 팝업: 학생 화면(student.html)과 같은 외출증을 교사 화면에서도 본다.
+// 열려 있는 동안 기록이 바뀌면 다시 그리고, 복귀·취소로 외출이 끝나면 닫는다.
+let passStudentId = "";
+let drawnPassKey = "";
+
+function refreshPassDialog() {
+  if (!passStudentId || !passDialogEl.open) return;
+  const student = getAllStudents().find((s) => s.id === passStudentId);
+  const status = student ? getOutingStatus(student) : "in";
+  if (status !== "out" && status !== "scheduled") {
+    passDialogEl.close();
+    return;
+  }
+  const pass = outingPassData(student, state.outings[student.id], state.selectedDate);
+  passDialogTitleEl.textContent = `${student.name || "이름 없음"} 외출증${status === "scheduled" ? " (외출 예정)" : ""}`;
+  const key = JSON.stringify(pass);
+  if (key === drawnPassKey) return;
+  drawnPassKey = key;
+  drawOutingPass(passDialogCanvas, pass);
+}
+
+function openPassDialog(studentId) {
+  passStudentId = studentId;
+  drawnPassKey = "";
+  passDialogEl.showModal();
+  refreshPassDialog();
+}
+
+passDialogEl.addEventListener("close", () => {
+  passStudentId = "";
+  drawnPassKey = "";
+});
+passDialogCloseBtn.addEventListener("click", () => passDialogEl.close());
+// 바깥(어두운 부분)을 눌러도 닫힘
+passDialogEl.addEventListener("click", (event) => {
+  if (event.target === passDialogEl) passDialogEl.close();
+});
 
 // 내가 승인할 수 있는 오늘의 신청만 보여준다(범위 밖 신청은 서버도 거부함).
 function renderRequestPanel() {
@@ -403,6 +451,12 @@ chipsEl.addEventListener("click", (event) => {
 });
 
 listEl.addEventListener("click", (event) => {
+  const passBtn = event.target.closest("[data-pass-id]");
+  if (passBtn) {
+    openPassDialog(passBtn.dataset.passId);
+    return;
+  }
+
   const restoreBtn = event.target.closest("[data-restore-id]");
   if (restoreBtn) {
     // 저장이 끝나 목록이 다시 그려질 때까지 같은 버튼을 또 누르지 못하게 한다.

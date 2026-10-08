@@ -17,6 +17,7 @@ test.describe("외출 체크 화면", () => {
     await expect(page.locator("#outCountText")).toHaveText("외출중 0명");
     await expect(card(page, "홍길동").locator(".status-badge")).toHaveText("재실");
     await expect(card(page, "홍길동").getByRole("button", { name: "외출 체크" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "외출증 보기" })).toHaveCount(0); // 외출중·외출 예정에만
     await expect(card(page, "김민준").locator(".status-badge")).toHaveText("자리 없음");
     await expect(card(page, "김민준").getByRole("button", { name: "재실로 되돌리기" })).toBeVisible();
     await expect(card(page, "박지훈").locator(".status-badge")).toHaveText("명령퇴사");
@@ -47,8 +48,18 @@ test.describe("외출 체크 화면", () => {
     expect(toParent.text).toContain("확인 교사: 김담임");
     expect((await outingRow(env, todayKst(), STUDENT.hong)).notice).toMatchObject({ status: "done", parent: { result: "sent" } });
 
+    // 학생 화면과 같은 외출증을 교사 화면에서도 팝업으로 본다
+    await card(page, "홍길동").getByRole("button", { name: "외출증 보기" }).click();
+    const passDialog = page.locator("#passDialog");
+    await expect(passDialog).toBeVisible();
+    await expect(page.locator("#passDialogTitle")).toHaveText("홍길동 외출증");
+    await expect.poll(() => page.locator("#passDialogCanvas").evaluate((c) => [c.width, c.height])).toEqual([640, 860]);
+    await passDialog.getByRole("button", { name: "닫기" }).click();
+    await expect(passDialog).toBeHidden();
+
     await card(page, "홍길동").getByRole("button", { name: "복귀 체크" }).click();
     await expect(card(page, "홍길동").locator(".status-badge")).toHaveText("재실");
+    await expect(card(page, "홍길동").getByRole("button", { name: "외출증 보기" })).toHaveCount(0);
     const back = await outingRow(env, todayKst(), STUDENT.hong);
     expect(back).toMatchObject({ status: "in", reason: null, expected_return: null, notice: null });
     expect(env.sms.messages).toHaveLength(1); // 복귀할 때는 보내지 않음
@@ -141,6 +152,13 @@ test.describe("외출 체크 화면", () => {
     await expect(card(page, "이서윤")).toBeVisible();
     await env.sql("update public.rooms set name = '2·3학년 자습실' where name = '2·3학년실'");
     await expect(page.locator("#filterChips .filter-chip")).toHaveText(["전체", "1학년실", "2·3학년 자습실"]);
+
+    // 외출증을 보고 있는 동안 다른 교사가 복귀 체크하면 팝업이 닫힌다
+    await card(page, "이서윤").getByRole("button", { name: "외출증 보기" }).click();
+    await expect(page.locator("#passDialogTitle")).toHaveText("이서윤 외출증");
+    await card(other, "이서윤").getByRole("button", { name: "복귀 체크" }).click();
+    await expect(page.locator("#passDialog")).toBeHidden();
+    await expect(card(page, "이서윤").locator(".status-badge")).toHaveText("재실");
   });
 
   test("저장이 거부되면 알림을 띄우고 화면은 그대로 둔다", async ({ env, openAs, page }) => {

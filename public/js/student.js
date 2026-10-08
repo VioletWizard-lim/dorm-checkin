@@ -3,7 +3,7 @@
 import { supabase, requireStudent, signOutTo, describeError, showPageError } from "./supabase-client.js";
 import { liveTable } from "./live-table.js";
 import { studentFromRow, isScheduledOuting, createStartTimeTicker } from "./adapters.js";
-import { drawOutingPass } from "./outing-pass.js";
+import { drawOutingPass, outingPassData } from "./outing-pass.js";
 
 function getDateKey(date = new Date()) {
   const y = date.getFullYear();
@@ -227,12 +227,6 @@ function renderRequests() {
 // 외출 시각이 되면 다시 그려서 "외출 예정" → "외출중"으로 바꾼다.
 const updateStartTicker = createStartTimeTicker(() => render());
 
-// 학번 마지막 2자리 = 번호 (예: "10305" → 5)
-function numberFromSid(sid) {
-  const match = /^\d{3}(\d{2})$/.exec((sid || "").trim());
-  return match ? String(Number(match[1])) : "";
-}
-
 // 승인된 외출(외출중·외출 예정)이 있으면 외출증을 그린다. 내용이 바뀔 때만 다시 그림.
 let drawnPassKey = "";
 function renderPass() {
@@ -243,18 +237,7 @@ function renderPass() {
     drawnPassKey = "";
     return;
   }
-  const o = state.outing;
-  const [, month, day] = TODAY_KEY.split("-").map(Number);
-  const pass = {
-    name: state.student.name || "",
-    cls: state.student.cls || "",
-    number: numberFromSid(state.student.sid),
-    dateLabel: `${month}월 ${day}일`,
-    start: o.start_time || formatTime(o.since),
-    back: o.expected_return || "미정",
-    reason: o.reason || "",
-    teacher: o.checked_by_name || "",
-  };
+  const pass = outingPassData(state.student, state.outing, TODAY_KEY);
   const key = JSON.stringify(pass);
   if (key === drawnPassKey) return;
   drawnPassKey = key;

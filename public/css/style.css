@@ -1648,3 +1648,37 @@ input {
   background: #E9F6EC;
   color: #1E8449;
 }
+
+/* 교사 체크 화면의 외출증 팝업 */
+.pass-dialog {
+  width: min(420px, calc(100vw - 32px));
+  padding: 16px;
+  border: none;
+  border-radius: 16px;
+  background: var(--color-card-bg);
+  color: var(--color-text);
+}
+
+.pass-dialog::backdrop {
+  background: rgba(28, 34, 48, 0.55);
+}
+
+.pass-dialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.pass-dialog__title {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.pass-dialog .pass-canvas {
+  max-height: calc(100vh - 120px);
+  width: auto;
+  max-width: 100%;
+  margin: 0 auto;
+}
