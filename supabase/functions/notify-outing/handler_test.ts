@@ -10,7 +10,6 @@ import {
   type NotifyOutingDeps,
   type OutingRow,
   parentNoticeText,
-  studentPassText,
 } from "./handler.ts";
 
 const TODAY = "2026-10-08";
@@ -31,14 +30,7 @@ function profile(overrides: Partial<Profile> = {}): Profile {
   };
 }
 
-const HONG: NoticeStudent = {
-  id: "st1",
-  name: "홍길동",
-  sid: "10305",
-  cls: "1학년 3반",
-  phone: "01011112222",
-  parent_phone: "01033334444",
-};
+const HONG: NoticeStudent = { id: "st1", name: "홍길동", parent_phone: "01033334444" };
 
 const OUTING: OutingRow = {
   date: TODAY,
@@ -51,30 +43,19 @@ const OUTING: OutingRow = {
   checked_by_name: "김담임",
 };
 
-// 가장 작은 JPEG 머리(FF D8 FF) + 데이터
-const JPEG_BASE64 = btoa(String.fromCharCode(0xff, 0xd8, 0xff, 0xe0, 1, 2, 3));
-
 function fakeDeps(options: {
   caller?: Profile;
   outing?: OutingRow | null;
   student?: NoticeStudent | null;
   sms?: "on" | "off";
-  failKeys?: string[];
-  failUpload?: boolean;
+  fail?: boolean;
 } = {}) {
-  const calls = { claims: [] as Notice[], finished: [] as Notice[], sent: [] as SmsMessage[], uploads: [] as string[] };
+  const calls = { claims: [] as Notice[], finished: [] as Notice[], sent: [] as SmsMessage[] };
   const sms: SmsSender = {
-    async uploadMmsImage(b64) {
-      calls.uploads.push(b64);
-      if (options.failUpload) throw new Error("업로드 실패");
-      return "IMG1";
-    },
     async send(messages) {
       calls.sent.push(...messages);
       const results = new Map<string, SmsResult>();
-      for (const m of messages) {
-        results.set(m.key, options.failKeys?.includes(m.key) ? { ok: false, error: "수신 거부" } : { ok: true });
-      }
+      for (const m of messages) results.set(m.key, options.fail ? { ok: false, error: "수신 거부" } : { ok: true });
       return results;
     },
   };
@@ -106,20 +87,11 @@ async function assertHttpError(promise: Promise<unknown>, status: number) {
   assertEquals(err.status, status);
 }
 
-Deno.test("sends the pass (MMS) to the student and a notice to the parent, and records both", async () => {
+Deno.test("sends the outing notice to the parent only (the pass is shown on the student page) and records it", async () => {
   const { deps, calls } = fakeDeps();
-  const result = await handleNotifyOuting({ date: TODAY, studentId: "st1", image: JPEG_BASE64 }, deps);
-  assertEquals(calls.uploads, [JPEG_BASE64]);
-  assertEquals(calls.sent.map((m) => [m.key, m.to, m.imageId ?? null]), [
-    ["student", "01011112222", "IMG1"],
-    ["parent", "01033334444", null],
-  ]);
-  const expected: Notice = {
-    status: "done",
-    at: "2026-10-08T10:00:00.000Z",
-    student: { result: "sent", mms: true },
-    parent: { result: "sent" },
-  };
+  const result = await handleNotifyOuting({ date: TODAY, studentId: "st1" }, deps);
+  assertEquals(calls.sent.map((m) => [m.key, m.to, m.subject]), [["parent", "01033334444", "외출 안내"]]);
+  const expected: Notice = { status: "done", at: "2026-10-08T10:00:00.000Z", parent: { result: "sent" } };
   assertEquals(result, expected);
   assertEquals(calls.claims, [{ status: "sending", at: "2026-10-08T10:00:00.000Z" }]);
   assertEquals(calls.finished, [expected]);
@@ -129,7 +101,7 @@ Deno.test("sends only once per outing", async () => {
   const { deps, calls } = fakeDeps();
   await handleNotifyOuting({ date: TODAY, studentId: "st1" }, deps);
   assertEquals(await handleNotifyOuting({ date: TODAY, studentId: "st1" }, deps), { status: "skipped" });
-  assertEquals(calls.sent.length, 2);
+  assertEquals(calls.sent.length, 1);
 });
 
 Deno.test("skips when the student is not out (or already notified)", async () => {
@@ -145,23 +117,17 @@ Deno.test("without Solapi keys it records not-configured and sends nothing", asy
   assertEquals(calls.sent, []);
 });
 
-Deno.test("no image, a bad image or a failed upload falls back to a long text message", async () => {
-  for (const image of [undefined, btoa("not a jpeg"), "%%%"]) {
-    const { deps, calls } = fakeDeps();
-    const result = (await handleNotifyOuting({ date: TODAY, studentId: "st1", image }, deps)) as { student: unknown };
-    assertEquals(calls.uploads, []);
-    assertEquals(calls.sent[0].imageId, undefined);
-    assertEquals(result.student, { result: "sent", mms: false });
-  }
-  const { deps, calls } = fakeDeps({ failUpload: true });
-  await handleNotifyOuting({ date: TODAY, studentId: "st1", image: JPEG_BASE64 }, deps);
-  assertEquals(calls.sent[0].imageId, undefined);
-});
+Deno.test("a missing parent number or a failed send is recorded", async () => {
+  const noPhone = fakeDeps({ student: { ...HONG, parent_phone: null } });
+  assertEquals(await handleNotifyOuting({ date: TODAY, studentId: "st1" }, noPhone.deps), {
+    status: "done",
+    at: "2026-10-08T10:00:00.000Z",
+    parent: { result: "no-phone" },
+  });
+  assertEquals(noPhone.calls.sent, []);
 
-Deno.test("missing phone numbers and failed sends are recorded per target", async () => {
-  const { deps } = fakeDeps({ student: { ...HONG, phone: null }, failKeys: ["parent"] });
-  const result = (await handleNotifyOuting({ date: TODAY, studentId: "st1" }, deps)) as Record<string, unknown>;
-  assertEquals(result.student, { result: "no-phone" });
+  const failed = fakeDeps({ fail: true });
+  const result = (await handleNotifyOuting({ date: TODAY, studentId: "st1" }, failed.deps)) as Record<string, unknown>;
   assertEquals(result.parent, { result: "failed", error: "수신 거부" });
 });
 
@@ -172,10 +138,10 @@ Deno.test("only active staff may call, and only for today's outings", async () =
   await assertHttpError(handleNotifyOuting({ date: TODAY }, fakeDeps().deps), 400);
 });
 
-Deno.test("message texts use the requested start time, or the check time in KST", () => {
+Deno.test("the parent text uses the requested start time, or the check time in KST", () => {
   assertEquals(
-    studentPassText(HONG, OUTING),
-    "[기숙사 외출증]\n홍길동 (1학년 3반 5번)\n10월 8일 19:00 ~ 21:00\n사유: 병원\n확인 교사: 김담임",
+    parentNoticeText(HONG, OUTING),
+    "[기숙사 외출 안내]\n홍길동 학생이 10월 8일 19:00에 외출합니다.\n복귀 예정: 21:00\n사유: 병원\n확인 교사: 김담임",
   );
   assertEquals(
     parentNoticeText(HONG, { ...OUTING, start_time: null, expected_return: null, reason: null }),

@@ -1,4 +1,4 @@
-import { assertEquals, assertRejects } from "jsr:@std/assert@1";
+import { assertEquals } from "jsr:@std/assert@1";
 import { authorizationHeader, createSmsSender, normalizeSender, smsConfigFromEnv } from "./solapi.ts";
 
 const env = (values: Record<string, string>) => ({ get: (key: string) => values[key] });
@@ -46,16 +46,16 @@ Deno.test("send posts every message once and maps failures back by key", async (
     body: { groupInfo: {}, failedMessageList: [{ statusMessage: "수신번호 형식 오류", customFields: { key: "parent" } }] },
   }));
   const results = await createSmsSender(config, impl).send([
-    { key: "student", to: "01011112222", text: "외출증", subject: "외출증", imageId: "IMG1" },
-    { key: "parent", to: "0101", text: "안내" },
+    { key: "student", to: "01011112222", text: "비밀번호" },
+    { key: "parent", to: "0101", text: "안내", subject: "외출 안내" },
   ]);
   assertEquals(calls.length, 1);
   assertEquals(calls[0].url, "https://sms.test/messages/v4/send-many/detail");
   assertEquals(calls[0].auth.startsWith("HMAC-SHA256 apiKey=k, date="), true);
   assertEquals(calls[0].body.allowDuplicates, true); // 학생·학부모 번호가 같아도 둘 다 보냄
   assertEquals(calls[0].body.messages, [
-    { to: "01011112222", from: "0212345678", text: "외출증", subject: "외출증", imageId: "IMG1", type: "MMS", customFields: { key: "student" } },
-    { to: "0101", from: "0212345678", text: "안내", customFields: { key: "parent" } },
+    { to: "01011112222", from: "0212345678", text: "비밀번호", customFields: { key: "student" } },
+    { to: "0101", from: "0212345678", text: "안내", subject: "외출 안내", customFields: { key: "parent" } },
   ]);
   assertEquals(results.get("student"), { ok: true });
   assertEquals(results.get("parent"), { ok: false, error: "수신번호 형식 오류" });
@@ -65,14 +65,4 @@ Deno.test("a rejected request marks every message as failed with the API's reaso
   const { impl } = fakeFetch(() => ({ status: 403, body: { errorCode: "Forbidden", errorMessage: "잔액이 부족합니다." } }));
   const results = await createSmsSender(config, impl).send([{ key: "a", to: "01011112222", text: "x" }]);
   assertEquals(results.get("a"), { ok: false, error: "잔액이 부족합니다." });
-});
-
-Deno.test("uploadMmsImage returns the file id", async () => {
-  const { calls, impl } = fakeFetch(() => ({ body: { fileId: "FILE123" } }));
-  assertEquals(await createSmsSender(config, impl).uploadMmsImage("/9j/AAAA"), "FILE123");
-  assertEquals(calls[0].url, "https://sms.test/storage/v1/files");
-  assertEquals(calls[0].body, { file: "/9j/AAAA", type: "MMS", name: "outing-pass.jpg" });
-
-  const { impl: failing } = fakeFetch(() => ({ status: 400, body: { errorMessage: "파일이 너무 큽니다." } }));
-  await assertRejects(() => createSmsSender(config, failing).uploadMmsImage("x"), Error, "파일이 너무 큽니다.");
 });

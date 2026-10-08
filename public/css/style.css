@@ -1465,6 +1465,39 @@ input {
   border-color: var(--color-active);
 }
 
+/* 학생 화면 외출증 */
+.pass-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(28, 34, 48, 0.12);
+}
+
+.pass-clock {
+  margin-left: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-out);
+  font-variant-numeric: tabular-nums;
+}
+
+.pass-clock::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--color-out);
+  vertical-align: middle;
+  animation: pass-pulse 1s ease-in-out infinite;
+}
+
+@keyframes pass-pulse {
+  50% { opacity: 0.2; }
+}
+
 .student-form .btn-primary {
   margin-top: 0;
 }

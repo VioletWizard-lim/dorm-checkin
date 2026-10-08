@@ -8,7 +8,6 @@ import {
   isScheduledOuting,
   createStartTimeTicker,
 } from "./adapters.js";
-import { renderOutingPassJpeg } from "./outing-pass.js";
 
 let currentTeacherId = "";
 let currentTeacherName = "";
@@ -88,34 +87,19 @@ function formatTime(ts) {
   return `${hh}:${mm}`;
 }
 
-function formatDate(ts) {
-  const d = new Date(ts);
-  return `${d.getMonth() + 1}월 ${d.getDate()}일`;
-}
-
-// 외출 문자 결과 한 줄(notify-outing이 outings.notice에 기록). 표시할 게 없으면 ""
-const NOTICE_TARGET_LABEL = { sent: "✓", failed: "실패", "no-phone": "번호 없음" };
+// 외출 문자 결과 한 줄(notify-outing이 outings.notice에 기록). 표시할 게 없으면 text가 ""
+// 학부모에게만 보낸다(학생 외출증은 학생 화면에 뜸).
+const NOTICE_LABEL = { sent: "문자 학부모 ✓", failed: "문자 학부모 실패", "no-phone": "학부모 번호 없음" };
 function describeNotice(notice) {
   if (!notice) return { text: "", failed: false, title: "" };
   if (notice.status === "sending") return { text: "문자 보내는 중", failed: false, title: "" };
   if (notice.status === "not-configured") return { text: "문자 설정 전", failed: false, title: "" };
-  const student = (notice.student && notice.student.result) || "no-phone";
-  const parent = (notice.parent && notice.parent.result) || "no-phone";
-  const errors = [
-    notice.student && notice.student.error ? `학생: ${notice.student.error}` : "",
-    notice.parent && notice.parent.error ? `학부모: ${notice.parent.error}` : "",
-  ].filter(Boolean);
+  const parent = notice.parent || {};
   return {
-    text: `문자 학생 ${NOTICE_TARGET_LABEL[student] || "-"} · 학부모 ${NOTICE_TARGET_LABEL[parent] || "-"}`,
-    failed: student === "failed" || parent === "failed",
-    title: errors.join("\n"),
+    text: NOTICE_LABEL[parent.result] || "",
+    failed: parent.result === "failed",
+    title: parent.error ? `학부모: ${parent.error}` : "",
   };
-}
-
-// 학번 마지막 2자리 = 번호 (예: "10305" -> 5번)
-function deriveSeatNoFromSid(sid) {
-  const match = /^\d{3}(\d{2})$/.exec((sid || "").trim());
-  return match ? String(Number(match[1])) : "";
 }
 
 function getAllStudents() {
@@ -344,7 +328,7 @@ async function approveRequest(requestId, btn) {
     requestsLive ? requestsLive.refresh() : null,
     outingsLive && state.selectedDate === TODAY_KEY ? outingsLive.refresh() : null,
   ]);
-  // 승인 = 외출 시작이므로 "외출 체크"와 같이 학생·학부모에게 문자를 보낸다.
+  // 승인 = 외출 시작이므로 "외출 체크"와 같이 학부모에게 문자를 보낸다.
   sendOutingNotice(request.student_id);
 }
 
@@ -370,31 +354,11 @@ requestListEl.addEventListener("click", (event) => {
   if (rejectBtn) rejectRequest(rejectBtn.dataset.rejectRequest, rejectBtn);
 });
 
-// 오늘 외출이 시작되면(외출 체크·신청 승인) 학생에게 외출증 문자(MMS), 학부모에게 안내 문자를 보낸다.
+// 오늘 외출이 시작되면(외출 체크·신청 승인) 학부모에게 외출 안내 문자를 보낸다(학생 외출증은 학생 화면에 뜸).
 // 실제 발송과 중복 방지는 서버(notify-outing)가 하고, 결과는 outings.notice로 카드에 실시간 표시된다.
-// 외출증 이미지는 여기서 만들어 함께 보낸다(못 만들면 서버가 장문 문자로 보냄).
 async function sendOutingNotice(studentId) {
-  const student = findStudent(studentId);
-  const outing = state.outings[studentId];
-  let image = null;
-  if (student && outing && outing.status === "out") {
-    try {
-      image = await renderOutingPassJpeg({
-        name: student.name || "",
-        cls: student.cls || "",
-        number: deriveSeatNoFromSid(student.sid),
-        dateLabel: formatDate(Date.now()),
-        start: outing.startTime || formatTime(outing.since),
-        back: outing.expectedReturn || "미정",
-        reason: outing.reason,
-        teacher: outing.checkedByName || currentTeacherName || currentTeacherId,
-      });
-    } catch (err) {
-      console.warn("외출증 이미지를 만들지 못했습니다:", err);
-    }
-  }
   try {
-    await callFunction("notify-outing", { date: TODAY_KEY, studentId, ...(image ? { image } : {}) });
+    await callFunction("notify-outing", { date: TODAY_KEY, studentId });
   } catch (err) {
     console.warn("외출 문자 요청 실패:", err);
     showPageError(`외출 문자를 보내지 못했습니다(${err.message}).`);

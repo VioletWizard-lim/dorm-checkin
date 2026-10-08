@@ -24,7 +24,7 @@ test.describe("외출 체크 화면", () => {
     await expect(card(page, "박지훈").locator("button")).toHaveCount(0);
   });
 
-  test("외출 체크 → 사유·복귀 시각 저장, 담당 교사 기록, 학생 외출증(MMS)·학부모 문자 → 복귀 체크", async ({ env, openAs, page }) => {
+  test("외출 체크 → 사유·복귀 시각 저장, 담당 교사 기록, 학부모 문자 → 복귀 체크", async ({ env, openAs, page }) => {
     answerDialogs(page, ["병원 진료", "18:00"]);
     await openAs("homeroom01", "/check.html");
     await card(page, "홍길동").getByRole("button", { name: "외출 체크" }).click();
@@ -36,31 +36,22 @@ test.describe("외출 체크 화면", () => {
     const row = await outingRow(env, todayKst(), STUDENT.hong);
     expect(row).toMatchObject({ status: "out", reason: "병원 진료", expected_return: "18:00", checked_by_name: "김담임" });
 
-    // 학생에게는 화면에서 만든 외출증 이미지(JPEG)를 붙인 MMS, 학부모에게는 안내 문자
-    await expect(card(page, "홍길동").locator(".notice-text")).toHaveText("문자 학생 ✓ · 학부모 ✓");
-    expect(env.sms.uploads).toHaveLength(1);
-    expect(env.sms.uploads[0]).toMatchObject({ type: "MMS" });
-    expect(Buffer.from(env.sms.uploads[0].file, "base64").subarray(0, 3)).toEqual(Buffer.from([0xff, 0xd8, 0xff]));
-    expect(Buffer.from(env.sms.uploads[0].file, "base64").length).toBeLessThan(200 * 1024);
-    const [toStudent, toParent] = env.sms.messages;
-    expect(toStudent).toMatchObject({ to: "01011112222", from: "0212345678", type: "MMS", imageId: "FILE1", subject: "외출증" });
-    expect(toStudent.text).toContain("홍길동 (1학년 3반 5번)");
-    expect(toStudent.text).toContain("~ 18:00");
-    expect(toStudent.text).toContain("사유: 병원 진료");
-    expect(toStudent.text).toContain("확인 교사: 김담임");
-    expect(toParent).toMatchObject({ to: "01033334444", subject: "외출 안내" });
+    // 학부모에게만 안내 문자(학생 외출증은 학생 화면에 뜸 — 문자 비용 절약)
+    await expect(card(page, "홍길동").locator(".notice-text")).toHaveText("문자 학부모 ✓");
+    expect(env.sms.messages).toHaveLength(1);
+    const [toParent] = env.sms.messages;
+    expect(toParent).toMatchObject({ to: "01033334444", from: "0212345678", subject: "외출 안내" });
     expect(toParent.text).toContain("홍길동 학생이");
-    expect((await outingRow(env, todayKst(), STUDENT.hong)).notice).toMatchObject({
-      status: "done",
-      student: { result: "sent", mms: true },
-      parent: { result: "sent" },
-    });
+    expect(toParent.text).toContain("복귀 예정: 18:00");
+    expect(toParent.text).toContain("사유: 병원 진료");
+    expect(toParent.text).toContain("확인 교사: 김담임");
+    expect((await outingRow(env, todayKst(), STUDENT.hong)).notice).toMatchObject({ status: "done", parent: { result: "sent" } });
 
     await card(page, "홍길동").getByRole("button", { name: "복귀 체크" }).click();
     await expect(card(page, "홍길동").locator(".status-badge")).toHaveText("재실");
     const back = await outingRow(env, todayKst(), STUDENT.hong);
     expect(back).toMatchObject({ status: "in", reason: null, expected_return: null, notice: null });
-    expect(env.sms.messages).toHaveLength(2); // 복귀할 때는 보내지 않음
+    expect(env.sms.messages).toHaveLength(1); // 복귀할 때는 보내지 않음
   });
 
   test("문자 실패는 카드에 빨갛게 보인다", async ({ env, openAs, page }) => {
@@ -69,19 +60,19 @@ test.describe("외출 체크 화면", () => {
     await openAs("homeroom01", "/check.html");
     await card(page, "홍길동").getByRole("button", { name: "외출 체크" }).click();
     const notice = card(page, "홍길동").locator(".notice-text");
-    await expect(notice).toHaveText("문자 학생 ✓ · 학부모 실패");
+    await expect(notice).toHaveText("문자 학부모 실패");
     await expect(notice).toHaveClass(/notice-text--failed/);
     await expect(notice).toHaveAttribute("title", "학부모: 수신번호 오류");
   });
 
-  test("사유 입력을 취소해도 외출 체크는 된다(연락처 없는 학생은 문자 없음)", async ({ env, openAs, page }) => {
+  test("사유 입력을 취소해도 외출 체크는 된다(학부모 연락처가 없으면 문자 없음)", async ({ env, openAs, page }) => {
     answerDialogs(page, [null, null]);
     await openAs("teacher01", "/check.html");
     await card(page, "최하늘").getByRole("button", { name: "외출 체크" }).click();
     await expect(card(page, "최하늘").locator(".status-badge")).toHaveText("외출중");
     const row = await outingRow(env, todayKst(), STUDENT.haneul);
     expect(row).toMatchObject({ status: "out", reason: null, expected_return: null });
-    await expect(card(page, "최하늘").locator(".notice-text")).toHaveText("문자 학생 번호 없음 · 학부모 번호 없음");
+    await expect(card(page, "최하늘").locator(".notice-text")).toHaveText("학부모 번호 없음");
     expect(env.sms.messages).toHaveLength(0);
   });
 

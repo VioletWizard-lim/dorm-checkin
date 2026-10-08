@@ -49,7 +49,7 @@ serve(async (req) => {
       async get(id) {
         const { data, error } = await admin
           .from("students")
-          .select("id, name, sid, cls, phone, parent_phone")
+          .select("id, name, parent_phone")
           .eq("id", id)
           .maybeSingle();
         if (error) throw error;

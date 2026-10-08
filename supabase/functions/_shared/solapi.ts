@@ -1,4 +1,4 @@
-// 솔라피(문자) REST API: HMAC 인증, MMS 이미지 업로드, 여러 건 한 번에 발송.
+// 솔라피(문자) REST API: HMAC 인증, 여러 건 한 번에 발송.
 // 키는 Supabase Edge Function 시크릿(SOLAPI_API_KEY·SOLAPI_API_SECRET·SMS_SENDER)에만 둔다.
 // 키가 없으면 smsConfigFromEnv가 null을 돌려주고, 부르는 쪽은 문자만 건너뛴다(외출 처리·계정 발급은 그대로).
 
@@ -10,15 +10,12 @@ export type SmsMessage = {
   key: string; // 결과를 찾을 때 쓰는 이름(예: "student", "parent", 학생 id)
   to: string;
   text: string;
-  subject?: string;
-  imageId?: string; // 있으면 MMS
+  subject?: string; // 장문(LMS)일 때만 쓰임
 };
 
 export type SmsResult = { ok: true } | { ok: false; error: string };
 
 export interface SmsSender {
-  // MMS용 JPEG(base64, 200KB 이하) → 솔라피 파일 id
-  uploadMmsImage(jpegBase64: string): Promise<string>;
   send(messages: SmsMessage[]): Promise<Map<string, SmsResult>>;
 }
 
@@ -86,14 +83,6 @@ export function createSmsSender(config: SmsConfig, fetchImpl: typeof fetch = fet
   }
 
   return {
-    async uploadMmsImage(jpegBase64) {
-      const data = (await request("storage/v1/files", { file: jpegBase64, type: "MMS", name: "outing-pass.jpg" })) as {
-        fileId?: string;
-      };
-      if (!data?.fileId) throw new Error("이미지를 올리지 못했습니다.");
-      return data.fileId;
-    },
-
     async send(messages) {
       const results = new Map<string, SmsResult>();
       if (messages.length === 0) return results;
@@ -108,8 +97,7 @@ export function createSmsSender(config: SmsConfig, fetchImpl: typeof fetch = fet
             from: config.sender,
             text: m.text,
             ...(m.subject ? { subject: m.subject } : {}),
-            // 이미지가 있으면 MMS, 없으면 솔라피가 길이를 보고 단문/장문을 고른다.
-            ...(m.imageId ? { imageId: m.imageId, type: "MMS" } : {}),
+            // 단문/장문은 솔라피가 길이를 보고 고른다.
             customFields: { key: m.key },
           })),
         })) as typeof data;
