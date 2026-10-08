@@ -2,6 +2,7 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm";
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STAFF_EMAIL_DOMAIN, STUDENT_EMAIL_DOMAIN } from "./supabase-config.js";
 import { studentFromRow, userFromProfile } from "./adapters.js";
+import { startIdleLogout } from "./idle-logout.js";
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
@@ -61,9 +62,18 @@ async function loadOwnProfile() {
 // 교직원 화면 공통 진입: 세션과 프로필을 확인한다.
 // - 로그인 안 됨 → login.html / 학생 계정 → student.html
 // - 삭제(비활성화)됐거나 역할이 없는 계정 → 로그아웃 후 login.html?disabled=1
+// - 2시간 동안 조작이 없었으면 → 로그아웃 후 login.html?idle=1(idle-logout.js, 화면을 열어 둔 동안에도 지켜봄)
 // - 그 외 → { uid, loginId, profile } (profile은 예전 users/{uid} 모양, adapters.js 참고)
 // 다른 곳으로 보내는 중이면 null을 돌려준다.
 export async function requireStaff() {
+  const { data } = await supabase.auth.getSession();
+  if (data && data.session && data.session.user.app_metadata?.kind !== "student") {
+    const expired = startIdleLogout(() => signOutTo("./login.html?idle=1"));
+    if (expired) {
+      await signOutTo("./login.html?idle=1");
+      return null;
+    }
+  }
   const row = await loadOwnProfile();
   if (!row) return null;
   if (row.kind === "student") {

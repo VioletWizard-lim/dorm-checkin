@@ -1,4 +1,5 @@
 import { supabase, staffEmail, studentEmail } from "./supabase-client.js";
+import { markActivity } from "./idle-logout.js";
 
 const MODE_STORAGE_KEY = "dormcheckin.loginMode";
 
@@ -135,6 +136,8 @@ setMode(readStorage(MODE_STORAGE_KEY) || "staff");
 
 if (new URLSearchParams(window.location.search).get("disabled") === "1") {
   showError("삭제(비활성화)된 계정입니다. 관리자에게 문의해 주세요.");
+} else if (new URLSearchParams(window.location.search).get("idle") === "1") {
+  showNotice("2시간 동안 사용하지 않아 자동으로 로그아웃되었습니다. 다시 로그인해 주세요.");
 }
 
 // 이미 로그인돼 있으면 계정 종류에 맞는 화면으로(학생 계정은 만들 때 app_metadata.kind = "student").
@@ -174,5 +177,6 @@ form.addEventListener("submit", async (event) => {
     showError(mapAuthError(error));
     return;
   }
+  markActivity(); // 예전 기록 때문에 로그인하자마자 자동 로그아웃되지 않게
   window.location.replace(config.target);
 });
