@@ -282,7 +282,7 @@ function renderGrid(room) {
           // "외출"(재실 -> 외출중)은 여기서 할 수 없다 — check.html에서만.
           actionButtonsHtml = `<button type="button" class="seat-cell__action-btn" data-seat-mark-away="${escapeHtml(studentId)}">자리없음</button>`;
         } else if (rawStatus === "scheduled") {
-          actionButtonsHtml = `<button type="button" class="seat-cell__action-btn" data-seat-restore="${escapeHtml(studentId)}">외출 취소</button>`;
+          actionButtonsHtml = `<button type="button" class="seat-cell__action-btn" data-seat-restore="${escapeHtml(studentId)}" data-confirm-cancel="${escapeHtml(name)}">외출 취소</button>`;
         } else if (rawStatus === "out") {
           actionButtonsHtml = `<button type="button" class="seat-cell__action-btn" data-seat-restore="${escapeHtml(studentId)}">복귀</button>`;
         } else {
@@ -502,6 +502,8 @@ seatGridEl.addEventListener("click", (event) => {
 
   const restoreBtn = event.target.closest("[data-seat-restore]");
   if (restoreBtn) {
+    // 승인된 외출(외출 예정)을 취소할 때는 한 번 확인한다.
+    if (restoreBtn.dataset.confirmCancel && !window.confirm(`${restoreBtn.dataset.confirmCancel} 학생의 외출을 취소할까요?`)) return;
     restoreToIn(restoreBtn.dataset.seatRestore);
     state.actionCellKey = null;
     render();
