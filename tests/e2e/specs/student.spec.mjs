@@ -240,6 +240,20 @@ test.describe("외출 예정(승인됐지만 외출 시각 전)", () => {
     await expect(page.locator("#outCountText")).toHaveText("외출중 1명");
   });
 
+  test("교사 화면: 외출 취소는 확인을 한 번 받는다(취소하면 그대로)", async ({ env, context, page, openAs }) => {
+    await seedApprovedOuting(env);
+    await context.clock.install({ time: fakeNow() });
+    const dialogs = answerDialogs(page, [false, true]);
+    await openAs("admin01", "/check.html");
+    const cancelBtn = page.locator(".student-card", { hasText: "홍길동" }).getByRole("button", { name: "외출 취소" });
+    await cancelBtn.click();
+    await expect.poll(() => dialogs.map((d) => d.message)).toEqual(["홍길동 학생의 외출을 취소할까요?"]);
+    expect((await outingOf(env, STUDENT.hong)).status).toBe("out");
+    await cancelBtn.click();
+    await expect.poll(async () => (await outingOf(env, STUDENT.hong)).status).toBe("in");
+    expect(dialogs).toHaveLength(2);
+  });
+
   test("현황판·좌석 배치판: 외출 예정은 인원에서 빼고 좌석은 외출 색이 아니다", async ({ env, context, page, openAs }) => {
     await seedApprovedOuting(env);
     await context.clock.install({ time: fakeNow() });
@@ -253,6 +267,10 @@ test.describe("외출 예정(승인됐지만 외출 시각 전)", () => {
     await expect(seat).not.toHaveClass(/seat-cell--out/);
     await seat.click();
     await expect(seat.locator(".seat-cell__action-btn")).toHaveText(["외출 취소", "취소"]);
+    const dialogs = answerDialogs(page, [false, true]);
+    await seat.locator(".seat-cell__action-btn", { hasText: "외출 취소" }).click();
+    await expect.poll(() => dialogs.map((d) => d.message)).toEqual(["홍길동 학생의 외출을 취소할까요?"]);
+    expect((await outingOf(env, STUDENT.hong)).status).toBe("out"); // 확인 창에서 취소하면 그대로
     await seat.locator(".seat-cell__action-btn", { hasText: "외출 취소" }).click();
     await expect.poll(async () => (await outingOf(env, STUDENT.hong)).status).toBe("in");
   });

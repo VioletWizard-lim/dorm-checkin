@@ -212,7 +212,7 @@ function renderList(filtered) {
       } else if (status === "out") {
         actionsHtml = `<button type="button" class="toggle-btn toggle-btn--mark-in" data-toggle-id="${escapeHtml(s.id)}" data-grade="${escapeHtml(s.grade)}" data-current-status="out">복귀 체크</button>`;
       } else if (status === "scheduled") {
-        actionsHtml = `<button type="button" class="toggle-btn toggle-btn--mark-in" data-toggle-id="${escapeHtml(s.id)}" data-grade="${escapeHtml(s.grade)}" data-current-status="out">외출 취소</button>`;
+        actionsHtml = `<button type="button" class="toggle-btn toggle-btn--mark-in" data-toggle-id="${escapeHtml(s.id)}" data-grade="${escapeHtml(s.grade)}" data-current-status="out" data-confirm-cancel="${escapeHtml(s.name || "이 학생")}">외출 취소</button>`;
       } else if (status === "leave") {
         actionsHtml = `<div class="since-text ml-auto">학생 명단 관리에서 설정</div>`;
       } else {
@@ -416,6 +416,8 @@ listEl.addEventListener("click", (event) => {
   const btn = event.target.closest("[data-toggle-id]");
   if (!btn) return;
   const currentStatus = btn.dataset.currentStatus;
+  // 승인된 외출(외출 예정)을 취소할 때는 한 번 확인한다(잘못 누르면 승인이 없어지므로).
+  if (btn.dataset.confirmCancel && !window.confirm(`${btn.dataset.confirmCancel} 학생의 외출을 취소할까요?`)) return;
   let reason = "";
   let expectedReturn = "";
   if (currentStatus === "in") {

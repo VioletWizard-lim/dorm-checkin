@@ -237,9 +237,9 @@ outing_requests   -- 학생 외출 신청: date(KST), student_id, requested_by, 
 - "자리 없음"의 예전 값 `unauthorized`는 이전할 때 `away`로 바뀌었다
 - 외출 시각 표시: `start_time`이 있으면 그 값, 없으면(교사가 직접 "외출 체크") `since`
 - **외출 예정**: 오늘 기록이 `out`이고 `start_time`이 지금(화면을 연 컴퓨터 시각)보다 나중이면 화면에서만 "외출 예정"으로 취급(`adapters.js`의 `isScheduledOuting`, DB 상태는 그대로 `out`). 각 화면은 `createStartTimeTicker`로 가장 가까운 외출 시각에 다시 그려서 "외출중"으로 바꾼다
-  - check.html: "외출 예정" 배지 + [외출 취소](재실로), 상단 인원은 "외출중 N명 · 외출 예정 M명"
+  - check.html: "외출 예정" 배지 + [외출 취소](재실로, 확인 창 한 번), 상단 인원은 "외출중 N명 · 외출 예정 M명"
   - display.html: 외출중 패널 맨 아래 점선 카드, 인원은 "N명 · 예정 M명"(외출중 인원에서 뺌)
-  - seat.html: 외출 색으로 칠하지 않고 좌석에 "HH:MM 외출 예정", 눌렀을 때 [외출 취소]
+  - seat.html: 외출 색으로 칠하지 않고 좌석에 "HH:MM 외출 예정", 눌렀을 때 [외출 취소](확인 창 한 번)
   - student.html: "외출 예정" 배지, 새 신청은 잠김
 - 날짜 키는 화면을 연 컴퓨터의 로컬 날짜(학교 PC는 KST), 서버 RPC는 `today_kst()`
 
