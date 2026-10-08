@@ -1,10 +1,8 @@
-// 외출증 이미지(JPEG) 만들기 — 학생에게 MMS로 보낼 종이 외출증 모양.
-// 서버(Deno)에서는 한글 글꼴로 그림을 그리기 어려워서, 화면에 이미 있는 Noto Sans KR로 브라우저 canvas에서 그린다.
-// 결과는 data: 접두어를 뺀 base64. 솔라피 MMS 한도(200KB)보다 작게 만든다.
+// 외출증 그리기 — 학생 화면(student.html)에 띄우는 종이 외출증 모양(도장 포함).
+// 예전에는 학생에게 MMS로 보냈지만 문자 비용 때문에 화면에 띄우는 것으로 바꿨다(학부모에게는 안내 문자만).
 
 const WIDTH = 640;
 const HEIGHT = 860;
-const MAX_BYTES = 190 * 1024;
 const FONT = '"Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif';
 // 가운데에 찍는 도장 문구(위·가운데). 아래 줄에는 외출 날짜가 들어간다.
 const STAMP_TOP = "기숙사";
@@ -95,8 +93,8 @@ function wrapText(ctx, text, maxWidth, maxLines) {
   return lines;
 }
 
-// pass: { name, cls, number, dateLabel, start, back, reason, teacher }
-export async function renderOutingPassJpeg(pass) {
+// canvas에 외출증을 그린다. pass: { name, cls, number, dateLabel, start, back, reason, teacher }
+export async function drawOutingPass(canvas, pass) {
   const rows = [
     ["이름", pass.name],
     ["학년·반·번호", `${pass.cls}${pass.number ? ` ${pass.number}번` : ""}`],
@@ -106,11 +104,10 @@ export async function renderOutingPassJpeg(pass) {
   ];
   const footer = "복귀하면 사감 선생님께 꼭 알려 주세요.";
   await ensureFont(["외 출 증", "기숙사 외출 확인", footer, STAMP_TOP, STAMP_MAIN, ...rows.flat()].join(""));
-  const canvas = document.createElement("canvas");
   canvas.width = WIDTH;
   canvas.height = HEIGHT;
   const ctx = canvas.getContext("2d");
-  if (!ctx) return null;
+  if (!ctx) return;
 
   ctx.fillStyle = "#FFFFFF";
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
@@ -158,10 +155,4 @@ export async function renderOutingPassJpeg(pass) {
   ctx.fillStyle = "#C0392B";
   ctx.font = `700 24px ${FONT}`;
   ctx.fillText(footer, WIDTH / 2, HEIGHT - 80);
-
-  for (const quality of [0.85, 0.7, 0.55]) {
-    const base64 = canvas.toDataURL("image/jpeg", quality).split(",")[1] || "";
-    if (base64.length * 0.75 <= MAX_BYTES) return base64;
-  }
-  return null;
 }

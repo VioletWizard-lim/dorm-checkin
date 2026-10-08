@@ -25,6 +25,13 @@
     <div class="my-status" id="statusBox"><span class="student-empty">불러오는 중...</span></div>
   </section>
 
+  <!-- 승인된 외출이 있을 때만: 확인하는 선생님께 보여 주는 외출증(문자 대신 화면으로) -->
+  <section class="student-section" id="passSection" hidden>
+    <div class="student-section__title">외출증 <span class="pass-clock" id="passClock"></span></div>
+    <canvas class="pass-canvas" id="passCanvas" role="img" aria-label="외출증"></canvas>
+    <div class="field-hint">확인하는 선생님께 이 화면을 그대로 보여 주세요. 위의 시계가 움직이지 않으면 캡처한 화면입니다.</div>
+  </section>
+
   <section class="student-section">
     <div class="student-section__title">외출 신청</div>
     <form class="student-form" id="requestForm" novalidate>

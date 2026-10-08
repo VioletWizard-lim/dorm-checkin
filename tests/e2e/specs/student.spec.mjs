@@ -143,17 +143,24 @@ test.describe("외출 신청 승인", () => {
       request_id: request.id,
       checked_by_name: "김담임",
     });
-    // 승인 = 외출 시작: 학생 외출증(MMS)·학부모 문자
-    await expect(page.locator(".student-card", { hasText: "홍길동" }).locator(".notice-text")).toHaveText("문자 학생 ✓ · 학부모 ✓");
-    expect(env.sms.messages.map((m) => m.to)).toEqual(["01011112222", "01033334444"]);
-    expect(env.sms.messages[0].text).toContain("00:00 ~ 21:00");
+    // 승인 = 외출 시작: 학부모에게 안내 문자(학생 외출증은 학생 화면에)
+    await expect(page.locator(".student-card", { hasText: "홍길동" }).locator(".notice-text")).toHaveText("문자 학부모 ✓");
+    expect(env.sms.messages.map((m) => m.to)).toEqual(["01033334444"]);
+    expect(env.sms.messages[0].text).toContain("00:00에 외출합니다");
+    expect(env.sms.messages[0].text).toContain("복귀 예정: 21:00");
     expect(env.sms.messages[0].text).toContain("사유: 치과");
-    expect(env.sms.messages[0].text).toContain("확인 교사: 김담임");
 
     await expect(studentPage.locator("#requestList .request-chip")).toHaveText(["승인됨"]);
     await expect(studentPage.locator("#requestList")).toContainText("김담임 선생님 승인");
     await expect(studentPage.locator("#statusBox .status-badge")).toHaveText("외출중");
     await expect(studentPage.locator("#statusBox")).toContainText("00:00부터 외출 중");
+    // 외출증이 학생 화면에 뜨고, 옆 시계가 초 단위로 움직인다(캡처 화면이 아님을 보여 줌)
+    await expect(studentPage.locator("#passSection")).toBeVisible();
+    await expect(studentPage.locator("#passClock")).toHaveText(/^\d{2}:\d{2}:\d{2}$/);
+    const firstTick = await studentPage.locator("#passClock").textContent();
+    await expect(studentPage.locator("#passClock")).not.toHaveText(firstTick, { timeout: 3000 });
+    const passSize = await studentPage.locator("#passCanvas").evaluate((c) => [c.width, c.height]);
+    expect(passSize).toEqual([640, 860]);
     await expect(studentPage.locator("#requestHint")).toContainText("이미 외출 중입니다");
   });
 
@@ -172,6 +179,7 @@ test.describe("외출 신청 승인", () => {
     expect(await outingOf(env, STUDENT.hong)).toBeNull();
 
     await expect(studentPage.locator("#requestList .request-chip")).toHaveText(["반려됨"]);
+    await expect(studentPage.locator("#passSection")).toBeHidden();
     await expect(studentPage.locator("#requestList")).toContainText("사유: 자습 시간입니다");
     await expect(studentPage.locator("#requestBtn")).toBeEnabled();
   });

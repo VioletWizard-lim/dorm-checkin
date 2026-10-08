@@ -86,7 +86,6 @@ function fakeDeps(
     generatePin: () => String(123450 + ++pin),
     sms: options.sms
       ? {
-        uploadMmsImage: () => Promise.reject(new Error("not used")),
         send(messages) {
           calls.sms.push(...messages);
           const results = new Map<string, SmsResult>();

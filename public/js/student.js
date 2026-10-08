@@ -3,6 +3,7 @@
 import { supabase, requireStudent, signOutTo, describeError, showPageError } from "./supabase-client.js";
 import { liveTable } from "./live-table.js";
 import { studentFromRow, isScheduledOuting, createStartTimeTicker } from "./adapters.js";
+import { drawOutingPass } from "./outing-pass.js";
 
 function getDateKey(date = new Date()) {
   const y = date.getFullYear();
@@ -27,6 +28,9 @@ const requestBtn = document.getElementById("requestBtn");
 const requestHint = document.getElementById("requestHint");
 const requestListEl = document.getElementById("requestList");
 const logoutBtn = document.getElementById("logoutBtn");
+const passSection = document.getElementById("passSection");
+const passCanvas = document.getElementById("passCanvas");
+const passClock = document.getElementById("passClock");
 
 const STATUS_META = {
   in: { badge: "재실", badgeClass: "status-badge--in" },
@@ -223,10 +227,56 @@ function renderRequests() {
 // 외출 시각이 되면 다시 그려서 "외출 예정" → "외출중"으로 바꾼다.
 const updateStartTicker = createStartTimeTicker(() => render());
 
+// 학번 마지막 2자리 = 번호 (예: "10305" → 5)
+function numberFromSid(sid) {
+  const match = /^\d{3}(\d{2})$/.exec((sid || "").trim());
+  return match ? String(Number(match[1])) : "";
+}
+
+// 승인된 외출(외출중·외출 예정)이 있으면 외출증을 그린다. 내용이 바뀔 때만 다시 그림.
+let drawnPassKey = "";
+function renderPass() {
+  const status = currentStatus();
+  const show = status === "out" || status === "scheduled";
+  passSection.hidden = !show;
+  if (!show) {
+    drawnPassKey = "";
+    return;
+  }
+  const o = state.outing;
+  const [, month, day] = TODAY_KEY.split("-").map(Number);
+  const pass = {
+    name: state.student.name || "",
+    cls: state.student.cls || "",
+    number: numberFromSid(state.student.sid),
+    dateLabel: `${month}월 ${day}일`,
+    start: o.start_time || formatTime(o.since),
+    back: o.expected_return || "미정",
+    reason: o.reason || "",
+    teacher: o.checked_by_name || "",
+  };
+  const key = JSON.stringify(pass);
+  if (key === drawnPassKey) return;
+  drawnPassKey = key;
+  drawOutingPass(passCanvas, pass);
+}
+
+// 외출증 옆 시계(초 단위) — 움직이는 걸로 캡처한 화면이 아님을 보여 준다.
+function tickPassClock() {
+  if (passSection.hidden) return;
+  const now = new Date();
+  passClock.textContent = [now.getHours(), now.getMinutes(), now.getSeconds()]
+    .map((n) => String(n).padStart(2, "0"))
+    .join(":");
+}
+setInterval(tickPassClock, 1000);
+
 function render() {
   if (!state.student) return;
   updateStartTicker(state.outing ? [state.outing] : []);
   renderStatus();
+  renderPass();
+  tickPassClock();
   renderForm();
   renderRequests();
 }

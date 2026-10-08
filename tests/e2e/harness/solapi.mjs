@@ -22,11 +22,10 @@ export class FakeSolapi {
     this.server = createServer((req, res) => this.handle(req, res));
   }
 
-  // messages: 보낸 문자(to, from, text, subject, imageId, type, customFields), uploads: 올린 MMS 이미지(base64)
+  // messages: 보낸 문자(to, from, text, subject, customFields)
   // failTo: 이 번호로 가는 문자는 실패로 답한다
   reset() {
     this.messages = [];
-    this.uploads = [];
     this.failTo = new Set();
   }
 
@@ -48,10 +47,6 @@ export class FakeSolapi {
       };
       if (!verifyAuth(req.headers.authorization)) return reply(401, { errorCode: "Unauthorized", errorMessage: "인증 실패" });
       const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
-      if (req.url === "/storage/v1/files") {
-        this.uploads.push(body);
-        return reply(200, { fileId: `FILE${this.uploads.length}` });
-      }
       if (req.url === "/messages/v4/send-many/detail") {
         const failed = [];
         for (const m of body.messages || []) {
