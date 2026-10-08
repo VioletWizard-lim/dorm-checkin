@@ -33,7 +33,7 @@
   4. 머지 직전에 이전 워크플로를 한 번 더 실행(그 사이 Firebase에 입력된 내용 반영) → 머지
   5. 관리자가 계정 관리의 "비밀번호 일괄 재발급"으로 교사 비밀번호를 새로 나눠 줌. 열려 있던 화면(전자칠판 등)은 새로고침
 - 파일 위치:
-  - `supabase/migrations/`: 테이블(`profiles`·`students`·`rooms`·`outings`·`outing_requests`), 권한 함수(`is_staff`·`can_manage_student`·`can_edit_room` 등), RLS, RPC(좌석 배정·크기 변경·외출 신청/취소/승인/반려)
+  - `supabase/migrations/`: 테이블(`profiles`·`students`·`rooms`·`outings`·`outing_requests`), 권한 함수(`private.is_staff`·`private.can_manage_student`·`private.can_edit_room` 등), RLS, RPC(좌석 배정·크기 변경·외출 신청/취소/승인/반려 — 본체는 `private`, `public`에는 껍데기)
   - `supabase/functions/`: Edge Functions(Deno)
     - `staff-accounts`: 교사 계정 생성·비밀번호 재발급·비활성화(ban), 관리자 전용
     - `student-accounts`: 학생 계정 발급(여러 명)·비밀번호 재발급·삭제(`withStudent`면 명단 행까지). 호출자가 그 학생의 명단을 관리할 수 있어야 함(`_shared/scope.ts`의 `canManageStudent` — DB `can_manage_student`와 같은 규칙)
@@ -244,6 +244,7 @@ outing_requests   -- 학생 외출 신청: date(KST), student_id, requested_by, 
 - `profiles`: 교직원은 전체, 그 외는 자기 것만 읽기. 역할·이름·담당 범위 수정은 admin만, 본인 행 제외. 생성·삭제·비활성화는 Edge Function(service_role)만
 - `outing_requests`: 교직원 + 신청한 본인 읽기, 쓰기는 RPC로만
 - 계정 비활성화는 로그인 자체를 차단(ban)한다
+- 권한 판정 함수(`is_staff`·`can_manage_student` 등)와 RPC 본체(security definer)는 API로 열리지 않는 `private` 스키마에 둔다. 화면이 부르는 RPC는 `public`에 같은 이름·인자의 security invoker 껍데기만 있다(Supabase 보안 점검 경고 방지, DB 테스트가 같은 기준으로 확인). 새 RPC도 이 방식으로 추가할 것
 - RLS는 조건에 안 맞는 행을 조용히 건너뛰므로(에러 없이 0행), 화면은 update·delete 뒤 `.select("id")`로 실제로 바뀐 행이 있는지 확인한다
 
 ## 디자인 톤 (와이어프레임 기준)
