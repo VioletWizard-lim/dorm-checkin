@@ -13,8 +13,7 @@ async function studentAccount(env, studentId) {
 }
 
 test.describe("학생 계정 관리(학생 명단 화면)", () => {
-  test("계정 발급(비밀번호는 학생에게 문자로) → 학생 로그인 → 비번 재발급(문자 실패면 화면에) → 계정 삭제", async ({ env, openAs, openOtherAs, page }) => {
-    answerDialogs(page, [true, true]);
+  test("담임이 계정 발급(비밀번호는 학생에게 문자로) → 학생 로그인 → 관리자가 비번 재발급(문자 실패면 화면에) → 계정 삭제", async ({ env, openAs, openOtherAs, page }) => {
     await openAs("homeroom01", "/students.html");
     await expect(rosterCard(page, "홍길동").locator(".account-chip")).toHaveText("계정 없음");
     // 목록에는 학번·이름·반·번호만(연락처·이메일·ID는 수정 폼에서만)
@@ -39,18 +38,35 @@ test.describe("학생 계정 관리(학생 명단 화면)", () => {
 
     expect(await tryLogin(openOtherAs, "Hong123", pin, { student: true })).toBe("ok");
 
+    // 비번 재발급·계정 삭제는 관리자만(담임 화면에는 버튼이 없고, 서버도 거부)
+    await expect(rosterCard(page, "홍길동").getByRole("button", { name: "비번 재발급" })).toHaveCount(0);
+    await expect(rosterCard(page, "홍길동").getByRole("button", { name: "계정 삭제" })).toHaveCount(0);
+    const denied = await page.evaluate(async (id) => {
+      const { callFunction } = await import("/js/supabase-client.js");
+      try {
+        await callFunction("student-accounts", { action: "reset-password", studentId: id });
+        return "ok";
+      } catch (err) {
+        return err.message;
+      }
+    }, STUDENT.hong);
+    expect(denied).toBe("비밀번호 재발급은 관리자만 할 수 있습니다.");
+
+    const admin = await openOtherAs("admin01", "/students.html");
+    answerDialogs(admin, [true, true]);
     // 문자가 실패하면 비밀번호를 화면에 보여 준다
     env.sms.failTo.add("01011112222");
-    await rosterCard(page, "홍길동").getByRole("button", { name: "비번 재발급" }).click();
-    const reset = page.locator("#accountResultList .student-card").first();
+    await rosterCard(admin, "홍길동").getByRole("button", { name: "비번 재발급" }).click();
+    const reset = admin.locator("#accountResultList .student-card").first();
     await expect(reset).toContainText("재발급됨");
     await expect(reset).toContainText("문자 실패(수신번호 오류)");
     const newPin = /비밀번호: (\d{6})/.exec(await reset.textContent())[1];
-    await expect(page.locator("#accountResultCopy")).toHaveValue(`홍길동\t10305\thong123\t${newPin}`);
+    await expect(admin.locator("#accountResultCopy")).toHaveValue(`홍길동\t10305\thong123\t${newPin}`);
     expect(await tryLogin(openOtherAs, "hong123", pin, { student: true })).toBe(WRONG_LOGIN);
     expect(await tryLogin(openOtherAs, "hong123", newPin, { student: true })).toBe("ok");
 
-    await rosterCard(page, "홍길동").getByRole("button", { name: "계정 삭제" }).click();
+    await rosterCard(admin, "홍길동").getByRole("button", { name: "계정 삭제" }).click();
+    await expect(rosterCard(admin, "홍길동").locator(".account-chip")).toHaveText("계정 없음");
     await expect(rosterCard(page, "홍길동").locator(".account-chip")).toHaveText("계정 없음");
     expect(await studentAccount(env, STUDENT.hong)).toBeNull();
     expect(await studentRow(env, STUDENT.hong)).not.toBeNull();

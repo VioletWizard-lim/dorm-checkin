@@ -293,6 +293,74 @@ select tests.expect_affected(format($$update public.outings set status = 'in' wh
 select tests.expect_true(format($$(select start_time is null and reason is null and expected_return is null and request_id is null
   from public.outings where student_id = %L and date = public.today_kst())$$, :st1), 'return clears start time and request fields');
 select tests.expect_affected(format($$update public.outings set status = 'out' where student_id = %L and date = public.today_kst()$$, :st1), 1, 'teacher marks out again');
+-- 다른 학년 학생(2학년 1반)의 외출·복귀
+select tests.expect_affected(format($$insert into public.outings (date, student_id, status, reason) values (public.today_kst(), %L, 'out', '학원')$$, :st2), 1, 'teacher checks out a student of another grade');
+select tests.expect_affected(format($$update public.outings set status = 'in' where student_id = %L and date = public.today_kst()$$, :st2), 1, 'and marks the return');
+reset role;
+select tests.logout();
+
+-- ─────────────────────────── 외출 기록(outing_log) ───────────────────────────
+select tests.expect_true(format($$(select count(*) = 2
+    and count(*) filter (where request_id = %L and start_time = '15:30' and reason = '병원 진료' and out_by_name = '김담임'
+                           and ended_at is not null and ended_by_name = '김담임') = 1
+    and count(*) filter (where request_id is null and ended_at is null) = 1
+  from public.outing_log where student_id = %L and date = public.today_kst())$$, :'req1', :st1),
+  'outing log keeps the approved outing with its return time, and the new open one');
+select tests.expect_true(format($$(select count(*) = 1 and bool_and(reason = '학원' and ended_at >= out_at)
+  from public.outing_log where student_id = %L)$$, :st2), 'outing log records a direct check-out and its return');
+
+select tests.login(:t13);
+set role authenticated;
+select tests.expect_count(format($$select * from public.outing_log where student_id = %L$$, :st1), 2, 'homeroom sees own class history');
+select tests.expect_count(format($$select * from public.outing_log where student_id = %L$$, :st2), 0, 'homeroom cannot see other class history');
+select tests.expect_error($$insert into public.outing_log (date, student_id, out_at) values (current_date, gen_random_uuid(), now())$$,
+  'nobody writes the outing log directly', '%permission denied%');
+reset role;
+select tests.login(:gm1);
+set role authenticated;
+select tests.expect_count('select * from public.outing_log', 2, 'grade manager sees own grade history only');
+reset role;
+select tests.login(:admin);
+set role authenticated;
+select tests.expect_count('select * from public.outing_log', 3, 'admin sees all history');
+reset role;
+select tests.login(:dorm);
+set role authenticated;
+select tests.expect_count('select * from public.outing_log', 0, 'dorm staff cannot see history');
+reset role;
+select tests.login(:tplain);
+set role authenticated;
+select tests.expect_count('select * from public.outing_log', 0, 'teacher without a class cannot see history');
+reset role;
+select tests.logout();
+
+-- ─────────────────────────── 지난 날짜는 보기만 ───────────────────────────
+insert into public.outings (date, student_id, status) values (public.today_kst() - 1, :st3, 'out');
+select tests.login(:t13);
+set role authenticated;
+select tests.expect_affected(format($$update public.outings set status = 'in' where student_id = %L and date = public.today_kst() - 1$$, :st3),
+  0, 'past outings cannot be changed');
+select tests.expect_error(format($$insert into public.outings (date, student_id, status) values (public.today_kst() - 1, %L, 'out')$$, :st1),
+  'past outings cannot be added', '%row-level security%');
+reset role;
+select tests.logout();
+
+-- ─────────────────── 명령퇴사 기간은 관리자·기숙사부만 ───────────────────
+select tests.login(:t13);
+set role authenticated;
+select tests.expect_error(format($$update public.students set leave_from = current_date, leave_to = current_date where id = %L$$, :st1),
+  'homeroom cannot set a leave period', '%관리자·기숙사부만%');
+select tests.expect_affected(format($$update public.students set name = name where id = %L$$, :st1), 1, 'homeroom still edits other fields');
+reset role;
+select tests.login(:gm1);
+set role authenticated;
+select tests.expect_error($$insert into public.students (grade, name, sid, cls, leave_from, leave_to) values (1, '새학생', '10199', '1학년 1반', current_date, current_date)$$,
+  'grade manager cannot add a student with a leave period', '%관리자·기숙사부만%');
+reset role;
+select tests.login(:admin);
+set role authenticated;
+select tests.expect_affected(format($$update public.students set leave_from = current_date, leave_to = current_date where id = %L$$, :st1), 1, 'admin sets a leave period');
+select tests.expect_affected(format($$update public.students set leave_from = null, leave_to = null where id = %L$$, :st1), 1, 'admin clears it');
 reset role;
 select tests.logout();
 
@@ -346,11 +414,11 @@ select tests.expect_true(format($$(select status = 'cancelled' from public.outin
 select tests.login(:sup);
 set role authenticated;
 select tests.expect_affected(format($$insert into public.outings (date, student_id, status, since, checked_by, checked_by_name, reason)
-  values (current_date, %L, 'away', '2000-01-01', %L, '가짜', '무시됨')$$, :st3, :admin), 1, 'supervisor writes an outing');
+  values (public.today_kst(), %L, 'away', '2000-01-01', %L, '가짜', '무시됨')$$, :st3, :admin), 1, 'supervisor writes an outing');
 reset role;
 select tests.logout();
 select tests.expect_true(format($$(select checked_by = %L and checked_by_name = '박감독' and since > '2001-01-01' and reason is null
-  from public.outings where student_id = %L and date = current_date)$$, :sup, :st3),
+  from public.outings where student_id = %L and date = public.today_kst())$$, :sup, :st3),
   'trigger stamps server time and the real author, drops reason for non-out');
 
 -- service_role(이전 스크립트)은 보낸 값을 그대로 유지한다.

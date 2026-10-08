@@ -33,7 +33,7 @@
   - `supabase/migrations/`: 테이블(`profiles`·`students`·`rooms`·`outings`·`outing_requests`), 권한 함수(`private.is_staff`·`private.can_manage_student`·`private.can_edit_room` 등), RLS, RPC(좌석 배정·크기 변경·외출 신청/취소/승인/반려 — 본체는 `private`, `public`에는 껍데기)
   - `supabase/functions/`: Edge Functions(Deno)
     - `staff-accounts`: 교사 계정 생성·비밀번호 재발급·비활성화(ban), 관리자 전용
-    - `student-accounts`: 학생 계정 발급(여러 명)·비밀번호 재발급·삭제(`withStudent`면 명단 행까지). 호출자가 그 학생의 명단을 관리할 수 있어야 함(`_shared/scope.ts`의 `canManageStudent` — DB `can_manage_student`와 같은 규칙)
+    - `student-accounts`: 학생 계정 발급(여러 명)·비밀번호 재발급·삭제(`withStudent`면 명단 행까지). 호출자가 그 학생의 명단을 관리할 수 있어야 하고, 비밀번호 재발급과 계정만 삭제(`withStudent` 없이)는 관리자만(`_shared/scope.ts`의 `canManageStudent` — DB `can_manage_student`와 같은 규칙)
     - `notify-outing`: 오늘 외출이 시작되면(외출 체크·신청 승인) 학부모에게 안내 문자(장문). 학생 외출증은 문자 대신 학생 화면에 띄움(문자 비용: MMS를 빼서 1회 약 155원 → 약 45원). 교직원만 호출, 같은 외출에는 한 번만(`outings.notice`가 빈 'out' 기록을 먼저 차지), 결과를 `outings.notice`에 기록
     - `_shared/solapi.ts`: 솔라피 REST(HMAC 인증·여러 건 발송, 같은 번호 중복 허용). 키가 없으면 문자만 건너뜀
     - `config.toml`에서 `verify_jwt`를 끄고, 함수 안(`_shared/supabase.ts`의 `getCaller`)에서 호출자를 확인한다
@@ -61,7 +61,7 @@
   - 기본 데이터는 `harness/seed.mjs`(모든 테스트 계정 비밀번호 `pass1234`). 학생 계정은 테스트마다 `env.createStudentAccount()`로 만든다
 - 운영 메모: Supabase Auth는 IP당 로그인 횟수를 제한한다. 학생들이 같은 학교 와이파이에서 한꺼번에 처음 로그인하다 막히면 대시보드 Authentication → Rate Limits에서 늘린다
 
-## 화면 구성 (7개)
+## 화면 구성 (8개)
 로그인 화면을 제외한 모든 화면의 헤더에는 로그아웃 버튼이 있음(이 기기에서만 로그아웃 — 다른 기기·전자칠판의 로그인은 유지, `login.html`로 이동).
 **자동 로그아웃**: 교직원 화면(체크·현황판·좌석 배치판·학생 명단·계정 관리 — 현황판 포함, 사용자 요청)은 마우스·키보드·터치 조작이 **2시간** 없으면 이 기기에서 로그아웃되고 `login.html?idle=1`("2시간 동안 사용하지 않아 자동으로 로그아웃되었습니다")로 간다. 학생 화면은 적용하지 않음. `public/js/idle-logout.js`(`requireStaff()`가 시작) — 마지막 조작 시각은 localStorage `dormcheckin.lastActivityAt`에 둬서 다른 탭의 조작도 함께 연장되고, 창을 닫았다가 2시간 뒤에 열어도 바로 로그아웃된다. 로그인하면 그 시각을 새로 기록함
 학생 계정은 학생 화면(`student.html`)만 쓸 수 있고, 교사 화면 URL로 들어가면 학생 화면으로 돌아간다(교직원이 학생 화면에 들어가면 check.html로).
@@ -82,7 +82,7 @@
 - 상단: 오늘 날짜, 전체 외출중 인원 카운트
 - 실 필터: "전체" / 실 이름별 탭(실 목록은 `rooms`에서 동적으로 읽어옴)
 - 검색창(이름 검색)
-- **조회 날짜 선택**(`<input type="date">`, 기본값 오늘, 미래 날짜는 선택 불가): 오늘이 아닌 날짜를 고르면 그 날짜의 `outings` 기록을 보고 그 자리에서 고칠 수 있음("출석체크 변경") — 화면에 "지난 기록을 보는 중입니다" 안내가 뜨고, 이 상태에서 체크를 바꿔도 문자는 발송되지 않음(실시간 외출이 아니라 사후 정정이므로)
+- **조회 날짜 선택**(`<input type="date">`, 기본값 오늘, 미래 날짜는 선택 불가): 오늘이 아닌 날짜를 고르면 그 날짜의 `outings` 기록을 **보기만** 할 수 있음(사용자 요청 — 예전에는 고칠 수 있었음). "지난 기록을 보는 중입니다 — 지난 날짜의 외출 기록은 보기만 할 수 있습니다" 안내가 뜨고 조작 버튼이 없음([외출증 보기]만). 서버도 `outings` 쓰기를 오늘(KST) 기록으로만 제한
 - **외출 신청 대기** 패널(맨 위, 승인할 신청이 있을 때만): 오늘 들어온 학생 신청 중 **내가 승인할 수 있는 것만**(담임은 담당 반, 학년부장은 담당 학년, 관리자는 전체 — 서버 `can_manage_student`와 같은 범위. 기숙사부는 승인 불가) 이름·학번·반·사유·외출 시각~예상 복귀·신청 시각과 [승인] / [반려] 버튼
   - 승인 → RPC `approve_outing_request`가 신청을 승인하고 그 학생을 바로 "외출중"으로 기록(담당 교사 = 승인한 교사). "외출 체크"와 같이 외출 문자 발송
   - 반려 → 사유를 묻는 프롬프트(비워도 됨, 취소하면 반려 안 함) → RPC `reject_outing_request`. 사유는 학생 화면에 보임
@@ -131,6 +131,7 @@
 ### 5. 학생 명단 관리·학생 계정 (`students.html`)
 - admin·gradeManager·dormStaff는 항상 접근 가능. teacher는 담임(담당 반, `managed_classes`)이 배정되어 있을 때만 접근 가능 — 아무 반도 배정 안 된 일반 teacher는 접근 시 `check.html`로 리다이렉트
 - **기숙사부(dormStaff)는 명령퇴사 기간만**: 1/2/3학년 전체 명단을 보지만, 카드 버튼은 [명령퇴사 설정] 하나뿐이고 계정 상태 표시도 없음. 폼에는 "이름 (학번) 명령퇴사 기간" 제목과 명령퇴사 칸만 보임(ID·연락처·이메일·방과후 칸은 숨김, 사용자 요청). 학생 추가·여러 명 추가·삭제·다른 정보 수정·학생 계정 발급/재발급/삭제 불가 — 서버도 막음(`students_update` 정책 + 트리거 `private.students_leave_only`가 명령퇴사 칸 말고 다른 칸이 바뀌면 거부, `student-accounts`의 `canManageStudent`에서 제외)
+- **명령퇴사 기간은 관리자·기숙사부만**(사용자 요청): 담임·학년부장의 추가·수정 폼에는 명령퇴사 칸(`#leaveFields`)이 안 보이고, 저장할 때도 그 칸은 보내지 않음(지금 값 유지). 서버 트리거 `private.students_leave_editors`도 막음
 - 학년 탭: admin·dormStaff는 1/2/3학년 전체, gradeManager는 자기 `managed_grades`에 속한 학년 전체(반 구분 없음), teacher는 자기 담당 반이 있는 학년만(그 학년 탭 안에서도 담당 반 학생만 보임)
 - teacher가 담당 반이 정확히 하나면 "+ 학생 추가" 폼의 반 입력란이 자동으로 채워짐. 담당 반이 아닌 값으로 저장하려 하면 alert로 막음. 서버(RLS)도 반 단위까지 막는다(화면을 우회해도 다른 반 학생은 추가·수정·삭제 불가). gradeManager·admin은 이 제한이 없음(학년 전체 대상)
 - "+ 학생 추가" → 이름/학번/반/리로스쿨 ID/학생 연락처/학부모 연락처/이메일/방과후 요일(월~금 토글) 입력 폼 → `students`에 저장
@@ -144,14 +145,14 @@
 - **학생 계정**(카드마다 "계정 있음" / "계정 없음" / "ID 미등록" 표시)
   - [계정 발급]: 리로스쿨 ID가 있고 계정이 없을 때. 6자리 숫자 비밀번호를 만들어 **학생 연락처로 문자 발송**(아이디·비밀번호·접속 주소). 문자로 보냈으면 비밀번호는 화면에 나오지 않고, 연락처가 없거나 문자가 실패했거나 솔라피 키가 없으면 아래 결과 목록에 비밀번호를 표시
   - [계정 일괄 발급 (N명)]: 지금 학년 탭(담임은 담당 반)에서 ID가 있고 계정이 없는 학생 전부
-  - [비번 재발급]: 새 6자리 비밀번호(전달 방식은 발급과 같음). 예전 비밀번호는 더 이상 안 됨
-  - [계정 삭제]: 로그인 정보만 지우고 명단은 남김. 계정이 있는 학생을 명단에서 "삭제"하면 계정도 함께 지움(로그인 정보가 남지 않게 서버 함수가 처리)
+  - [비번 재발급]: 새 6자리 비밀번호(전달 방식은 발급과 같음). 예전 비밀번호는 더 이상 안 됨 — **관리자만**(사용자 요청, 다른 역할에는 버튼이 없고 함수도 거부)
+  - [계정 삭제]: 로그인 정보만 지우고 명단은 남김 — **관리자만**. 계정이 있는 학생을 명단에서 "삭제"하면 계정도 함께 지움(이건 담임·학년부장도 가능, 로그인 정보가 남지 않게 서버 함수가 처리)
   - 계정이 있으면 리로스쿨 ID 입력칸이 잠김(서버 트리거도 막음) — 바꾸려면 계정을 삭제하고 다시 발급
   - 결과 목록은 화면에 비밀번호가 나온 학생만 "이름[탭]학번[탭]아이디[탭]비밀번호" 줄로도 모아 엑셀에 붙여넣기 쉽게 보여줌(새로고침하면 사라짐) — 이 학생들에게는 직접 전달
   - 발급·재발급·삭제는 Edge Function `student-accounts`가 하고, 서버가 담당 범위를 다시 확인함
 - 명단 카드에는 이름과 "학번 · 반 번호"(예: 학번 10305 · 1학년 3반 5번), 방과후 요일, 계정 상태만 보인다 — ID·연락처·이메일은 "수정"을 눌러야 보임(사용자 요청)
 - 명단 카드의 "수정"/"삭제"로 기존 학생 정보 수정·삭제. 학생을 삭제하면 좌석표의 그 자리와 외출 기록도 함께 지워진다(서버 트리거·외래키)
-- 학생별 **명령퇴사 기간**(선택) 설정: "+ 학생 추가"/"수정" 폼에 시작일·종료일·사유 입력란이 있음. 시작일·종료일은 하나만 입력하면 alert로 막고(둘 다 입력하거나 둘 다 비워야 함), 종료일이 시작일보다 빠르면 저장을 막음(DB 제약도 같음). 저장하면 `leave_from`·`leave_to`·`leave_reason`에 반영되고, 그 기간 동안 check.html·display.html·seat.html에서 "명령퇴사"로 표시되며 "자리 없음" 판정에서 제외됨(둘 다 비우고 저장하면 해제)
+- 학생별 **명령퇴사 기간**(선택) 설정(관리자·기숙사부만): "+ 학생 추가"/"수정" 폼에 시작일·종료일·사유 입력란이 있음. 시작일·종료일은 하나만 입력하면 alert로 막고(둘 다 입력하거나 둘 다 비워야 함), 종료일이 시작일보다 빠르면 저장을 막음(DB 제약도 같음). 저장하면 `leave_from`·`leave_to`·`leave_reason`에 반영되고, 그 기간 동안 check.html·display.html·seat.html에서 "명령퇴사"로 표시되며 "자리 없음" 판정에서 제외됨(둘 다 비우고 저장하면 해제)
 - 다른 화면들(자기 자신인 students.html 제외) 상단에 이 화면으로 가는 "학생 명단 관리" 링크가 admin·gradeManager·dormStaff·(담당 반이 있는)teacher에게만 노출됨
 
 ### 6. 학생 화면 (`student.html`, 휴대폰 기준)
@@ -165,7 +166,13 @@
 - **오늘 신청 내역**: 승인 대기(→ [신청 취소], RPC `cancel_outing_request`) / 승인됨(교사·시각) / 반려됨(사유) / 취소함
 - 승인·반려·외출 상태가 실시간으로 바뀜. 학생은 자기 행만 읽을 수 있음(RLS)
 
-### 7. 계정 관리 (`accounts.html`)
+### 7. 외출 기록 (`history.html`)
+- 학생이 언제 외출하고 언제 복귀했는지 보는 화면(사용자 요청). 볼 수 있는 범위: 담임은 담당 반, 학년부장은 담당 학년, 관리자는 전체(서버 RLS = `can_manage_student`). 기숙사부·일반 교사(담당 반 없음)·자습 감독은 들어오면 check.html로, 메뉴 링크(`#historyLink`)도 숨김
+- 기간(기본 최근 7일, 시작일~종료일)·학년 탭(볼 수 있는 학년이 둘 이상일 때)·이름 검색. 최대 2000건
+- 표: 날짜 · 학생(이름, 학번·반) · 외출(신청한 외출 시각, 없으면 외출 처리 시각, 신청으로 나갔으면 "신청" 표시) · 복귀(복귀 시각 / 외출 시각 전에 끝났으면 "외출 취소 HH:MM" / 오늘이고 아직이면 "외출 중" / 지난 날이면 "복귀 기록 없음") · 복귀 예정 · 사유 · 확인 교사 · 복귀 처리 교사
+- 데이터는 `outing_log`(아래 데이터 모델). 실시간 구독 없이 기간을 바꾸거나 화면이 다시 보일 때 다시 읽음
+
+### 8. 계정 관리 (`accounts.html`)
 - admin 전용(admin이 아니면 `check.html`로 리다이렉트 — dormStaff도 예외 없이 포함). 다른 화면들(자기 자신인 accounts.html 제외) 상단에 이 화면으로 가는 "계정 관리" 링크가 admin에게만 노출됨
 - 상단: 등록된 교직원 계정 목록(`profiles` 중 `kind = 'staff'`, 학생 계정은 제외) — 아이디·이름·역할 배지(teacher/gradeManager/admin/studyHallSupervisor/dormStaff), gradeManager는 담당 학년·담당 실을, teacher는 담당 반(있는 경우만)을 함께 표시
   - 본인 계정 행에는 버튼이 없음(관리자가 실수로 자기 자신을 강등·삭제해 잠기는 것을 방지 — 서버 RLS·함수도 본인 대상은 거부)
@@ -187,15 +194,17 @@
 
 | 기능 | teacher | gradeManager | admin | studyHallSupervisor | dormStaff |
 |---|---|---|---|---|---|
-| 외출 체크 입력/조회(지난 기록 수정 포함, check.html) · "자리 없음" 표시/해제(seat.html) | ✅ | ✅ | ✅ | ✅ (check.html만 가능) | 👀 (보기만, 외출증 보기 가능) |
+| 외출 체크 입력(오늘만, 지난 날짜는 보기만, check.html) · "자리 없음" 표시/해제(seat.html) | ✅ | ✅ | ✅ | ✅ (check.html만 가능) | 👀 (보기만, 외출증 보기 가능) |
+| 외출 기록 보기(history.html) | ✅ (담당 반만, 담당 반이 있을 때) | ✅ (담당 학년) | ✅ (전체) | ❌ | ❌ |
 | 현황판·좌석배치판 열람 | ✅ | ✅ | ✅ | ❌ | ✅ |
 | 담당 실의 좌석 배치 편집 | ❌ | ✅ (담당 실만) | ✅ (전체) | ❌ | ❌ |
 | 학생 명단·방과후 요일 등록/수정 | ✅ (담당 반만, `managed_classes` 배정된 경우) | ✅ (담당 학년 전체) | ✅ (전체) | ❌ | ❌ |
-| 명령퇴사 기간 등록/수정 | ✅ (담당 반만) | ✅ (담당 학년) | ✅ (전체) | ❌ | ✅ (전체, 이것만 가능) |
+| 명령퇴사 기간 등록/수정 | ❌ | ❌ | ✅ (전체) | ❌ | ✅ (전체, 이것만 가능) |
 | 실 추가/삭제·이름 변경·대상 학년·크기 지정 | ❌ | ❌ | ✅ | ❌ | ❌ |
 | 교사 계정 추가/역할 지정/비밀번호 재발급/삭제 | ❌ | ❌ | ✅ | ❌ | ❌ |
 | 학생 외출 신청 승인/반려 | ✅ (담당 반만) | ✅ (담당 학년) | ✅ (전체) | ❌ | ❌ |
-| 학생 계정 발급/비밀번호 재발급/삭제 | ✅ (담당 반만) | ✅ (담당 학년) | ✅ (전체) | ❌ | ❌ |
+| 학생 계정 발급 | ✅ (담당 반만) | ✅ (담당 학년) | ✅ (전체) | ❌ | ❌ |
+| 학생 계정 비밀번호 재발급/계정 삭제 | ❌ | ❌ | ✅ (전체) | ❌ | ❌ |
 
 studyHallSupervisor는 외출 체크 화면(`check.html`) 외에는 아무 화면도 접근할 수 없음(다른 화면 URL로 직접 이동해도 check.html로 리다이렉트). dormStaff는 계정 관리(`accounts.html`)를 뺀 모든 화면을 볼 수 있지만, 바꿀 수 있는 건 명령퇴사 기간뿐(예전에는 계정 관리만 빼고 admin과 같았는데 사용자 요청으로 축소).
 학생(`role = student`) 계정은 학생 화면에서 자기 정보·외출 기록·신청만 보고, 외출 신청·취소만 할 수 있다.
@@ -228,6 +237,11 @@ outings           -- PK (date, student_id). 레코드가 없으면 그 날 "재�
   since timestamptz, reason?, start_time?(신청한 외출 시각 "19:00", 승인한 외출만), expected_return?(out일 때만),
   checked_by, checked_by_name(서버 트리거가 채움), request_id?(3단계), notice jsonb?(4단계 문자 결과)
 
+outing_log        -- 외출 기록(history.html): 외출이 시작될 때마다 한 줄. outings 트리거(private.outings_log_after)가 쌓음 — 화면은 읽기만
+  date, student_id, out_at(외출 처리 시각), start_time?, expected_return?, reason?, out_by_name(확인 교사), request_id?(신청으로 나감),
+  ended_at?(복귀·외출 취소 시각, 외출 중이면 없음), ended_by_name?
+  -- outings는 날짜·학생당 한 행이라 복귀하면 외출 정보가 지워져서 따로 둔다. 만들 때 승인된 신청·지금 외출 중인 기록으로 채움(그 전에 교사가 직접 체크하고 이미 복귀한 외출은 없음)
+
 outing_requests   -- 학생 외출 신청: date(KST), student_id, requested_by, reason, start_time?(HH:MM), expected_return?,
                   -- status pending|approved|rejected|cancelled, decided_by(_name), decided_at, reject_reason?. RPC로만 씀
                   -- 학생·날짜별 대기 중 신청은 하나만(부분 unique 인덱스). 지난 날짜 신청은 승인 불가
@@ -246,7 +260,9 @@ outing_requests   -- 학생 외출 신청: date(KST), student_id, requested_by, 
 - 교직원 판정(`is_staff`) = 역할이 있고, 학생이 아니고, 비활성화되지 않은 계정. 역할 없는 계정은 아무것도 못 읽음
 - `students`: 교직원 읽기. 쓰기는 `can_manage_student(grade, cls)` — admin 전체, gradeManager 담당 학년, teacher 담당 반(**반 단위까지 서버에서 강제**). dormStaff는 수정만 되고 트리거 `private.students_leave_only`가 명령퇴사 칸(`leave_*`) 말고 다른 칸이 바뀌면 거부
 - `rooms`: 교직원 읽기. 추가·삭제·이름·대상 학년·크기는 admin(`is_admin_like` — 이름은 남았지만 이제 admin만). 좌석 배정·해제는 RPC(`assign_seat`·`unassign_seat`, `can_edit_room` = admin 또는 담당 실의 gradeManager)
-- `outings`: 교직원 읽기, 쓰기는 `can_write_outings`(dormStaff 제외, 삭제 없음 — 재실로 되돌리는 방식). 학생은 자기 기록만 읽기
+- `outings`: 교직원 읽기, 쓰기는 `can_write_outings`(dormStaff 제외) **이고 오늘(`today_kst()`) 기록만**(지난 날짜는 보기만). 삭제 없음 — 재실로 되돌리는 방식. 학생은 자기 기록만 읽기
+- `outing_log`: 읽기만, `can_manage_student`(학생의 학년·반) 범위. 쓰기는 트리거만
+- `students`의 명령퇴사 칸(`leave_*`)은 admin·dormStaff만 바꿀 수 있음(트리거 `private.students_leave_editors`, service_role 제외)
 - `profiles`: 교직원은 전체, 그 외는 자기 것만 읽기. 역할·이름·담당 범위 수정은 admin만, 본인 행 제외. 생성·삭제·비활성화는 Edge Function(service_role)만
 - `outing_requests`: 교직원 + 신청한 본인 읽기, 쓰기는 RPC로만
 - 계정 비활성화는 로그인 자체를 차단(ban)한다

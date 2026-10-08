@@ -143,14 +143,14 @@ Deno.test("issue texts the password to the student and leaves it out of the resp
 });
 
 Deno.test("a failed password text falls back to showing the password", async () => {
-  const { deps } = fakeDeps({ sms: "fail" });
+  const { deps } = fakeDeps({ sms: "fail", caller: staff({ role: "admin" }) });
   assertEquals(await handleStudentAccounts({ action: "reset-password", studentId: "s-done" }, deps), {
     loginId: "done1",
     password: "123451",
     sms: "failed",
     smsError: "잔액 부족",
   });
-  const sent = fakeDeps({ sms: "on" });
+  const sent = fakeDeps({ sms: "on", caller: staff({ role: "admin" }) });
   assertEquals(await handleStudentAccounts({ action: "reset-password", studentId: "s-done" }, sent.deps), {
     loginId: "done1",
     sms: "sent",
@@ -199,8 +199,8 @@ Deno.test("grade managers and admins may issue across classes", async () => {
   }
 });
 
-Deno.test("reset-password gives a new pin for an existing account in scope", async () => {
-  const { deps, calls } = fakeDeps();
+Deno.test("reset-password (admin only) gives a new pin for an existing account", async () => {
+  const { deps, calls } = fakeDeps({ caller: staff({ role: "admin" }) });
   assertEquals(await handleStudentAccounts({ action: "reset-password", studentId: "s-done" }, deps), {
     loginId: "done1",
     password: "123451",
@@ -209,12 +209,16 @@ Deno.test("reset-password gives a new pin for an existing account in scope", asy
   assertEquals(calls.updatedUsers, [{ id: "auth-s-done", attrs: { password: "123451" } }]);
 
   await assertHttpError(handleStudentAccounts({ action: "reset-password", studentId: "s-hong" }, deps), 404);
-  await assertHttpError(handleStudentAccounts({ action: "reset-password", studentId: "s-other" }, deps), 403);
   await assertHttpError(handleStudentAccounts({ action: "reset-password", studentId: "" }, deps), 400);
+
+  // 담임·학년부장은 담당 학생이어도 재발급 불가
+  await assertHttpError(handleStudentAccounts({ action: "reset-password", studentId: "s-done" }, fakeDeps().deps), 403);
+  const gm = staff({ role: "gradeManager", managed_grades: [1], managed_classes: [] });
+  await assertHttpError(handleStudentAccounts({ action: "reset-password", studentId: "s-done" }, fakeDeps({ caller: gm }).deps), 403);
 });
 
-Deno.test("delete removes the login, and the roster row only when asked", async () => {
-  const { deps, calls } = fakeDeps();
+Deno.test("delete removes the login (admin only), and the roster row only when asked", async () => {
+  const { deps, calls } = fakeDeps({ caller: staff({ role: "admin" }) });
   assertEquals(await handleStudentAccounts({ action: "delete", studentId: "s-done" }, deps), { ok: true });
   assertEquals(calls.deletedUsers, ["auth-s-done"]);
   assertEquals(calls.deletedStudents, []);
@@ -226,7 +230,16 @@ Deno.test("delete removes the login, and the roster row only when asked", async 
   await handleStudentAccounts({ action: "delete", studentId: "s-hong", withStudent: true }, deps);
   assertEquals(calls.deletedStudents, ["s-done", "s-hong"]);
   await assertHttpError(handleStudentAccounts({ action: "delete", studentId: "s-hong" }, deps), 404);
-  await assertHttpError(handleStudentAccounts({ action: "delete", studentId: "s-other" }, deps), 403);
+});
+
+Deno.test("homeroom teachers may remove a roster row with its login, but not the login alone", async () => {
+  const { deps, calls } = fakeDeps();
+  await assertHttpError(handleStudentAccounts({ action: "delete", studentId: "s-done" }, deps), 403);
+  assertEquals(calls.deletedUsers, []);
+  await handleStudentAccounts({ action: "delete", studentId: "s-done", withStudent: true }, deps);
+  assertEquals(calls.deletedUsers, ["auth-s-done"]);
+  assertEquals(calls.deletedStudents, ["s-done"]);
+  await assertHttpError(handleStudentAccounts({ action: "delete", studentId: "s-other", withStudent: true }, deps), 403);
 });
 
 Deno.test("unknown actions are rejected", async () => {

@@ -18,6 +18,7 @@ const logoutBtn = document.getElementById("logoutBtn");
 const currentUserNameEl = document.getElementById("currentUserName");
 const currentUserRoleBadgeEl = document.getElementById("currentUserRoleBadge");
 const accountsLink = document.getElementById("accountsLink");
+const historyLink = document.getElementById("historyLink");
 const navLoadingHint = document.getElementById("navLoadingHint");
 const gradeTabsEl = document.getElementById("gradeTabs");
 const rosterListEl = document.getElementById("rosterList");
@@ -25,6 +26,7 @@ const addStudentBtn = document.getElementById("addStudentBtn");
 const formWrap = document.getElementById("formWrap");
 const studentInfoFields = document.getElementById("studentInfoFields");
 const leaveOnlyTitle = document.getElementById("leaveOnlyTitle");
+const leaveFields = document.getElementById("leaveFields");
 const studentForm = document.getElementById("studentForm");
 const editingIdInput = document.getElementById("editingId");
 const inputName = document.getElementById("inputName");
@@ -85,6 +87,10 @@ const state = {
   // 기숙사부(dormStaff): 명단은 모두 보지만 바꿀 수 있는 건 명령퇴사 기간뿐(서버 트리거도 막음).
   // 학생 추가·삭제·다른 정보 수정·학생 계정 발급/재발급/삭제는 할 수 없다.
   leaveOnly: false,
+  // 명령퇴사 기간은 관리자·기숙사부만(담임·학년부장은 칸이 안 보임 — 서버 트리거도 막음)
+  canEditLeave: false,
+  // 학생 계정 비밀번호 재발급·계정 삭제는 관리자만(발급은 담당 교사도 가능)
+  isAdmin: false,
 };
 
 // 해당 학년에 반 단위 제한이 있으면 허용된 반 목록을, 없으면(학년 전체 담당) null을 반환
@@ -247,7 +253,9 @@ function renderRoster() {
       const accountButtons = state.leaveOnly
         ? ""
         : hasAccount
-        ? `<button type="button" class="btn-secondary btn-small" data-reset-account="${escapeHtml(id)}">비번 재발급</button>
+        ? !state.isAdmin
+          ? ""
+          : `<button type="button" class="btn-secondary btn-small" data-reset-account="${escapeHtml(id)}">비번 재발급</button>
            <button type="button" class="btn-secondary btn-small" data-delete-account="${escapeHtml(id)}">계정 삭제</button>`
         : s.loginId
           ? `<button type="button" class="btn-secondary btn-small" data-issue-account="${escapeHtml(id)}">계정 발급</button>`
@@ -301,6 +309,7 @@ function openFormForAdd() {
   }
 
   renderDayToggle();
+  leaveFields.hidden = !state.canEditLeave;
   formWrap.hidden = false;
   inputName.focus();
 }
@@ -331,6 +340,7 @@ function openFormForEdit(id) {
   studentInfoFields.hidden = state.leaveOnly;
   leaveOnlyTitle.hidden = !state.leaveOnly;
   leaveOnlyTitle.textContent = `${s.name || "이름 없음"} (학번 ${s.sid || "-"}) 명령퇴사 기간`;
+  leaveFields.hidden = !state.canEditLeave;
   formWrap.hidden = false;
   (state.leaveOnly ? inputLeaveFrom : inputName).focus();
 }
@@ -799,6 +809,12 @@ studentForm.addEventListener("submit", async (event) => {
   if (leave.from) data.leaveOfAbsence = leave;
 
   const row = studentToRow(state.activeGrade, data);
+  if (!state.canEditLeave) {
+    // 담임·학년부장은 명령퇴사 칸을 건드리지 않는다(지금 값을 그대로 둠)
+    delete row.leave_from;
+    delete row.leave_to;
+    delete row.leave_reason;
+  }
   const editingId = editingIdInput.value;
   submitFormBtn.disabled = true;
   const { data: saved, error } = editingId
@@ -866,12 +882,16 @@ async function init() {
   const role = profile.role;
   navLoadingHint.hidden = true;
   accountsLink.hidden = role !== "admin";
+  // 이 화면에 들어오는 사람 중 외출 기록을 못 보는 건 기숙사부뿐
+  historyLink.hidden = role === "dormStaff";
 
   function showCurrentUser() {
     currentUserNameEl.textContent = profile.name || loginId;
     currentUserRoleBadgeEl.textContent = role;
     currentUserRoleBadgeEl.className = `role-badge role-badge--${role}`;
   }
+  state.isAdmin = role === "admin";
+  state.canEditLeave = role === "admin" || role === "dormStaff";
 
   if (role === "admin" || role === "dormStaff") {
     showCurrentUser();

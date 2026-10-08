@@ -106,8 +106,7 @@ test.describe("외출 체크 화면", () => {
     await expect(page.locator(".student-card .student-name")).toHaveText(["최하늘"]);
   });
 
-  test("지난 날짜 기록을 보고 고칠 수 있다(문자는 보내지 않음)", async ({ env, openAs, page }) => {
-    answerDialogs(page, ["외박", "21:00"]);
+  test("지난 날짜 기록은 보기만 할 수 있다(서버도 막음)", async ({ env, openAs, page }) => {
     await openAs("teacher01", "/check.html");
     await expect(page.locator("#dateSelect")).toHaveValue(todayKst());
     await expect(page.locator("#dateSelect")).toHaveAttribute("max", todayKst());
@@ -119,15 +118,20 @@ test.describe("외출 체크 화면", () => {
     await expect(card(page, "김민준").locator(".status-badge")).toHaveText("재실");
     await expect(page.locator("#outCountText")).toHaveText("그 날 외출 기록 1명");
 
-    await card(page, "홍길동").getByRole("button", { name: "복귀 체크" }).click();
-    await expect(card(page, "홍길동").locator(".status-badge")).toHaveText("재실");
-    expect((await outingRow(env, yesterdayKst(), STUDENT.hong)).status).toBe("in");
+    await expect(page.locator("#pastDateNotice")).toContainText("보기만 할 수 있습니다");
+    // 외출 체크·복귀 체크 버튼이 없고, 외출증은 볼 수 있다
+    await expect(page.getByRole("button", { name: "외출 체크" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "복귀 체크" })).toHaveCount(0);
+    await expect(card(page, "홍길동").locator("button")).toHaveText(["외출증 보기"]);
 
-    await card(page, "최하늘").getByRole("button", { name: "외출 체크" }).click();
-    await expect(card(page, "최하늘").locator(".status-badge")).toHaveText("외출중");
-    expect(await outingRow(env, yesterdayKst(), STUDENT.haneul)).toMatchObject({ status: "out", reason: "외박" });
-    expect(await outingRow(env, todayKst(), STUDENT.haneul)).toBeNull();
-    expect(env.sms.messages).toHaveLength(0);
+    // 화면을 우회해도 서버가 지난 날짜 쓰기를 막는다
+    const error = await page.evaluate(async ({ date, id }) => {
+      const { supabase } = await import("/js/supabase-client.js");
+      const { error } = await supabase.from("outings").upsert({ date, student_id: id, status: "in" });
+      return error && error.message;
+    }, { date: yesterdayKst(), id: STUDENT.hong });
+    expect(error).toContain("row-level security");
+    expect((await outingRow(env, yesterdayKst(), STUDENT.hong)).status).toBe("out");
 
     await page.fill("#dateSelect", todayKst());
     await expect(page.locator("#pastDateNotice")).toBeHidden();

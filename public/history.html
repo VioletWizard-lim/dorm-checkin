@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>기숙사 외출체크 - 외출 기록</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+
+<div class="check-page">
+
+  <header class="check-header">
+    <div class="check-header__titles">
+      <div class="check-header__title">외출 기록</div>
+      <div class="check-header__subtitle">학생이 언제 외출하고 언제 복귀했는지 날짜별로 봅니다</div>
+    </div>
+    <div class="check-header__meta">
+      <a href="./check.html" class="back-link">← 체크 화면으로</a>
+      <a href="./display.html" class="back-link">현황판 보기</a>
+      <a href="./seat.html" class="back-link">좌석 배치판 보기</a>
+      <a href="./students.html" class="back-link">학생 명단 관리</a>
+      <span class="loading-hint" id="navLoadingHint">메뉴 확인 중...</span>
+      <a href="./accounts.html" class="back-link" id="accountsLink" hidden>계정 관리</a>
+      <div class="current-user" id="currentUserBox">
+        <span class="current-user__name" id="currentUserName"></span>
+        <span class="role-badge" id="currentUserRoleBadge"></span>
+      </div>
+      <button type="button" class="back-link" id="logoutBtn">로그아웃</button>
+    </div>
+  </header>
+
+  <div class="check-toolbar">
+    <label for="search" class="sr-only">학생 이름 검색</label>
+    <div class="check-toolbar__search">
+      <input id="search" type="text" placeholder="학생 이름 검색" autocomplete="off">
+    </div>
+    <div class="check-toolbar__divider"></div>
+    <div class="date-picker-group">
+      <label for="fromDate" class="field-hint">기간</label>
+      <input type="date" id="fromDate" class="date-input">
+      <span class="field-hint">~</span>
+      <input type="date" id="toDate" class="date-input">
+    </div>
+    <div class="check-toolbar__divider"></div>
+    <div class="filter-chips" id="gradeChips"></div>
+  </div>
+
+  <div class="history-summary" id="historySummary"></div>
+  <div class="history-wrap">
+    <table class="history-table">
+      <thead>
+        <tr>
+          <th>날짜</th>
+          <th>학생</th>
+          <th>외출</th>
+          <th>복귀</th>
+          <th>복귀 예정</th>
+          <th>사유</th>
+          <th>확인 교사</th>
+          <th>복귀 처리</th>
+        </tr>
+      </thead>
+      <tbody id="historyBody"></tbody>
+    </table>
+  </div>
+
+</div>
+
+<script type="module" src="./js/history.js"></script>
+</body>
+</html>

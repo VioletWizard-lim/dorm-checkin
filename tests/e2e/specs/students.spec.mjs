@@ -90,6 +90,7 @@ test.describe("학생 명단 관리", () => {
 
     await page.click("#addStudentBtn");
     await expect(page.locator("#inputCls")).toHaveValue("1학년 3반");
+    await expect(page.locator("#leaveFields")).toBeHidden(); // 명령퇴사 기간은 관리자·기숙사부만
     await page.fill("#inputName", "오세훈");
     await page.fill("#inputSid", "10399");
     await page.click("#submitFormBtn");

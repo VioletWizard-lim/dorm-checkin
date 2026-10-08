@@ -16,6 +16,7 @@ let currentTeacherName = "";
 
 const manageLink = document.getElementById("manageLink");
 const accountsLink = document.getElementById("accountsLink");
+const historyLink = document.getElementById("historyLink");
 const displayLink = document.getElementById("displayLink");
 const seatLink = document.getElementById("seatLink");
 const navLoadingHint = document.getElementById("navLoadingHint");
@@ -136,9 +137,10 @@ function canApprove(student) {
   return false;
 }
 
-// 기숙사부는 보기만 한다 — 외출 체크·복귀·외출 취소·자리 없음 해제 버튼이 없음(서버 can_write_outings도 막음)
+// 보기만 하는 경우 — 외출 체크·복귀·외출 취소·자리 없음 해제 버튼이 없음(서버 정책도 막음)
+//   기숙사부(can_write_outings), 지난 날짜(오늘 기록만 쓸 수 있음, 사용자 요청)
 function isReadOnly() {
-  return Boolean(currentProfile && currentProfile.role === "dormStaff");
+  return Boolean(currentProfile && currentProfile.role === "dormStaff") || state.selectedDate !== TODAY_KEY;
 }
 
 function findStudent(studentId) {
@@ -513,6 +515,8 @@ async function init() {
   manageLink.hidden =
     profile.role !== "admin" && profile.role !== "gradeManager" && profile.role !== "dormStaff" && !hasManagedClasses;
   accountsLink.hidden = profile.role !== "admin";
+  // 외출 기록: 관리자·학년부장·담임(담당 반이 있을 때)
+  historyLink.hidden = profile.role !== "admin" && profile.role !== "gradeManager" && !hasManagedClasses;
   // 자습 감독 계정은 외출 체크 화면만 쓸 수 있게 다른 화면 링크를 모두 숨긴다.
   const isStudyHallSupervisor = profile.role === "studyHallSupervisor";
   displayLink.hidden = isStudyHallSupervisor;
