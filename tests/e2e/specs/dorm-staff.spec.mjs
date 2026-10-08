@@ -57,10 +57,13 @@ test.describe("기숙사부 — 보기 + 명령퇴사 기간만", () => {
     await expect(hong.locator("button")).toHaveText(["명령퇴사 설정"]);
 
     await hong.getByRole("button", { name: "명령퇴사 설정" }).click();
-    await expect(page.locator("#inputName")).toBeDisabled();
-    await expect(page.locator("#inputPhone")).toBeDisabled();
-    await expect(page.locator("#inputLoginId")).toBeDisabled();
-    await expect(page.locator("#dayToggleRow button").first()).toBeDisabled();
+    // 학생 정보 칸(이름·ID·연락처·이메일·방과후)은 보이지 않고 명령퇴사 칸만
+    await expect(page.locator("#leaveOnlyTitle")).toHaveText("홍길동 (학번 10305) 명령퇴사 기간");
+    for (const id of ["#inputName", "#inputSid", "#inputLoginId", "#inputPhone", "#inputParentPhone", "#inputEmail", "#dayToggleRow"]) {
+      await expect(page.locator(id)).toBeHidden();
+    }
+    await expect(page.locator("#inputLeaveFrom")).toBeVisible();
+    await expect(hong.locator(".account-chip")).toHaveCount(0);
 
     // 기간 검사는 그대로
     await page.fill("#inputLeaveFrom", kstDatePlus(1));

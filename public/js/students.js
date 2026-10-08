@@ -23,6 +23,8 @@ const gradeTabsEl = document.getElementById("gradeTabs");
 const rosterListEl = document.getElementById("rosterList");
 const addStudentBtn = document.getElementById("addStudentBtn");
 const formWrap = document.getElementById("formWrap");
+const studentInfoFields = document.getElementById("studentInfoFields");
+const leaveOnlyTitle = document.getElementById("leaveOnlyTitle");
 const studentForm = document.getElementById("studentForm");
 const editingIdInput = document.getElementById("editingId");
 const inputName = document.getElementById("inputName");
@@ -237,7 +239,9 @@ function renderRoster() {
       // 목록에는 학번·이름·반·번호만 보여준다(ID·연락처·이메일은 "수정"을 눌러야 보임).
       const seatNo = deriveNumberFromSid(s.sid);
       const hasAccount = Boolean(state.accounts[id]);
-      const accountChip = hasAccount
+      const accountChip = state.leaveOnly
+        ? ""
+        : hasAccount
         ? `<span class="account-chip account-chip--active">계정 있음</span>`
         : `<span class="account-chip">${s.loginId ? "계정 없음" : "ID 미등록"}</span>`;
       const accountButtons = state.leaveOnly
@@ -323,9 +327,10 @@ function openFormForEdit(id) {
   // 기존 학생은 이미 반이 저장되어 있으니, 학번을 고치더라도 자동으로 덮어쓰지 않는다.
   state.clsManuallyEdited = true;
   renderDayToggle();
-  // 기숙사부는 명령퇴사 칸만 고칠 수 있다(나머지는 보이기만)
-  for (const el of [inputName, inputSid, inputCls, inputEmail, inputPhone, inputParentPhone]) el.disabled = state.leaveOnly;
-  if (state.leaveOnly) inputLoginId.disabled = true;
+  // 기숙사부는 명령퇴사 칸만 고칠 수 있다 — 다른 학생 정보(ID·연락처 등)는 아예 보이지 않게 한다
+  studentInfoFields.hidden = state.leaveOnly;
+  leaveOnlyTitle.hidden = !state.leaveOnly;
+  leaveOnlyTitle.textContent = `${s.name || "이름 없음"} (학번 ${s.sid || "-"}) 명령퇴사 기간`;
   formWrap.hidden = false;
   (state.leaveOnly ? inputLeaveFrom : inputName).focus();
 }
