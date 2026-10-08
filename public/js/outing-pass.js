@@ -1,4 +1,4 @@
-// 외출증 그리기 — 학생 화면(student.html)에 띄우는 종이 외출증 모양(도장 포함).
+// 외출증 그리기 — 학생 화면(student.html)과 교사 체크 화면(check.html의 [외출증])에 띄우는 종이 외출증 모양(도장 포함).
 // 예전에는 학생에게 MMS로 보냈지만 문자 비용 때문에 화면에 띄우는 것으로 바꿨다(학부모에게는 안내 문자만).
 
 const WIDTH = 640;
@@ -107,6 +107,32 @@ function wrapText(ctx, text, maxWidth, maxLines) {
     return kept;
   }
   return lines;
+}
+
+// 학번 마지막 2자리 = 번호 (예: "10305" → 5)
+function numberFromSid(sid) {
+  const match = /^\d{3}(\d{2})$/.exec(String(sid || "").trim());
+  return match ? String(Number(match[1])) : "";
+}
+
+// 외출증에 들어갈 내용. 학생 화면(DB 행: start_time…)과 교사 화면(adapters 모양: startTime…)이
+// 같은 외출증을 그리도록 여기서 모은다. 외출 시각은 신청한 시각, 없으면(교사가 직접 체크) 체크한 시각.
+export function outingPassData(student, outing, dateKey) {
+  const [, month, day] = String(dateKey).split("-").map(Number);
+  const since = outing.since ? new Date(outing.since) : null;
+  const sinceText = since
+    ? `${String(since.getHours()).padStart(2, "0")}:${String(since.getMinutes()).padStart(2, "0")}`
+    : "";
+  return {
+    name: student.name || "",
+    cls: student.cls || "",
+    number: numberFromSid(student.sid),
+    dateLabel: `${month}월 ${day}일`,
+    start: outing.startTime || outing.start_time || sinceText,
+    back: outing.expectedReturn || outing.expected_return || "미정",
+    reason: outing.reason || "",
+    teacher: outing.checkedByName || outing.checked_by_name || "",
+  };
 }
 
 // canvas에 외출증을 그린다. pass: { name, cls, number, dateLabel, start, back, reason, teacher }

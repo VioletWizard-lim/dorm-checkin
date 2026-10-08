@@ -233,8 +233,14 @@ test.describe("외출 예정(승인됐지만 외출 시각 전)", () => {
     await expect(hong).toContainText("00:40 외출 예정 · 병원 (~02:00)");
     await expect(hong.getByRole("button", { name: "외출 취소" })).toBeVisible();
     await expect(page.locator("#outCountText")).toHaveText("외출중 0명 · 외출 예정 1명");
+    // 외출 예정이어도 외출증을 볼 수 있고, 제목에 "외출 예정"이 붙는다
+    await hong.getByRole("button", { name: "외출증 보기" }).click();
+    await expect(page.locator("#passDialogTitle")).toHaveText("홍길동 외출증 (외출 예정)");
 
     await page.clock.fastForward("31:00");
+    await expect(page.locator("#passDialogTitle")).toHaveText("홍길동 외출증");
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#passDialog")).toBeHidden();
     await expect(hong.locator(".status-badge")).toHaveText("외출중");
     await expect(hong).toContainText("00:40 외출중 · 병원 (~02:00)");
     await expect(page.locator("#outCountText")).toHaveText("외출중 1명");

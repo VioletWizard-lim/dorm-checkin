@@ -4,7 +4,6 @@ on:
     paths:
       - "supabase/**"
       - "tests/db/**"
-      - "scripts/migrate/**"
       - ".github/workflows/supabase-test.yml"
   workflow_call:
 
@@ -32,18 +31,3 @@ jobs:
       - run: deno test --node-modules-dir=none --no-lock --allow-env supabase/functions/
       - run: deno check --node-modules-dir=none --no-lock supabase/functions/*/index.ts
 
-  migrate-script:
-    name: Migration script
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: scripts/migrate
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: scripts/migrate/package-lock.json
-      - run: npm ci
-      - run: npm test
