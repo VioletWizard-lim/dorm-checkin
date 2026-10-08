@@ -100,6 +100,9 @@ export function createSmsSender(config: SmsConfig, fetchImpl: typeof fetch = fet
       let data: { failedMessageList?: Array<{ statusMessage?: string; customFields?: Record<string, string> }> };
       try {
         data = (await request("messages/v4/send-many/detail", {
+          // 학생·학부모 번호가 같아도(시험할 때, 연락처를 하나만 아는 경우) 둘 다 보낸다.
+          // 솔라피는 기본으로 한 번에 보내는 묶음 안의 같은 번호를 중복으로 막는다.
+          allowDuplicates: true,
           messages: messages.map((m) => ({
             to: m.to,
             from: config.sender,

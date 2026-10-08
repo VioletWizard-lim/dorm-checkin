@@ -52,6 +52,7 @@ Deno.test("send posts every message once and maps failures back by key", async (
   assertEquals(calls.length, 1);
   assertEquals(calls[0].url, "https://sms.test/messages/v4/send-many/detail");
   assertEquals(calls[0].auth.startsWith("HMAC-SHA256 apiKey=k, date="), true);
+  assertEquals(calls[0].body.allowDuplicates, true); // 학생·학부모 번호가 같아도 둘 다 보냄
   assertEquals(calls[0].body.messages, [
     { to: "01011112222", from: "0212345678", text: "외출증", subject: "외출증", imageId: "IMG1", type: "MMS", customFields: { key: "student" } },
     { to: "0101", from: "0212345678", text: "안내", customFields: { key: "parent" } },
