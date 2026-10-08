@@ -4,7 +4,7 @@
 Claude Code로 이 폴더를 열면 `CLAUDE.md`를 자동으로 읽어 프로젝트 맥락을 파악합니다.
 
 ## 구성
-- 화면(`public/`): 순수 HTML/CSS/JS. Firebase Hosting에서 서비스하고(Firebase는 화면 파일 호스팅에만 씀), `main`에 push하면 GitHub Actions가 자동 배포합니다(PR마다 미리보기 URL).
+- 화면(`public/`): 순수 HTML/CSS/JS. GitHub Pages(https://violetwizard-lim.github.io/dorm-checkin/)에서 서비스하고, `main`에 push하면 GitHub Actions(`pages-deploy.yml`)가 자동 배포합니다. 처음 한 번 저장소 Settings → Pages → Source를 "GitHub Actions"로 골라야 합니다.
 - 백엔드: Supabase(Postgres·Auth·Realtime·Edge Functions). `supabase/`가 바뀐 채로 `main`에 들어오면 GitHub Actions(`supabase-deploy.yml`)가 DB 마이그레이션과 Edge Function을 배포합니다.
 
 ## 처음 설정할 때

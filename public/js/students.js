@@ -74,6 +74,9 @@ let bulkPreviewRows = [];
 let studentsLive = null;
 let accountsLive = null;
 
+// 이 화면이 있는 경로(GitHub Pages면 "/dorm-checkin/"). 학생 비밀번호 문자의 접속 주소에 쓴다
+const APP_PATH = new URL(".", window.location.href).pathname;
+
 const state = {
   allowedGrades: [],
   activeGrade: null,
@@ -575,7 +578,7 @@ async function issueAccounts(studentIds, btn) {
     let chunkResults = null;
     let failure = "";
     try {
-      const data = await callFunction("student-accounts", { action: "issue", studentIds: chunk });
+      const data = await callFunction("student-accounts", { action: "issue", studentIds: chunk, appPath: APP_PATH });
       chunkResults = Array.isArray(data && data.results) ? data.results : null;
       if (!chunkResults) failure = "서버 응답을 확인하지 못했습니다.";
     } catch (err) {
@@ -608,7 +611,7 @@ async function resetAccountPassword(studentId, btn) {
   if (!confirm(`${s.name}의 비밀번호를 새로 발급할까요?\n지금 쓰는 비밀번호로는 더 이상 로그인할 수 없게 됩니다.`)) return;
   btn.disabled = true;
   try {
-    const data = await callFunction("student-accounts", { action: "reset-password", studentId });
+    const data = await callFunction("student-accounts", { action: "reset-password", studentId, appPath: APP_PATH });
     addAccountResults([
       {
         kind: "reset",
