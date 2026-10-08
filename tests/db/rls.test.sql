@@ -358,4 +358,13 @@ reset role;
 -- ─────────────────────────── Realtime ───────────────────────────
 select tests.expect_count($$select * from pg_publication_tables where pubname = 'supabase_realtime'$$, 5, 'realtime publishes the 5 app tables');
 
+-- ─────────────────────────── API로 열린 함수 ───────────────────────────
+-- Supabase 보안 점검과 같은 기준: public(API로 열린 스키마)의 security definer 함수를 anon·authenticated가 부를 수 없어야 한다.
+select tests.expect_true($$not exists (
+  select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.prosecdef and p.prorettype <> 'trigger'::regtype
+     and (has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute'))
+)$$, 'no security definer function in public is callable through the API');
+select tests.expect_true($$not has_schema_privilege('anon', 'private', 'usage')$$, 'anon cannot use the private schema');
+
 \echo 'ALL DB TESTS PASSED'
