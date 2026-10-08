@@ -39,7 +39,7 @@
     - `config.toml`에서 `verify_jwt`를 끄고, 함수 안(`_shared/supabase.ts`의 `getCaller`)에서 호출자를 확인한다
   - `public/js/`의 공통 모듈
     - `supabase-config.js`: 프로젝트 URL·publishable 키(공개돼도 안전한 값)·가짜 이메일 도메인
-    - `supabase-client.js`: 클라이언트, `requireStaff()`(세션·프로필 확인, 비활성화 계정 로그아웃, 학생 계정은 student.html로), `requireStudent()`(교직원 계정은 check.html로), `signOutTo()`(이 기기만 로그아웃), `describeError()`, `callFunction()`, `showPageError()`
+    - `supabase-client.js`: 클라이언트, `requireStaff()`(세션·프로필 확인, 비활성화 계정 로그아웃, 학생 계정은 student.html로, 2시간 자동 로그아웃 시작 — `idle-logout.js`), `requireStudent()`(교직원 계정은 check.html로), `signOutTo()`(이 기기만 로그아웃), `describeError()`, `callFunction()`, `showPageError()`
     - `live-table.js`: 테이블 하나를 "전체 조회 + Realtime 변경 알림이 오면 다시 조회"로 화면에 맞춰 둔다. 1000행씩 나눠 읽고, 구독이 다시 연결될 때·화면이 다시 보일 때 다시 조회하며, Realtime이 안 되면 15초마다 조회한다. `refresh()`는 다시 읽기가 끝나면 풀리는 Promise
     - `adapters.js`: DB 행(snake_case) ↔ 화면 코드가 쓰는 예전 Firebase 모양(`studentsByGrade`, `seatMap`, `managedClasses` 등) 변환. 화면 렌더링 코드는 예전 모양을 그대로 쓴다
 - 배포
@@ -63,6 +63,7 @@
 
 ## 화면 구성 (7개)
 로그인 화면을 제외한 모든 화면의 헤더에는 로그아웃 버튼이 있음(이 기기에서만 로그아웃 — 다른 기기·전자칠판의 로그인은 유지, `login.html`로 이동).
+**자동 로그아웃**: 교직원 화면(체크·현황판·좌석 배치판·학생 명단·계정 관리 — 현황판 포함, 사용자 요청)은 마우스·키보드·터치 조작이 **2시간** 없으면 이 기기에서 로그아웃되고 `login.html?idle=1`("2시간 동안 사용하지 않아 자동으로 로그아웃되었습니다")로 간다. 학생 화면은 적용하지 않음. `public/js/idle-logout.js`(`requireStaff()`가 시작) — 마지막 조작 시각은 localStorage `dormcheckin.lastActivityAt`에 둬서 다른 탭의 조작도 함께 연장되고, 창을 닫았다가 2시간 뒤에 열어도 바로 로그아웃된다. 로그인하면 그 시각을 새로 기록함
 학생 계정은 학생 화면(`student.html`)만 쓸 수 있고, 교사 화면 URL로 들어가면 학생 화면으로 돌아간다(교직원이 학생 화면에 들어가면 check.html로).
 로그인·학생 화면을 제외한 모든 화면의 헤더에는 그 계정이 접근 가능한 **다른 화면으로 가는 링크가 전부** 노출됨(자기 자신 화면으로의 링크는 제외, 대신 check.html이 아닌 화면에는 "← 체크 화면으로" 링크가 있음) — 권한이 없는 화면의 링크는 숨겨짐(판단 로직은 화면마다 독립적으로 구현되어 있지만 기준은 모두 동일). 예: teacher가 담당 반이 없으면 어느 화면에서도 "학생 명단 관리" 링크가 안 보이고, admin이 아니면 어느 화면에서도 "계정 관리" 링크가 안 보임.
 모든 화면은 데이터를 실시간으로 갱신한다(`live-table.js`). 저장이 서버에서 거부되면(권한 없음 등) alert로 이유를 보여주고 화면은 서버 상태 그대로 둔다. 데이터를 불러오지 못하면 화면 맨 위에 안내가 뜨고 자동으로 다시 시도한다.
