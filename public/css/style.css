@@ -512,6 +512,18 @@ input {
   color: #1E8449;
 }
 
+/* 외출 문자 결과(check.html 학생 카드) */
+.notice-text {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--color-text-faint);
+}
+
+.notice-text--failed {
+  color: var(--color-out);
+  font-weight: 700;
+}
+
 .since-text {
   font-size: 12px;
   color: var(--color-text-faint);

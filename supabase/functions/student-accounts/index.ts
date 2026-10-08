@@ -1,6 +1,7 @@
 import { jsonResponse, readJson, serve } from "../_shared/http.ts";
 import { createAdminClient, getCaller } from "../_shared/supabase.ts";
 import { randomPin } from "../_shared/accounts.ts";
+import { createSmsSender, smsConfigFromEnv } from "../_shared/solapi.ts";
 import type { Profile } from "../_shared/types.ts";
 import { handleStudentAccounts, type StudentRow } from "./handler.ts";
 
@@ -11,7 +12,13 @@ async function inChunks<T>(ids: string[], load: (chunk: string[]) => Promise<T[]
   return rows;
 }
 
+// 문자에 넣을 로그인 주소: 호출한 화면의 주소(Origin) + /login.html
+function loginPageUrl(origin: string | null): string | null {
+  return origin && /^https?:\/\/[A-Za-z0-9.:-]+$/.test(origin) ? `${origin}/login.html` : null;
+}
+
 serve(async (req) => {
+  const smsConfig = smsConfigFromEnv();
   const admin = createAdminClient();
   const caller = await getCaller(req, admin);
   const body = await readJson(req);
@@ -22,7 +29,7 @@ serve(async (req) => {
     students: {
       getMany: (ids) =>
         inChunks(ids, async (chunk) => {
-          const { data, error } = await admin.from("students").select("id, grade, cls, name, login_id").in("id", chunk);
+          const { data, error } = await admin.from("students").select("id, grade, cls, name, login_id, phone").in("id", chunk);
           if (error) throw error;
           return (data ?? []) as StudentRow[];
         }),
@@ -44,6 +51,8 @@ serve(async (req) => {
       },
     },
     generatePin: () => randomPin(6),
+    sms: smsConfig ? createSmsSender(smsConfig) : null,
+    appUrl: loginPageUrl(req.headers.get("Origin")),
   });
   return jsonResponse(200, result);
 });

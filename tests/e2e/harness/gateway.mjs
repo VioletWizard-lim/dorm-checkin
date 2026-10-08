@@ -241,6 +241,7 @@ export function createGateway({ auth, postgrestUrl, functionUrls }) {
       "apikey",
       "authorization",
       "x-client-info",
+      "origin", // 함수가 문자에 넣을 접속 주소를 만들 때 씀(실제 Supabase도 넘겨줌)
     ]) {
       if (headers[name] !== undefined) forwarded[name] = headers[name];
     }

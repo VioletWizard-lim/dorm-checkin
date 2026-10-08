@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.student-accounts]
 verify_jwt = false
+
+[functions.notify-outing]
+verify_jwt = false

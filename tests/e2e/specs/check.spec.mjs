@@ -24,7 +24,7 @@ test.describe("외출 체크 화면", () => {
     await expect(card(page, "박지훈").locator("button")).toHaveCount(0);
   });
 
-  test("외출 체크 → 사유·복귀 시각 저장, 담당 교사 기록, 외출증 이메일 발송 → 복귀 체크", async ({ env, openAs, page }) => {
+  test("외출 체크 → 사유·복귀 시각 저장, 담당 교사 기록, 학생 외출증(MMS)·학부모 문자 → 복귀 체크", async ({ env, openAs, page }) => {
     answerDialogs(page, ["병원 진료", "18:00"]);
     await openAs("homeroom01", "/check.html");
     await card(page, "홍길동").getByRole("button", { name: "외출 체크" }).click();
@@ -36,34 +36,53 @@ test.describe("외출 체크 화면", () => {
     const row = await outingRow(env, todayKst(), STUDENT.hong);
     expect(row).toMatchObject({ status: "out", reason: "병원 진료", expected_return: "18:00", checked_by_name: "김담임" });
 
-    const sends = await page.evaluate(() => window.__emailjsSends);
-    expect(sends).toHaveLength(1);
-    expect(sends[0].params).toMatchObject({
-      to_email: "hong@example.com",
-      student_name: "홍길동",
-      sid: "10305",
-      cls: "1학년 3반",
-      seat_no: "5",
-      reason: "병원 진료",
-      return_time: "18:00",
-      teacher_id: "김담임",
+    // 학생에게는 화면에서 만든 외출증 이미지(JPEG)를 붙인 MMS, 학부모에게는 안내 문자
+    await expect(card(page, "홍길동").locator(".notice-text")).toHaveText("문자 학생 ✓ · 학부모 ✓");
+    expect(env.sms.uploads).toHaveLength(1);
+    expect(env.sms.uploads[0]).toMatchObject({ type: "MMS" });
+    expect(Buffer.from(env.sms.uploads[0].file, "base64").subarray(0, 3)).toEqual(Buffer.from([0xff, 0xd8, 0xff]));
+    expect(Buffer.from(env.sms.uploads[0].file, "base64").length).toBeLessThan(200 * 1024);
+    const [toStudent, toParent] = env.sms.messages;
+    expect(toStudent).toMatchObject({ to: "01011112222", from: "0212345678", type: "MMS", imageId: "FILE1", subject: "외출증" });
+    expect(toStudent.text).toContain("홍길동 (1학년 3반 5번)");
+    expect(toStudent.text).toContain("~ 18:00");
+    expect(toStudent.text).toContain("사유: 병원 진료");
+    expect(toStudent.text).toContain("확인 교사: 김담임");
+    expect(toParent).toMatchObject({ to: "01033334444", subject: "외출 안내" });
+    expect(toParent.text).toContain("홍길동 학생이");
+    expect((await outingRow(env, todayKst(), STUDENT.hong)).notice).toMatchObject({
+      status: "done",
+      student: { result: "sent", mms: true },
+      parent: { result: "sent" },
     });
 
     await card(page, "홍길동").getByRole("button", { name: "복귀 체크" }).click();
     await expect(card(page, "홍길동").locator(".status-badge")).toHaveText("재실");
     const back = await outingRow(env, todayKst(), STUDENT.hong);
-    expect(back).toMatchObject({ status: "in", reason: null, expected_return: null });
-    expect(await page.evaluate(() => window.__emailjsSends.length)).toBe(1);
+    expect(back).toMatchObject({ status: "in", reason: null, expected_return: null, notice: null });
+    expect(env.sms.messages).toHaveLength(2); // 복귀할 때는 보내지 않음
   });
 
-  test("사유 입력을 취소해도 외출 체크는 된다(이메일 없는 학생은 발송 안 함)", async ({ env, openAs, page }) => {
+  test("문자 실패는 카드에 빨갛게 보인다", async ({ env, openAs, page }) => {
+    env.sms.failTo.add("01033334444");
+    answerDialogs(page, ["병원", ""]);
+    await openAs("homeroom01", "/check.html");
+    await card(page, "홍길동").getByRole("button", { name: "외출 체크" }).click();
+    const notice = card(page, "홍길동").locator(".notice-text");
+    await expect(notice).toHaveText("문자 학생 ✓ · 학부모 실패");
+    await expect(notice).toHaveClass(/notice-text--failed/);
+    await expect(notice).toHaveAttribute("title", "학부모: 수신번호 오류");
+  });
+
+  test("사유 입력을 취소해도 외출 체크는 된다(연락처 없는 학생은 문자 없음)", async ({ env, openAs, page }) => {
     answerDialogs(page, [null, null]);
     await openAs("teacher01", "/check.html");
     await card(page, "최하늘").getByRole("button", { name: "외출 체크" }).click();
     await expect(card(page, "최하늘").locator(".status-badge")).toHaveText("외출중");
     const row = await outingRow(env, todayKst(), STUDENT.haneul);
     expect(row).toMatchObject({ status: "out", reason: null, expected_return: null });
-    expect(await page.evaluate(() => window.__emailjsSends.length)).toBe(0);
+    await expect(card(page, "최하늘").locator(".notice-text")).toHaveText("문자 학생 번호 없음 · 학부모 번호 없음");
+    expect(env.sms.messages).toHaveLength(0);
   });
 
   test("자리 없음 → 재실로 되돌리기", async ({ env, openAs, page }) => {
@@ -85,7 +104,7 @@ test.describe("외출 체크 화면", () => {
     await expect(page.locator(".student-card .student-name")).toHaveText(["최하늘"]);
   });
 
-  test("지난 날짜 기록을 보고 고칠 수 있다(이메일은 보내지 않음)", async ({ env, openAs, page }) => {
+  test("지난 날짜 기록을 보고 고칠 수 있다(문자는 보내지 않음)", async ({ env, openAs, page }) => {
     answerDialogs(page, ["외박", "21:00"]);
     await openAs("teacher01", "/check.html");
     await expect(page.locator("#dateSelect")).toHaveValue(todayKst());
@@ -106,7 +125,7 @@ test.describe("외출 체크 화면", () => {
     await expect(card(page, "최하늘").locator(".status-badge")).toHaveText("외출중");
     expect(await outingRow(env, yesterdayKst(), STUDENT.haneul)).toMatchObject({ status: "out", reason: "외박" });
     expect(await outingRow(env, todayKst(), STUDENT.haneul)).toBeNull();
-    expect(await page.evaluate(() => window.__emailjsSends.length)).toBe(0);
+    expect(env.sms.messages).toHaveLength(0);
 
     await page.fill("#dateSelect", todayKst());
     await expect(page.locator("#pastDateNotice")).toBeHidden();
@@ -137,6 +156,8 @@ test.describe("외출 체크 화면", () => {
     const seen = answerDialogs(page, ["사유", "", true]);
     await openAs("teacher01", "/check.html");
     await expect(card(page, "홍길동").locator(".status-badge")).toHaveText("재실");
+    // 실시간 연결 직후의 다시 읽기까지 끝난 뒤에 비활성화한다(그 전에 바꾸면 목록이 빈 채로 다시 그려짐)
+    await page.waitForLoadState("networkidle");
     // 화면을 연 뒤에 계정이 비활성화된 상황(서버 RLS가 쓰기를 거부)
     await env.sql("update public.profiles set disabled = true where login_id = 'teacher01'");
     await card(page, "홍길동").getByRole("button", { name: "외출 체크" }).click();

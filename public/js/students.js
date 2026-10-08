@@ -562,7 +562,9 @@ async function issueAccounts(studentIds, btn) {
         name: s.name,
         sid: s.sid,
         loginId: res && res.ok ? res.loginId : s.loginId || "",
-        password: res && res.ok ? res.password : "",
+        password: res && res.ok ? res.password || "" : "",
+        sms: res && res.ok ? res.sms : "",
+        smsError: res && res.ok ? res.smsError || "" : "",
         ok: Boolean(res && res.ok),
         errorText: res && !res.ok ? res.error : failure || "계정을 만들지 못했습니다.",
       });
@@ -580,7 +582,18 @@ async function resetAccountPassword(studentId, btn) {
   btn.disabled = true;
   try {
     const data = await callFunction("student-accounts", { action: "reset-password", studentId });
-    addAccountResults([{ kind: "reset", name: s.name, sid: s.sid, loginId: data.loginId, password: data.password, ok: true }]);
+    addAccountResults([
+      {
+        kind: "reset",
+        name: s.name,
+        sid: s.sid,
+        loginId: data.loginId,
+        password: data.password || "",
+        sms: data.sms,
+        smsError: data.smsError || "",
+        ok: true,
+      },
+    ]);
   } catch (err) {
     addAccountResults([{ kind: "reset", name: s.name, sid: s.sid, loginId: s.loginId, ok: false, errorText: err.message }]);
   }
@@ -629,7 +642,15 @@ function addAccountResults(results) {
   accountResultWrap.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-// 발급·재발급 결과. 성공한 것만 "이름[탭]학번[탭]아이디[탭]비밀번호" 줄로 모아 엑셀에 붙여넣기 쉽게 보여준다.
+// 비밀번호를 어떻게 전달했는지(서버가 학생에게 문자로 보냈으면 비밀번호는 화면에 오지 않음)
+function describeDelivery(r) {
+  if (r.sms === "sent") return "비밀번호를 학생에게 문자로 보냈습니다";
+  const reason =
+    r.sms === "failed" ? `문자 실패(${r.smsError || "발송 실패"}) — ` : r.sms === "no-phone" ? "학생 연락처 없음 — " : "";
+  return `${reason}비밀번호: ${r.password}`;
+}
+
+// 발급·재발급 결과. 화면에 비밀번호가 온 것만 "이름[탭]학번[탭]아이디[탭]비밀번호" 줄로 모아 엑셀에 붙여넣기 쉽게 보여준다.
 function renderAccountResults() {
   const results = state.accountResults;
   accountResultWrap.hidden = results.length === 0;
@@ -643,7 +664,7 @@ function renderAccountResults() {
           </div>
           ${
             r.ok
-              ? `<div class="status-badge status-badge--in">${r.kind === "reset" ? "재발급됨" : "발급됨"}</div><div class="since-text">비밀번호: ${escapeHtml(r.password)}</div>`
+              ? `<div class="status-badge status-badge--in">${r.kind === "reset" ? "재발급됨" : "발급됨"}</div><div class="since-text">${escapeHtml(describeDelivery(r))}</div>`
               : `<div class="status-badge status-badge--out">실패</div><div class="since-text">${escapeHtml(r.errorText)}</div>`
           }
         </div>
@@ -651,7 +672,7 @@ function renderAccountResults() {
     )
     .join("");
   accountResultCopy.value = results
-    .filter((r) => r.ok)
+    .filter((r) => r.ok && r.password)
     .map((r) => [r.name, r.sid, r.loginId, r.password].join("\t"))
     .join("\n");
 }

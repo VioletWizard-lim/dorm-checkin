@@ -111,7 +111,7 @@ test.describe("학생 화면", () => {
 });
 
 test.describe("외출 신청 승인", () => {
-  test("담임이 승인하면 바로 외출중이 되고 학생 화면에 실시간으로 보인다(외출증 이메일 발송)", async ({ env, openAs, openOtherAs, page }) => {
+  test("담임이 승인하면 바로 외출중이 되고 학생 화면에 실시간으로 보인다(외출증 문자 발송)", async ({ env, openAs, openOtherAs, page }) => {
     await env.createStudentAccount(STUDENT.hong, "hong123");
     const studentPage = await openOtherAs("hong123", "/student.html");
     await studentPage.fill("#reasonInput", "치과");
@@ -143,8 +143,12 @@ test.describe("외출 신청 승인", () => {
       request_id: request.id,
       checked_by_name: "김담임",
     });
-    const sends = await page.evaluate(() => window.__emailjsSends);
-    expect(sends.map((s) => s.params)).toMatchObject([{ student_name: "홍길동", reason: "치과", out_time: "00:00", return_time: "21:00", teacher_id: "김담임" }]);
+    // 승인 = 외출 시작: 학생 외출증(MMS)·학부모 문자
+    await expect(page.locator(".student-card", { hasText: "홍길동" }).locator(".notice-text")).toHaveText("문자 학생 ✓ · 학부모 ✓");
+    expect(env.sms.messages.map((m) => m.to)).toEqual(["01011112222", "01033334444"]);
+    expect(env.sms.messages[0].text).toContain("00:00 ~ 21:00");
+    expect(env.sms.messages[0].text).toContain("사유: 치과");
+    expect(env.sms.messages[0].text).toContain("확인 교사: 김담임");
 
     await expect(studentPage.locator("#requestList .request-chip")).toHaveText(["승인됨"]);
     await expect(studentPage.locator("#requestList")).toContainText("김담임 선생님 승인");

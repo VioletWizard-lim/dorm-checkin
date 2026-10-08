@@ -1,6 +1,7 @@
 import { assertEquals, assertRejects } from "jsr:@std/assert@1";
 import { HttpError } from "../_shared/http.ts";
 import type { AuthLikeError, Profile } from "../_shared/types.ts";
+import type { SmsMessage, SmsResult } from "../_shared/solapi.ts";
 import { handleStudentAccounts, type StudentAccountsDeps, type StudentRow } from "./handler.ts";
 
 function staff(overrides: Partial<Profile> = {}): Profile {
@@ -20,10 +21,10 @@ function staff(overrides: Partial<Profile> = {}): Profile {
 }
 
 const STUDENTS: StudentRow[] = [
-  { id: "s-hong", grade: 1, cls: "1학년 3반", name: "홍길동", login_id: "Hong.GD" },
-  { id: "s-noid", grade: 1, cls: "1학년 3반", name: "아이디없음", login_id: null },
-  { id: "s-other", grade: 1, cls: "1학년 1반", name: "다른반", login_id: "other1" },
-  { id: "s-done", grade: 1, cls: "1학년 3반", name: "발급됨", login_id: "done1" },
+  { id: "s-hong", grade: 1, cls: "1학년 3반", name: "홍길동", login_id: "Hong.GD", phone: "01011112222" },
+  { id: "s-noid", grade: 1, cls: "1학년 3반", name: "아이디없음", login_id: null, phone: null },
+  { id: "s-other", grade: 1, cls: "1학년 1반", name: "다른반", login_id: "other1", phone: null },
+  { id: "s-done", grade: 1, cls: "1학년 3반", name: "발급됨", login_id: "done1", phone: "01055556666" },
 ];
 
 function studentProfile(studentId: string, loginId: string): Profile {
@@ -36,10 +37,13 @@ type Calls = {
   deletedStudents: string[];
   updatedUsers: { id: string; attrs: Record<string, unknown> }[];
   insertedProfiles: Record<string, unknown>[];
+  sms: SmsMessage[];
 };
 
-function fakeDeps(options: { caller?: Profile; existingEmails?: string[]; failProfileInsert?: boolean } = {}) {
-  const calls: Calls = { created: [], deletedUsers: [], deletedStudents: [], updatedUsers: [], insertedProfiles: [] };
+function fakeDeps(
+  options: { caller?: Profile; existingEmails?: string[]; failProfileInsert?: boolean; sms?: "on" | "fail" } = {},
+) {
+  const calls: Calls = { created: [], deletedUsers: [], deletedStudents: [], updatedUsers: [], insertedProfiles: [], sms: [] };
   const emails = new Set(options.existingEmails ?? []);
   const profiles = [studentProfile("s-done", "done1")];
   let pin = 0;
@@ -80,6 +84,18 @@ function fakeDeps(options: { caller?: Profile; existingEmails?: string[]; failPr
       },
     },
     generatePin: () => String(123450 + ++pin),
+    sms: options.sms
+      ? {
+        uploadMmsImage: () => Promise.reject(new Error("not used")),
+        send(messages) {
+          calls.sms.push(...messages);
+          const results = new Map<string, SmsResult>();
+          for (const m of messages) results.set(m.key, options.sms === "fail" ? { ok: false, error: "잔액 부족" } : { ok: true });
+          return Promise.resolve(results);
+        },
+      }
+      : null,
+    appUrl: "https://dorm.example/login.html",
   };
   return { deps, calls };
 }
@@ -107,7 +123,40 @@ Deno.test("issue creates lowercase student logins with 6-digit pins and links th
   assertEquals(calls.insertedProfiles, [
     { id: "auth-new-1", login_id: "hong.gd", kind: "student", role: "student", name: "홍길동", student_id: "s-hong" },
   ]);
-  assertEquals(result.results, [{ studentId: "s-hong", ok: true, loginId: "hong.gd", password: "123451" }]);
+  // 문자가 설정되지 않았으면 비밀번호를 화면에 돌려준다
+  assertEquals(result.results, [{ studentId: "s-hong", ok: true, loginId: "hong.gd", password: "123451", sms: "off" }]);
+});
+
+Deno.test("issue texts the password to the student and leaves it out of the response", async () => {
+  const { deps, calls } = fakeDeps({ caller: staff({ role: "admin" }), sms: "on" });
+  const result = await handleStudentAccounts({ action: "issue", studentIds: ["s-hong", "s-other"] }, deps) as { results: unknown[] };
+  assertEquals(result.results, [
+    { studentId: "s-hong", ok: true, loginId: "hong.gd", sms: "sent" },
+    // 학생 연락처가 없으면 화면에 비밀번호를 보여 준다
+    { studentId: "s-other", ok: true, loginId: "other1", password: "123452", sms: "no-phone" },
+  ]);
+  assertEquals(calls.sms, [{
+    key: "s-hong",
+    to: "01011112222",
+    text: "[기숙사 외출체크] 홍길동 학생 계정\n아이디: hong.gd\n비밀번호: 123451\n접속: https://dorm.example/login.html\n" +
+      "로그인 화면에서 '학생' 탭을 골라 주세요.",
+  }]);
+});
+
+Deno.test("a failed password text falls back to showing the password", async () => {
+  const { deps } = fakeDeps({ sms: "fail" });
+  assertEquals(await handleStudentAccounts({ action: "reset-password", studentId: "s-done" }, deps), {
+    loginId: "done1",
+    password: "123451",
+    sms: "failed",
+    smsError: "잔액 부족",
+  });
+  const sent = fakeDeps({ sms: "on" });
+  assertEquals(await handleStudentAccounts({ action: "reset-password", studentId: "s-done" }, sent.deps), {
+    loginId: "done1",
+    sms: "sent",
+  });
+  assertEquals(sent.calls.sms.map((m) => m.to), ["01055556666"]);
 });
 
 Deno.test("issue reports missing ids, other classes, existing accounts and unknown students per row", async () => {
@@ -156,6 +205,7 @@ Deno.test("reset-password gives a new pin for an existing account in scope", asy
   assertEquals(await handleStudentAccounts({ action: "reset-password", studentId: "s-done" }, deps), {
     loginId: "done1",
     password: "123451",
+    sms: "off",
   });
   assertEquals(calls.updatedUsers, [{ id: "auth-s-done", attrs: { password: "123451" } }]);
 
