@@ -115,8 +115,10 @@ Deno.test("only active staff with a role may call it", async () => {
   }
 });
 
+const admin = () => staff({ role: "admin" });
+
 Deno.test("issue creates lowercase student logins with 6-digit pins and links the profile", async () => {
-  const { deps, calls } = fakeDeps();
+  const { deps, calls } = fakeDeps({ caller: admin() });
   const result = await handleStudentAccounts({ action: "issue", studentIds: ["s-hong", "s-hong"] }, deps) as { results: unknown[] };
   assertEquals(calls.created, [{ email: "hong.gd@student.donghall.local", password: "123451" }]);
   assertEquals(calls.insertedProfiles, [
@@ -158,15 +160,14 @@ Deno.test("a failed password text falls back to showing the password", async () 
   assertEquals(sent.calls.sms.map((m) => m.to), ["01055556666"]);
 });
 
-Deno.test("issue reports missing ids, other classes, existing accounts and unknown students per row", async () => {
-  const { deps, calls } = fakeDeps();
+Deno.test("issue reports missing ids, existing accounts and unknown students per row", async () => {
+  const { deps, calls } = fakeDeps({ caller: admin() });
   const result = await handleStudentAccounts(
-    { action: "issue", studentIds: ["s-noid", "s-other", "s-done", "s-missing"] },
+    { action: "issue", studentIds: ["s-noid", "s-done", "s-missing"] },
     deps,
   ) as { results: unknown[] };
   assertEquals(result.results, [
     { studentId: "s-noid", ok: false, error: "ID가 등록되지 않았습니다." },
-    { studentId: "s-other", ok: false, error: "이 학생의 계정을 관리할 권한이 없습니다." },
     { studentId: "s-done", ok: false, error: "이미 계정이 있습니다." },
     { studentId: "s-missing", ok: false, error: "학생을 찾을 수 없습니다." },
   ]);
@@ -174,29 +175,30 @@ Deno.test("issue reports missing ids, other classes, existing accounts and unkno
 });
 
 Deno.test("issue maps a taken login and rolls back when the profile cannot be saved", async () => {
-  const taken = fakeDeps({ existingEmails: ["hong.gd@student.donghall.local"] });
+  const taken = fakeDeps({ caller: admin(), existingEmails: ["hong.gd@student.donghall.local"] });
   const takenResult = await handleStudentAccounts({ action: "issue", studentIds: ["s-hong"] }, taken.deps) as { results: unknown[] };
   assertEquals(takenResult.results, [{ studentId: "s-hong", ok: false, error: "이미 사용 중인 아이디입니다." }]);
 
-  const broken = fakeDeps({ failProfileInsert: true });
+  const broken = fakeDeps({ caller: admin(), failProfileInsert: true });
   const brokenResult = await handleStudentAccounts({ action: "issue", studentIds: ["s-hong"] }, broken.deps) as { results: unknown[] };
   assertEquals(brokenResult.results, [{ studentId: "s-hong", ok: false, error: "계정 정보를 저장하지 못했습니다." }]);
   assertEquals(broken.calls.deletedUsers, ["auth-new-1"]);
 });
 
 Deno.test("issue validates the list", async () => {
-  await assertHttpError(handleStudentAccounts({ action: "issue", studentIds: [] }, fakeDeps().deps), 400);
-  await assertHttpError(handleStudentAccounts({ action: "issue", studentIds: "s-hong" }, fakeDeps().deps), 400);
+  const deps = () => fakeDeps({ caller: admin() }).deps;
+  await assertHttpError(handleStudentAccounts({ action: "issue", studentIds: [] }, deps()), 400);
+  await assertHttpError(handleStudentAccounts({ action: "issue", studentIds: "s-hong" }, deps()), 400);
   const tooMany = Array.from({ length: 201 }, (_, i) => `s-${i}`);
-  await assertHttpError(handleStudentAccounts({ action: "issue", studentIds: tooMany }, fakeDeps().deps), 400);
+  await assertHttpError(handleStudentAccounts({ action: "issue", studentIds: tooMany }, deps()), 400);
 });
 
-Deno.test("grade managers and admins may issue across classes", async () => {
-  for (const caller of [staff({ role: "gradeManager", managed_classes: [], managed_grades: [1] }), staff({ role: "admin" })]) {
-    const { deps } = fakeDeps({ caller });
-    const result = await handleStudentAccounts({ action: "issue", studentIds: ["s-other"] }, deps) as { results: { ok: boolean }[] };
-    assertEquals(result.results[0].ok, true);
+Deno.test("only admins may issue student accounts", async () => {
+  for (const caller of [staff(), staff({ role: "gradeManager", managed_classes: [], managed_grades: [1] })]) {
+    await assertHttpError(handleStudentAccounts({ action: "issue", studentIds: ["s-hong"] }, fakeDeps({ caller }).deps), 403);
   }
+  const result = await handleStudentAccounts({ action: "issue", studentIds: ["s-other"] }, fakeDeps({ caller: admin() }).deps) as { results: { ok: boolean }[] };
+  assertEquals(result.results[0].ok, true);
 });
 
 Deno.test("reset-password (admin only) gives a new pin for an existing account", async () => {
@@ -232,13 +234,14 @@ Deno.test("delete removes the login (admin only), and the roster row only when a
   await assertHttpError(handleStudentAccounts({ action: "delete", studentId: "s-hong" }, deps), 404);
 });
 
-Deno.test("homeroom teachers may remove a roster row with its login, but not the login alone", async () => {
+Deno.test("homeroom teachers may remove only roster rows without a login", async () => {
   const { deps, calls } = fakeDeps();
   await assertHttpError(handleStudentAccounts({ action: "delete", studentId: "s-done" }, deps), 403);
+  await assertHttpError(handleStudentAccounts({ action: "delete", studentId: "s-done", withStudent: true }, deps), 403);
   assertEquals(calls.deletedUsers, []);
-  await handleStudentAccounts({ action: "delete", studentId: "s-done", withStudent: true }, deps);
-  assertEquals(calls.deletedUsers, ["auth-s-done"]);
-  assertEquals(calls.deletedStudents, ["s-done"]);
+  assertEquals(calls.deletedStudents, []);
+  await handleStudentAccounts({ action: "delete", studentId: "s-hong", withStudent: true }, deps);
+  assertEquals(calls.deletedStudents, ["s-hong"]);
   await assertHttpError(handleStudentAccounts({ action: "delete", studentId: "s-other", withStudent: true }, deps), 403);
 });
 

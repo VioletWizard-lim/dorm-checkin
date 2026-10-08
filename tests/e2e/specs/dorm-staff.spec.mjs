@@ -107,7 +107,7 @@ test.describe("기숙사부 — 보기 + 명령퇴사 기간만", () => {
         return { error: err.message };
       }
     }, STUDENT.haneul);
-    expect(JSON.stringify(result)).toContain("이 학생의 계정을 관리할 권한이 없습니다.");
+    expect(JSON.stringify(result)).toContain("관리자만");
     expect(JSON.stringify(result)).not.toContain("password");
   });
 });

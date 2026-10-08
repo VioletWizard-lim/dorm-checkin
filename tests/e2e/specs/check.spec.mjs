@@ -11,7 +11,7 @@ async function outingRow(env, date, studentId) {
 
 test.describe("외출 체크 화면", () => {
   test("학생 목록과 상태별 버튼", async ({ openAs, page }) => {
-    await openAs("teacher01", "/check.html");
+    await openAs("admin01", "/check.html");
     const names = page.locator(".student-card .student-name");
     await expect(names).toHaveText(["김민준", "최하늘", "홍길동", "이서연", "박지훈"]); // 학번순
     await expect(page.locator("#outCountText")).toHaveText("외출중 0명");
@@ -23,6 +23,36 @@ test.describe("외출 체크 화면", () => {
     await expect(card(page, "박지훈").locator(".status-badge")).toHaveText("명령퇴사");
     await expect(card(page, "박지훈")).toContainText("학생 명단 관리에서 설정");
     await expect(card(page, "박지훈").locator("button")).toHaveCount(0);
+  });
+
+  test("외출 체크는 담당 범위만, 자습 감독은 확인 후 복귀만", async ({ env, openAs, openOtherAs, page }) => {
+    await env.sql("insert into public.outings (date, student_id, status, reason, expected_return) values ($1, $2, 'out', '학원', '23:59')", [todayKst(), STUDENT.seoyeon]);
+    // 1학년 3반 담임: 자기 반(홍길동·최하늘)만 외출 체크, 다른 반 외출생(이서연)은 복귀 버튼 없음. 자리 없음 해제는 누구나
+    await openAs("homeroom01", "/check.html");
+    await expect(card(page, "홍길동").getByRole("button", { name: "외출 체크" })).toBeVisible();
+    await expect(card(page, "최하늘").getByRole("button", { name: "외출 체크" })).toBeVisible();
+    await expect(card(page, "김민준").getByRole("button", { name: "외출 체크" })).toHaveCount(0);
+    await expect(card(page, "김민준").getByRole("button", { name: "재실로 되돌리기" })).toBeVisible();
+    await expect(card(page, "이서연").locator("button")).toHaveText(["외출증 보기"]);
+
+    // 자습 감독: 외출 체크 없음, 복귀는 확인 창을 거쳐서
+    const sup = await openOtherAs("super01", "/check.html");
+    const seen = answerDialogs(sup, [false, true]);
+    await expect(sup.getByRole("button", { name: "외출 체크" })).toHaveCount(0);
+    await card(sup, "이서연").getByRole("button", { name: "복귀 체크" }).click();
+    await expect.poll(() => seen.map((d) => d.message)).toEqual(["이서연 학생이 복귀한 것이 확실한가요?"]);
+    expect((await outingRow(env, todayKst(), STUDENT.seoyeon)).status).toBe("out"); // 취소하면 그대로
+    await card(sup, "이서연").getByRole("button", { name: "복귀 체크" }).click();
+    await expect(card(sup, "이서연").locator(".status-badge")).toHaveText("재실");
+    expect(await outingRow(env, todayKst(), STUDENT.seoyeon)).toMatchObject({ status: "in", checked_by_name: "야간감독" });
+
+    // 화면을 우회해도 서버가 담당 밖 외출 체크를 막는다
+    const error = await page.evaluate(async ({ date, id }) => {
+      const { supabase } = await import("/js/supabase-client.js");
+      const { error } = await supabase.from("outings").upsert({ date, student_id: id, status: "out", expected_return: "23:59" });
+      return error && error.message;
+    }, { date: todayKst(), id: STUDENT.minjun });
+    expect(error).toBe("이 학생의 외출을 처리할 권한이 없습니다.");
   });
 
   test("외출 체크 → 사유·복귀 시각 저장, 담당 교사 기록, 학부모 문자 → 복귀 체크", async ({ env, openAs, page }) => {
@@ -79,7 +109,7 @@ test.describe("외출 체크 화면", () => {
   test("사유 입력을 취소해도 외출 체크는 된다(학부모 연락처가 없으면 문자 없음)", async ({ env, openAs, page }) => {
     answerDialogs(page, [null, "9:30 "]);
     await page.clock.install({ time: new Date(`${todayKst()}T08:00:00+09:00`) });
-    await openAs("teacher01", "/check.html");
+    await openAs("homeroom01", "/check.html");
     await card(page, "최하늘").getByRole("button", { name: "외출 체크" }).click();
     await expect(card(page, "최하늘").locator(".status-badge")).toHaveText("외출중");
     const row = await outingRow(env, todayKst(), STUDENT.haneul);
@@ -90,7 +120,7 @@ test.describe("외출 체크 화면", () => {
 
   test("예상 복귀 시각은 꼭 넣어야 한다(취소·잘못된 값·지난 시각이면 외출 체크 안 함)", async ({ env, openAs, page }) => {
     const seen = answerDialogs(page, ["병원", null, "병원", "모름", null, "병원", "00:00", null]);
-    await openAs("teacher01", "/check.html");
+    await openAs("homeroom01", "/check.html");
     const btn = card(page, "최하늘").getByRole("button", { name: "외출 체크" });
     await btn.click(); // 예상 복귀 입력을 취소
     await btn.click(); // 시각이 아닌 값
@@ -185,12 +215,12 @@ test.describe("외출 체크 화면", () => {
 
   test("저장이 거부되면 알림을 띄우고 화면은 그대로 둔다", async ({ env, openAs, page }) => {
     const seen = answerDialogs(page, ["사유", "23:59", true]);
-    await openAs("teacher01", "/check.html");
+    await openAs("homeroom01", "/check.html");
     await expect(card(page, "홍길동").locator(".status-badge")).toHaveText("재실");
     // 실시간 연결 직후의 다시 읽기까지 끝난 뒤에 비활성화한다(그 전에 바꾸면 목록이 빈 채로 다시 그려짐)
     await page.waitForLoadState("networkidle");
     // 화면을 연 뒤에 계정이 비활성화된 상황(서버 RLS가 쓰기를 거부)
-    await env.sql("update public.profiles set disabled = true where login_id = 'teacher01'");
+    await env.sql("update public.profiles set disabled = true where login_id = 'homeroom01'");
     await card(page, "홍길동").getByRole("button", { name: "외출 체크" }).click();
     await expect.poll(() => seen.filter((d) => d.type === "alert").map((d) => d.message)).toEqual([
       "저장하지 못했습니다: 권한이 없습니다.",

@@ -137,6 +137,16 @@ function getRawOutingStatus(studentId) {
   return status === "out" ? "out" : "in";
 }
 
+// 외출 체크·외출 취소·복귀를 할 수 있는 담당 범위: 관리자 전체, 학년부장 담당 학년, 담임 담당 반(서버 can_manage_student)
+function canManageStudent(student) {
+  const p = state.profile;
+  if (!p || !student) return false;
+  if (p.role === "admin") return true;
+  if (p.role === "gradeManager") return Boolean((p.managedGrades || {})[student.grade]);
+  if (p.role === "teacher") return Boolean(((p.managedClasses || {})[student.grade] || {})[student.cls]);
+  return false;
+}
+
 function canEditRoom(roomId) {
   if (!state.editMode || !roomId) return false;
   if (state.role === "admin") return true;
@@ -290,9 +300,21 @@ function renderGrid(room) {
           // "외출"(재실 -> 외출중)은 여기서 할 수 없다 — check.html에서만.
           actionButtonsHtml = `<button type="button" class="seat-cell__action-btn" data-seat-mark-away="${escapeHtml(studentId)}">자리없음</button>`;
         } else if (rawStatus === "scheduled") {
-          actionButtonsHtml = `<button type="button" class="seat-cell__action-btn" data-seat-pass="${escapeHtml(studentId)}">외출증</button><button type="button" class="seat-cell__action-btn" data-seat-restore="${escapeHtml(studentId)}" data-confirm-cancel="${escapeHtml(name)}">외출 취소</button>`;
+          // 외출 취소는 담당 범위만(서버 outings_check_scope와 같은 규칙)
+          actionButtonsHtml = `<button type="button" class="seat-cell__action-btn" data-seat-pass="${escapeHtml(studentId)}">외출증</button>${
+            canManageStudent(student)
+              ? `<button type="button" class="seat-cell__action-btn" data-seat-restore="${escapeHtml(studentId)}" data-confirm-cancel="${escapeHtml(name)}">외출 취소</button>`
+              : ""
+          }`;
         } else if (rawStatus === "out") {
-          actionButtonsHtml = `<button type="button" class="seat-cell__action-btn" data-seat-pass="${escapeHtml(studentId)}">외출증</button><button type="button" class="seat-cell__action-btn" data-seat-restore="${escapeHtml(studentId)}">복귀</button>`;
+          // 복귀는 담당 범위 + 자습 감독(확인 창 한 번)
+          const manage = canManageStudent(student);
+          const supervisor = state.role === "studyHallSupervisor";
+          actionButtonsHtml = `<button type="button" class="seat-cell__action-btn" data-seat-pass="${escapeHtml(studentId)}">외출증</button>${
+            manage || supervisor
+              ? `<button type="button" class="seat-cell__action-btn" data-seat-restore="${escapeHtml(studentId)}"${manage ? "" : ` data-confirm-return="${escapeHtml(name)}"`}>복귀</button>`
+              : ""
+          }`;
         } else {
           actionButtonsHtml = `<button type="button" class="seat-cell__action-btn" data-seat-restore="${escapeHtml(studentId)}">재실로</button>`;
         }
@@ -532,6 +554,8 @@ seatGridEl.addEventListener("click", (event) => {
   if (restoreBtn) {
     // 승인된 외출(외출 예정)을 취소할 때는 한 번 확인한다.
     if (restoreBtn.dataset.confirmCancel && !window.confirm(`${restoreBtn.dataset.confirmCancel} 학생의 외출을 취소할까요?`)) return;
+    // 자습 감독의 복귀는 한 번 더 확인한다(사용자 요청)
+    if (restoreBtn.dataset.confirmReturn && !window.confirm(`${restoreBtn.dataset.confirmReturn} 학생이 복귀한 것이 확실한가요?`)) return;
     restoreToIn(restoreBtn.dataset.seatRestore);
     state.actionCellKey = null;
     render();
@@ -580,12 +604,8 @@ async function init() {
   const session = await requireStaff();
   if (!session) return;
   const { loginId, profile } = session;
-  // 자습 감독 계정은 외출 체크 화면만 쓸 수 있다.
-  if (profile.role === "studyHallSupervisor") {
-    window.location.replace("./check.html");
-    return;
-  }
   state.role = profile.role || "teacher";
+  state.profile = profile;
   state.roleResolved = true;
   state.managedRoomIds = Object.keys(profile.managedRooms || {});
   currentTeacherName = profile.name || "";

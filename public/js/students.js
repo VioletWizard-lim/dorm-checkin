@@ -253,12 +253,11 @@ function renderRoster() {
         : hasAccount
         ? `<span class="account-chip account-chip--active">계정 있음</span>`
         : `<span class="account-chip">${s.loginId ? "계정 없음" : "ID 미등록"}</span>`;
-      const accountButtons = state.leaveOnly
+      // 학생 계정 발급·비번 재발급·계정 삭제는 관리자만(사용자 요청 — 서버 함수도 거부)
+      const accountButtons = !state.isAdmin
         ? ""
         : hasAccount
-        ? !state.isAdmin
-          ? ""
-          : `<button type="button" class="btn-secondary btn-small" data-reset-account="${escapeHtml(id)}">비번 재발급</button>
+        ? `<button type="button" class="btn-secondary btn-small" data-reset-account="${escapeHtml(id)}">비번 재발급</button>
            <button type="button" class="btn-secondary btn-small" data-delete-account="${escapeHtml(id)}">계정 삭제</button>`
         : s.loginId
           ? `<button type="button" class="btn-secondary btn-small" data-issue-account="${escapeHtml(id)}">계정 발급</button>`
@@ -279,7 +278,12 @@ function renderRoster() {
               state.leaveOnly
                 ? `<button type="button" class="btn-secondary btn-small" data-edit-id="${escapeHtml(id)}">명령퇴사 설정</button>`
                 : `<button type="button" class="btn-secondary btn-small" data-edit-id="${escapeHtml(id)}">수정</button>
-            <button type="button" class="btn-danger btn-small" data-delete-id="${escapeHtml(id)}">삭제</button>`
+            ${
+              // 계정이 있는 학생을 명단에서 지우는 건 관리자만(계정도 함께 지워지므로)
+              hasAccount && !state.isAdmin
+                ? ""
+                : `<button type="button" class="btn-danger btn-small" data-delete-id="${escapeHtml(id)}">삭제</button>`
+            }`
             }
           </div>
         </div>
@@ -848,7 +852,7 @@ function initForGrades(allowedGrades) {
   bulkAddBtn.disabled = false;
   addStudentBtn.hidden = state.leaveOnly;
   bulkAddBtn.hidden = state.leaveOnly;
-  bulkIssueBtn.hidden = state.leaveOnly;
+  bulkIssueBtn.hidden = !state.isAdmin;
 
   const reportLoadError = (error) => {
     showPageError(`데이터를 불러오지 못했습니다(${describeError(error)}). 잠시 후 자동으로 다시 시도합니다.`);

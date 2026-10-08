@@ -61,9 +61,10 @@ export async function handleStudentAccounts(body: Record<string, unknown>, deps:
     throw new HttpError(403, "교직원만 사용할 수 있습니다.");
   }
   switch (body.action) {
+    // 학생 계정 발급·비밀번호 재발급·삭제는 관리자만(사용자 요청). 담당 교사는 계정 없는 학생을 명단에서 지우는 것만
     case "issue":
+      requireAdmin(caller, "학생 계정 발급은 관리자만 할 수 있습니다.");
       return { results: await issueAccounts(body.studentIds, deps) };
-    // 비밀번호 재발급·계정만 삭제는 관리자만(사용자 요청). 발급과, 명단에서 학생을 지울 때 계정을 함께 지우는 건 담당 교사도 가능
     case "reset-password":
       requireAdmin(caller, "비밀번호 재발급은 관리자만 할 수 있습니다.");
       return await resetPassword(body.studentId, deps);
@@ -228,6 +229,7 @@ async function resetPassword(
 
 async function deleteAccount(rawStudentId: unknown, withStudent: boolean, deps: StudentAccountsDeps): Promise<void> {
   const { student, account } = await loadTarget(rawStudentId, deps);
+  if (account) requireAdmin(deps.caller, "계정이 있는 학생은 관리자만 삭제할 수 있습니다.");
   if (!account && !withStudent) throw new HttpError(404, "계정이 아직 발급되지 않았습니다.");
   if (account) {
     // 프로필은 auth.users 외래키(on delete cascade)로 함께 지워진다.

@@ -37,7 +37,7 @@ test.describe("좌석 배치판 — 보기 모드", () => {
 
   test("외출 중 학생 복귀, 명령퇴사 좌석은 조작 불가", async ({ env, openAs, page }) => {
     await env.sql("insert into public.outings (date, student_id, status) values ($1, $2, 'out')", [todayKst(), STUDENT.seoyeon]);
-    await openAs("teacher01", "/seat.html");
+    await openAs("admin01", "/seat.html");
     await page.click("#roomTabs >> text=2·3학년실");
     await expect(cell(page, 0)).toHaveClass(/seat-cell--out/);
     await cell(page, 0).click();

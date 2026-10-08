@@ -216,20 +216,27 @@ function renderList(filtered) {
       const hasPendingRequest =
         state.selectedDate === TODAY_KEY && state.pendingRequests.some((r) => r.student_id === s.id);
 
+      // 외출 체크·외출 취소는 담당 범위(담임 담당 반·학년부장 담당 학년·관리자 전체)만,
+      // 복귀 체크는 담당 범위 + 자습 감독(확인 창 한 번) — 서버 트리거 outings_check_scope와 같은 규칙
+      const canManage = canApprove(s);
+      const supervisor = currentProfile && currentProfile.role === "studyHallSupervisor";
+      const passBtn = `<button type="button" class="btn-secondary btn-small" data-pass-id="${escapeHtml(s.id)}">외출증 보기</button>`;
       let actionsHtml;
       if (isReadOnly()) {
-        actionsHtml = isOut
-          ? `<div class="roster-actions"><button type="button" class="btn-secondary btn-small" data-pass-id="${escapeHtml(s.id)}">외출증 보기</button></div>`
-          : `<div class="ml-auto"></div>`;
+        actionsHtml = isOut ? `<div class="roster-actions">${passBtn}</div>` : `<div class="ml-auto"></div>`;
       } else if (status === "in") {
-        actionsHtml = `<button type="button" class="toggle-btn toggle-btn--mark-out" data-toggle-id="${escapeHtml(s.id)}" data-grade="${escapeHtml(s.grade)}" data-current-status="in">외출 체크</button>`;
+        actionsHtml = canManage
+          ? `<button type="button" class="toggle-btn toggle-btn--mark-out" data-toggle-id="${escapeHtml(s.id)}" data-grade="${escapeHtml(s.grade)}" data-current-status="in">외출 체크</button>`
+          : `<div class="ml-auto"></div>`;
       } else if (isOut) {
         // 외출중·외출 예정: 학생 화면과 같은 외출증을 볼 수 있다
-        const passBtn = `<button type="button" class="btn-secondary btn-small" data-pass-id="${escapeHtml(s.id)}">외출증 보기</button>`;
-        const toggleBtn =
-          status === "out"
-            ? `<button type="button" class="toggle-btn toggle-btn--mark-in" data-toggle-id="${escapeHtml(s.id)}" data-grade="${escapeHtml(s.grade)}" data-current-status="out">복귀 체크</button>`
-            : `<button type="button" class="toggle-btn toggle-btn--mark-in" data-toggle-id="${escapeHtml(s.id)}" data-grade="${escapeHtml(s.grade)}" data-current-status="out" data-confirm-cancel="${escapeHtml(s.name || "이 학생")}">외출 취소</button>`;
+        let toggleBtn = "";
+        if (status === "out" && (canManage || supervisor)) {
+          const confirmReturn = !canManage ? ` data-confirm-return="${escapeHtml(s.name || "이 학생")}"` : "";
+          toggleBtn = `<button type="button" class="toggle-btn toggle-btn--mark-in" data-toggle-id="${escapeHtml(s.id)}" data-grade="${escapeHtml(s.grade)}" data-current-status="out"${confirmReturn}>복귀 체크</button>`;
+        } else if (status === "scheduled" && canManage) {
+          toggleBtn = `<button type="button" class="toggle-btn toggle-btn--mark-in" data-toggle-id="${escapeHtml(s.id)}" data-grade="${escapeHtml(s.grade)}" data-current-status="out" data-confirm-cancel="${escapeHtml(s.name || "이 학생")}">외출 취소</button>`;
+        }
         actionsHtml = `<div class="roster-actions">${passBtn}${toggleBtn}</div>`;
       } else if (status === "leave") {
         actionsHtml = `<div class="since-text ml-auto">학생 명단 관리에서 설정</div>`;
@@ -454,6 +461,8 @@ listEl.addEventListener("click", (event) => {
   const currentStatus = btn.dataset.currentStatus;
   // 승인된 외출(외출 예정)을 취소할 때는 한 번 확인한다(잘못 누르면 승인이 없어지므로).
   if (btn.dataset.confirmCancel && !window.confirm(`${btn.dataset.confirmCancel} 학생의 외출을 취소할까요?`)) return;
+  // 자습 감독의 복귀 체크는 한 번 더 확인한다(사용자 요청)
+  if (btn.dataset.confirmReturn && !window.confirm(`${btn.dataset.confirmReturn} 학생이 복귀한 것이 확실한가요?`)) return;
   let reason = "";
   let expectedReturn = "";
   if (currentStatus === "in") {
@@ -535,10 +544,9 @@ async function init() {
   accountsLink.hidden = profile.role !== "admin";
   // 외출 기록: 관리자·학년부장·담임(담당 반이 있을 때)
   historyLink.hidden = profile.role !== "admin" && profile.role !== "gradeManager" && !hasManagedClasses;
-  // 자습 감독 계정은 외출 체크 화면만 쓸 수 있게 다른 화면 링크를 모두 숨긴다.
-  const isStudyHallSupervisor = profile.role === "studyHallSupervisor";
-  displayLink.hidden = isStudyHallSupervisor;
-  seatLink.hidden = isStudyHallSupervisor;
+  // 자습 감독도 현황판·좌석 배치판은 볼 수 있다(사용자 요청)
+  displayLink.hidden = false;
+  seatLink.hidden = false;
   currentTeacherName = profile.name || "";
 
   const role = profile.role || "teacher";
