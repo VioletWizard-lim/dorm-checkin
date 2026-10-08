@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>기숙사 면학 시스템 - 주소가 바뀌었습니다</title>
+<script>
+  // 예전 주소(Firebase Hosting)로 들어오면 같은 화면의 새 주소(GitHub Pages)로 보낸다. 즐겨찾기도 그대로 쓸 수 있게 경로를 유지
+  var NEW_BASE = "https://violetwizard-lim.github.io/dorm-checkin";
+  var path = location.pathname === "/" ? "/" : location.pathname;
+  location.replace(NEW_BASE + path + location.search);
+</script>
+<style>
+  body { font-family: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; background: #F3F4F7; color: #1C2230; display: grid; place-items: center; min-height: 100vh; margin: 0; padding: 16px; box-sizing: border-box; }
+  .box { background: #fff; border-radius: 16px; padding: 28px; max-width: 420px; text-align: center; }
+  a { color: #2B6CB0; font-weight: 700; word-break: break-all; }
+</style>
+</head>
+<body>
+  <div class="box">
+    <p><strong>기숙사 면학 시스템 주소가 바뀌었습니다.</strong></p>
+    <p>잠시 후 새 주소로 이동합니다. 이동하지 않으면 아래 주소를 눌러 주세요.</p>
+    <p><a href="https://violetwizard-lim.github.io/dorm-checkin/">https://violetwizard-lim.github.io/dorm-checkin/</a></p>
+    <p>즐겨찾기·바로가기는 새 주소로 바꿔 주세요.</p>
+  </div>
+</body>
+</html>

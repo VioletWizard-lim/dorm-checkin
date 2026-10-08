@@ -8,7 +8,7 @@ const historyRow = (page, name) => page.locator("#historyBody tr", { hasText: na
 
 test.describe("외출 기록", () => {
   test("담임: 담당 반 학생의 외출·복귀 시각을 본다(다른 반은 안 보임)", async ({ env, openAs, page }) => {
-    answerDialogs(page, ["편의점", "20:00"]);
+    answerDialogs(page, ["편의점", "23:59"]);
     await openAs("homeroom01", "/check.html");
     await card(page, "최하늘").getByRole("button", { name: "외출 체크" }).click();
     await expect(card(page, "최하늘").locator(".status-badge")).toHaveText("외출중");
@@ -20,7 +20,7 @@ test.describe("외출 기록", () => {
     await expect(page.locator("#historySummary")).toHaveText("2건");
     const haneul = historyRow(page, "최하늘");
     await expect(haneul).toContainText("편의점");
-    await expect(haneul).toContainText("20:00"); // 복귀 예정
+    await expect(haneul).toContainText("23:59"); // 복귀 예정
     await expect(haneul.locator("td").nth(3)).toHaveText(/^\d{2}:\d{2}$/); // 복귀 시각
     await expect(haneul.locator("td").nth(6)).toHaveText("김담임"); // 확인 교사
     await expect(haneul.locator("td").nth(7)).toHaveText("김담임"); // 복귀 처리

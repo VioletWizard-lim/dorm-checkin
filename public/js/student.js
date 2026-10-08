@@ -273,8 +273,14 @@ requestForm.addEventListener("submit", async (event) => {
     return;
   }
   const startTime = `${startHour.value}:${startMinute.value}`;
-  const expectedReturn = returnHour.value ? `${returnHour.value}:${returnMinute.value || "00"}` : "";
-  if (expectedReturn && expectedReturn <= startTime) {
+  // 예상 복귀 시각은 꼭 골라야 한다(사용자 요청 — 이 시각이 지나면 자동 복귀)
+  if (!returnHour.value) {
+    alert("예상 복귀 시각을 골라 주세요.");
+    returnHour.focus();
+    return;
+  }
+  const expectedReturn = `${returnHour.value}:${returnMinute.value || "00"}`;
+  if (expectedReturn <= startTime) {
     alert("예상 복귀 시각은 외출 시각보다 늦어야 합니다.");
     returnHour.focus();
     return;
@@ -284,7 +290,7 @@ requestForm.addEventListener("submit", async (event) => {
   const { error } = await supabase.rpc("create_outing_request", {
     p_reason: reason,
     p_start_time: startTime,
-    p_expected_return: expectedReturn || null,
+    p_expected_return: expectedReturn,
   });
   if (error) {
     state.submitting = false;

@@ -165,7 +165,7 @@ type Delivery = { sms: SmsStatus; smsError?: string };
 
 export function passwordText(issued: Issued, appUrl: string | null): string {
   return [
-    `[기숙사 외출체크] ${issued.student.name} 학생 계정`,
+    `[기숙사 면학 시스템] ${issued.student.name} 학생 계정`,
     `아이디: ${issued.loginId}`,
     `비밀번호: ${issued.password}`,
     ...(appUrl ? [`접속: ${appUrl}`] : []),
