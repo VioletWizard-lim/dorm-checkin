@@ -421,6 +421,22 @@ select tests.expect_true(format($$(select checked_by = %L and checked_by_name = 
   from public.outings where student_id = %L and date = public.today_kst())$$, :sup, :st3),
   'trigger stamps server time and the real author, drops reason for non-out');
 
+-- ─────────────────────────── 자동 복귀(복귀 예정 시각이 지나면) ───────────────────────────
+update public.outings set status = 'out', expected_return = '0:00', reason = '자동 복귀 시험'
+ where student_id = :st3 and date = public.today_kst();
+select tests.expect_true('(select private.auto_return_outings() >= 1)', 'auto return runs');
+select tests.expect_true(format($$(select status = 'in' and checked_by_name = '자동 복귀' and expected_return is null
+  from public.outings where student_id = %L and date = public.today_kst())$$, :st3), 'an outing past its expected return becomes 재실');
+select tests.expect_true(format($$(select ended_by_name = '자동 복귀' and ended_at is not null
+  from public.outing_log where student_id = %L and reason = '자동 복귀 시험')$$, :st3), 'outing log records the automatic return');
+select tests.expect_true(format($$(select status = 'out' from public.outings where student_id = %L and date = public.today_kst())$$, :st1),
+  'an outing without an expected return stays out');
+select tests.login(:admin);
+set role authenticated;
+select tests.expect_error('select private.auto_return_outings()', 'clients cannot run the auto return', '%permission denied%');
+reset role;
+select tests.logout();
+
 -- service_role(이전 스크립트)은 보낸 값을 그대로 유지한다.
 insert into public.outings (date, student_id, status, since, reason, checked_by_name)
 values ('2026-01-05', :st2, 'out', '2026-01-05 09:00+09', '과거 기록', '옛 교사');
