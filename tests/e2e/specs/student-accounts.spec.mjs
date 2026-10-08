@@ -13,8 +13,9 @@ async function studentAccount(env, studentId) {
 }
 
 test.describe("학생 계정 관리(학생 명단 화면)", () => {
-  test("담임이 계정 발급(비밀번호는 학생에게 문자로) → 학생 로그인 → 관리자가 비번 재발급(문자 실패면 화면에) → 계정 삭제", async ({ env, openAs, openOtherAs, page }) => {
-    await openAs("homeroom01", "/students.html");
+  test("관리자가 계정 발급(비밀번호는 학생에게 문자로) → 학생 로그인 → 비번 재발급(문자 실패면 화면에) → 계정 삭제", async ({ env, openAs, openOtherAs, page }) => {
+    answerDialogs(page, [true, true]);
+    await openAs("admin01", "/students.html");
     await expect(rosterCard(page, "홍길동").locator(".account-chip")).toHaveText("계정 없음");
     // 목록에는 학번·이름·반·번호만(연락처·이메일·ID는 수정 폼에서만)
     await expect(rosterCard(page, "홍길동").locator(".student-meta")).toHaveText(["학번 10305 · 1학년 3반 5번"]);
@@ -38,35 +39,18 @@ test.describe("학생 계정 관리(학생 명단 화면)", () => {
 
     expect(await tryLogin(openOtherAs, "Hong123", pin, { student: true })).toBe("ok");
 
-    // 비번 재발급·계정 삭제는 관리자만(담임 화면에는 버튼이 없고, 서버도 거부)
-    await expect(rosterCard(page, "홍길동").getByRole("button", { name: "비번 재발급" })).toHaveCount(0);
-    await expect(rosterCard(page, "홍길동").getByRole("button", { name: "계정 삭제" })).toHaveCount(0);
-    const denied = await page.evaluate(async (id) => {
-      const { callFunction } = await import("/js/supabase-client.js");
-      try {
-        await callFunction("student-accounts", { action: "reset-password", studentId: id });
-        return "ok";
-      } catch (err) {
-        return err.message;
-      }
-    }, STUDENT.hong);
-    expect(denied).toBe("비밀번호 재발급은 관리자만 할 수 있습니다.");
-
-    const admin = await openOtherAs("admin01", "/students.html");
-    answerDialogs(admin, [true, true]);
     // 문자가 실패하면 비밀번호를 화면에 보여 준다
     env.sms.failTo.add("01011112222");
-    await rosterCard(admin, "홍길동").getByRole("button", { name: "비번 재발급" }).click();
-    const reset = admin.locator("#accountResultList .student-card").first();
+    await rosterCard(page, "홍길동").getByRole("button", { name: "비번 재발급" }).click();
+    const reset = page.locator("#accountResultList .student-card").first();
     await expect(reset).toContainText("재발급됨");
     await expect(reset).toContainText("문자 실패(수신번호 오류)");
     const newPin = /비밀번호: (\d{6})/.exec(await reset.textContent())[1];
-    await expect(admin.locator("#accountResultCopy")).toHaveValue(`홍길동\t10305\thong123\t${newPin}`);
+    await expect(page.locator("#accountResultCopy")).toHaveValue(`홍길동\t10305\thong123\t${newPin}`);
     expect(await tryLogin(openOtherAs, "hong123", pin, { student: true })).toBe(WRONG_LOGIN);
     expect(await tryLogin(openOtherAs, "hong123", newPin, { student: true })).toBe("ok");
 
-    await rosterCard(admin, "홍길동").getByRole("button", { name: "계정 삭제" }).click();
-    await expect(rosterCard(admin, "홍길동").locator(".account-chip")).toHaveText("계정 없음");
+    await rosterCard(page, "홍길동").getByRole("button", { name: "계정 삭제" }).click();
     await expect(rosterCard(page, "홍길동").locator(".account-chip")).toHaveText("계정 없음");
     expect(await studentAccount(env, STUDENT.hong)).toBeNull();
     expect(await studentRow(env, STUDENT.hong)).not.toBeNull();
@@ -153,14 +137,27 @@ test.describe("학생 계정 관리(학생 명단 화면)", () => {
     expect(env.auth.findByEmail("hong123@student.donghall.local")).toBeNull();
   });
 
-  test("담임은 다른 반 학생 계정을 서버에서도 발급할 수 없다", async ({ openAs, page }) => {
+  test("담임은 학생 계정을 발급·삭제할 수 없고, 계정 있는 학생은 명단에서도 못 지운다(서버도 막음)", async ({ env, openAs, page }) => {
+    await env.createStudentAccount(STUDENT.hong, "hong123");
     await openAs("homeroom01", "/students.html");
     await expect(rosterCard(page, "홍길동")).toBeVisible();
+    await expect(page.locator("#bulkIssueBtn")).toBeHidden();
+    await expect(rosterCard(page, "최하늘").getByRole("button", { name: "계정 발급" })).toHaveCount(0);
+    await expect(rosterCard(page, "홍길동").getByRole("button", { name: "삭제", exact: true })).toHaveCount(0);
+    await expect(rosterCard(page, "최하늘").getByRole("button", { name: "삭제", exact: true })).toBeVisible(); // 계정 없는 학생은 삭제 가능
     const result = await page.evaluate(async (ids) => {
-      const { callFunction } = await import("/js/supabase-client.js");
-      return callFunction("student-accounts", { action: "issue", studentIds: ids });
-    }, [STUDENT.seoyeon]);
-    expect(result.results).toEqual([{ studentId: STUDENT.seoyeon, ok: false, error: "이 학생의 계정을 관리할 권한이 없습니다." }]);
+      const { callFunction, supabase } = await import("/js/supabase-client.js");
+      const out = {};
+      try {
+        await callFunction("student-accounts", { action: "issue", studentIds: [ids.haneul] });
+      } catch (err) {
+        out.issue = err.message;
+      }
+      out.del = (await supabase.from("students").delete().eq("id", ids.hong)).error?.message;
+      return out;
+    }, { haneul: STUDENT.haneul, hong: STUDENT.hong });
+    expect(result).toEqual({ issue: "학생 계정 발급은 관리자만 할 수 있습니다.", del: "계정이 있는 학생은 관리자만 삭제할 수 있습니다." });
+    expect(await studentRow(env, STUDENT.hong)).not.toBeNull();
   });
 });
 

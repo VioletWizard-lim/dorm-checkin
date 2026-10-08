@@ -299,11 +299,36 @@ select tests.expect_error(format($$update public.outings set status = 'out' wher
 select tests.expect_affected(format($$update public.outings set status = 'out', expected_return = '9:30' where student_id = %L and date = public.today_kst()$$, :st1), 1, 'teacher marks out again');
 select tests.expect_true(format($$(select expected_return = '09:30' from public.outings where student_id = %L and date = public.today_kst())$$, :st1),
   'expected return is normalized to HH:MM');
--- 다른 학년 학생(2학년 1반)의 외출·복귀
-select tests.expect_affected(format($$insert into public.outings (date, student_id, status, reason, expected_return) values (public.today_kst(), %L, 'out', '학원', '23:00')$$, :st2), 1, 'teacher checks out a student of another grade');
-select tests.expect_affected(format($$update public.outings set status = 'in' where student_id = %L and date = public.today_kst()$$, :st2), 1, 'and marks the return');
+-- 다른 학년 학생(2학년 1반)은 담임이 외출 처리할 수 없다(담당 범위만)
+select tests.expect_error(format($$insert into public.outings (date, student_id, status, reason, expected_return) values (public.today_kst(), %L, 'out', '학원', '23:00')$$, :st2),
+  'homeroom cannot check out a student of another class', '%권한%');
+select tests.expect_error(format($$delete from public.students where id = %L$$, :st1), 'homeroom cannot delete a student who has an account', '%관리자만%');
+reset role;
+select tests.login(:tplain);
+set role authenticated;
+select tests.expect_error(format($$update public.outings set status = 'in' where student_id = %L and date = public.today_kst()$$, :st1),
+  'a teacher without a class cannot mark a return', '%권한%');
+reset role;
+select tests.login(:admin);
+set role authenticated;
+select tests.expect_affected(format($$insert into public.outings (date, student_id, status, reason, expected_return) values (public.today_kst(), %L, 'out', '학원', '23:00')$$, :st2), 1, 'admin checks out any student');
+reset role;
+select tests.login(:sup);
+set role authenticated;
+select tests.expect_affected(format($$update public.outings set status = 'in' where student_id = %L and date = public.today_kst()$$, :st2), 1, 'study hall supervisor marks the return of any student');
+select tests.expect_error(format($$update public.outings set status = 'out', expected_return = '23:00' where student_id = %L and date = public.today_kst()$$, :st2),
+  'study hall supervisor cannot check out', '%권한%');
 reset role;
 select tests.logout();
+-- 외출 시각 전(외출 예정)을 취소하는 건 담당 교사만 — 자습 감독은 안 됨
+update public.outings set status = 'out', start_time = '23:59', expected_return = '23:59' where student_id = :st2 and date = public.today_kst();
+select tests.login(:sup);
+set role authenticated;
+select tests.expect_error(format($$update public.outings set status = 'in' where student_id = %L and date = public.today_kst()$$, :st2),
+  'study hall supervisor cannot cancel a scheduled outing', '%권한%');
+reset role;
+select tests.logout();
+update public.outings set status = 'in' where student_id = :st2 and date = public.today_kst();
 
 -- ─────────────────────────── 외출 기록(outing_log) ───────────────────────────
 select tests.expect_true(format($$(select count(*) = 2
@@ -313,7 +338,7 @@ select tests.expect_true(format($$(select count(*) = 2
   from public.outing_log where student_id = %L and date = public.today_kst())$$, :'req1', :st1),
   'outing log keeps the approved outing with its return time, and the new open one');
 select tests.expect_true(format($$(select count(*) = 1 and bool_and(reason = '학원' and ended_at >= out_at)
-  from public.outing_log where student_id = %L)$$, :st2), 'outing log records a direct check-out and its return');
+  from public.outing_log where student_id = %L and reason = '학원')$$, :st2), 'outing log records a direct check-out and its return');
 
 select tests.login(:t13);
 set role authenticated;
@@ -328,7 +353,7 @@ select tests.expect_count('select * from public.outing_log', 2, 'grade manager s
 reset role;
 select tests.login(:admin);
 set role authenticated;
-select tests.expect_count('select * from public.outing_log', 3, 'admin sees all history');
+select tests.expect_count('select * from public.outing_log', 4, 'admin sees all history');
 reset role;
 select tests.login(:dorm);
 set role authenticated;

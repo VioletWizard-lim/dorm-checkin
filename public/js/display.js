@@ -279,11 +279,6 @@ async function init() {
   const session = await requireStaff();
   if (!session) return;
   const { loginId, profile } = session;
-  // 자습 감독 계정은 외출 체크 화면만 쓸 수 있다.
-  if (profile.role === "studyHallSupervisor") {
-    window.location.replace("./check.html");
-    return;
-  }
   const role = profile.role || "teacher";
   currentUserNameEl.textContent = profile.name || loginId;
   currentUserRoleBadgeEl.textContent = role;

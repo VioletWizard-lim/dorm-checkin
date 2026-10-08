@@ -7,7 +7,7 @@ const CASES = [
   { who: "gm01", pages: { "students.html": "students.html", "history.html": "history.html", "accounts.html": "check.html", "display.html": "display.html" }, manage: true, accounts: false, history: true },
   { who: "teacher01", pages: { "students.html": "check.html", "history.html": "check.html", "accounts.html": "check.html", "display.html": "display.html" }, manage: false, accounts: false, history: false },
   { who: "homeroom01", pages: { "students.html": "students.html", "history.html": "history.html", "accounts.html": "check.html" }, manage: true, accounts: false, history: true },
-  { who: "super01", pages: { "display.html": "check.html", "seat.html": "check.html", "students.html": "check.html", "history.html": "check.html", "accounts.html": "check.html" }, manage: false, accounts: false, history: false },
+  { who: "super01", pages: { "display.html": "display.html", "seat.html": "seat.html", "students.html": "check.html", "history.html": "check.html", "accounts.html": "check.html" }, manage: false, accounts: false, history: false },
 ];
 
 for (const c of CASES) {
@@ -17,9 +17,9 @@ for (const c of CASES) {
     await expect(page.locator("#manageLink")).toBeVisible({ visible: c.manage });
     await expect(page.locator("#accountsLink")).toBeVisible({ visible: c.accounts });
     await expect(page.locator("#historyLink")).toBeVisible({ visible: c.history });
-    const supervisor = c.who === "super01";
-    await expect(page.locator("#displayLink")).toBeVisible({ visible: !supervisor });
-    await expect(page.locator("#seatLink")).toBeVisible({ visible: !supervisor });
+    // 현황판·좌석 배치판은 모든 교직원(자습 감독 포함)이 볼 수 있다
+    await expect(page.locator("#displayLink")).toBeVisible();
+    await expect(page.locator("#seatLink")).toBeVisible();
 
     for (const [target, landing] of Object.entries(c.pages)) {
       await page.goto(`/${target}`);
