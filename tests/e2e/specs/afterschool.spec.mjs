@@ -62,7 +62,7 @@ test.describe("방과후 일정(관리자)", () => {
     await page.click("#weekdayDays >> text=목");
     await page.fill("#weekdayInput", "10101 김민준\n10302\n10305\n99999");
     const preview = page.locator("#weekdayPreview");
-    await expect(preview.locator(".bulk-preview__summary")).toHaveText("켜기 2명 · 이미 켜짐 1명");
+    await expect(preview.locator(".bulk-preview__summary")).toHaveText("추가 2명 · 이미 등록 1명");
     await expect(preview).toContainText("김민준 · 10101 · 1학년 1반 — 없음 → 화·목");
     await expect(preview).toContainText("홍길동 · 10305 · 1학년 3반 — 월·화·수·목·금 (그대로)");
     await expect(preview.locator(".bulk-preview__errors")).toContainText("학번 99999 학생이 명단에 없습니다");
@@ -77,14 +77,31 @@ test.describe("방과후 일정(관리자)", () => {
     await page.click("#weekdayDays >> text=목"); // 화만
     await page.fill("#weekdayInput", "10101");
     await page.check("#weekdayReplace");
-    await expect(preview.locator(".bulk-preview__summary")).toHaveText("켜기 0명 · 이미 켜짐 1명 · 끄기 2명");
+    await expect(preview.locator(".bulk-preview__summary")).toHaveText("추가 0명 · 이미 등록 1명 · 이 요일에서 빼기 2명");
     await expect(preview).toContainText("최하늘 · 10302 · 1학년 3반 — 화·목 → 목");
     await page.click("#weekdaySaveBtn");
     await expect(page.locator("#weekdayInput")).toHaveValue("");
-    expect(dialogs.some((d) => d.type === "confirm" && d.message.includes("목록에 없는 2명은 화요일 방과후가 꺼집니다"))).toBe(true);
+    expect(dialogs.some((d) => d.type === "confirm" && d.message.includes("불러온 목록에 없는 2명은 화요일 방과후에서 빠집니다"))).toBe(true);
     expect(await days(env, STUDENT.minjun)).toEqual([false, true, false, true, false]);
     expect(await days(env, STUDENT.haneul)).toEqual([false, false, false, true, false]);
     expect(await days(env, STUDENT.hong)).toEqual([true, false, true, true, true]);
+  });
+
+  test("빼기: 잘못 넣은 출석부를 다시 불러와 그 요일에서 뺀다(다른 요일은 그대로)", async ({ env, openAs, page }) => {
+    const dialogs = answerDialogs(page, [true, true]);
+    await openAs("admin01", "/afterschool.html");
+    await page.click("#weekdayDays >> text=수");
+    await page.fill("#weekdayInput", "10305\n10101");
+    await page.check("#weekdayRemove");
+    const preview = page.locator("#weekdayPreview");
+    await expect(preview.locator(".bulk-preview__summary")).toHaveText("이 요일에서 빼기 1명 · 원래 없음 1명");
+    await expect(preview).toContainText("홍길동 · 10305 · 1학년 3반 — 월·화·수·목·금 → 월·화·목·금");
+    await expect(page.locator("#weekdaySaveBtn")).toHaveText("저장 (1명)");
+    await page.click("#weekdaySaveBtn");
+    await expect(page.locator("#weekdayInput")).toHaveValue("");
+    expect(dialogs.some((d) => d.type === "confirm" && d.message.includes("불러온 학생 1명을 수요일 방과후에서 뺍니다"))).toBe(true);
+    expect(await days(env, STUDENT.hong)).toEqual([true, true, false, true, true]);
+    expect(await days(env, STUDENT.minjun)).toEqual([false, false, false, false, false]);
   });
 
   test("방과후 출석부 파일(xlsx)을 불러오면 명단을 찾아 그 요일을 켜고, 현재 명단을 CSV로 받는다", async ({ env, openAs, page }) => {
@@ -95,7 +112,7 @@ test.describe("방과후 일정(관리자)", () => {
     await page.setInputFiles("#weekdayFile", new URL("../fixtures/afterschool-attendance.xlsx", import.meta.url).pathname);
     await expect(page.locator("#weekdayFileNote")).toHaveText("afterschool-attendance.xlsx에서 8줄을 읽었습니다.");
     const preview = page.locator("#weekdayPreview");
-    await expect(preview.locator(".bulk-preview__summary")).toHaveText("켜기 3명 · 이미 켜짐 1명");
+    await expect(preview.locator(".bulk-preview__summary")).toHaveText("추가 3명 · 이미 등록 1명");
     await expect(preview).toContainText("이서연 · 20101 · 2학년 1반 — 없음 → 수");
     await expect(preview).toContainText("최하늘 · 10302");
     await expect(preview.locator(".bulk-preview__errors")).toContainText("학번 30909(없는학생) 학생이 명단에 없습니다");
@@ -124,7 +141,7 @@ test.describe("방과후 일정(관리자)", () => {
     await page.setInputFiles("#weekdayFile", new URL("../fixtures/afterschool-attendance.pdf", import.meta.url).pathname);
     await expect(page.locator("#weekdayFileNote")).toHaveText(/^afterschool-attendance\.pdf에서 \d+줄을 읽었습니다\.$/);
     const preview = page.locator("#weekdayPreview");
-    await expect(preview.locator(".bulk-preview__summary")).toHaveText("켜기 3명 · 이미 켜짐 1명");
+    await expect(preview.locator(".bulk-preview__summary")).toHaveText("추가 3명 · 이미 등록 1명");
     await expect(preview).toContainText("김민준 · 10101 · 1학년 1반 — 없음 → 목");
     await expect(preview).toContainText("이서연 · 20101");
     await expect(preview).toContainText("최하늘 · 10302");
@@ -139,7 +156,7 @@ test.describe("방과후 일정(관리자)", () => {
     await page.click("#weekdayDays >> text=금");
     await page.setInputFiles("#weekdayFile", { name: "roster.csv", mimeType: "text/csv", buffer: Buffer.from("성명,비고\n최하늘,\n김민준,\n홍길순,") });
     const preview = page.locator("#weekdayPreview");
-    await expect(preview.locator(".bulk-preview__summary")).toHaveText("켜기 2명");
+    await expect(preview.locator(".bulk-preview__summary")).toHaveText("추가 2명");
     await expect(preview.locator(".bulk-preview__errors")).toContainText("홍길순 학생이 명단에 없습니다");
   });
 

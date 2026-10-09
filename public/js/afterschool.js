@@ -30,6 +30,7 @@ const rangeClearBtn = document.getElementById("rangeClearBtn");
 const weekdayDaysEl = document.getElementById("weekdayDays");
 const weekdayInput = document.getElementById("weekdayInput");
 const weekdayReplaceCheck = document.getElementById("weekdayReplace");
+const weekdayRemoveCheck = document.getElementById("weekdayRemove");
 const weekdayPreviewEl = document.getElementById("weekdayPreview");
 const weekdaySaveBtn = document.getElementById("weekdaySaveBtn");
 const weekdayFileInput = document.getElementById("weekdayFile");
@@ -350,15 +351,16 @@ function renderWeekdayPreview() {
   const changes = [];
   const lines = [];
   let unchanged = 0;
+  const removeMode = weekdayRemoveCheck.checked; // "빼기": 불러온 학생을 고른 요일에서 뺀다(잘못 넣은 것 되돌리기)
   if (hasDay) {
     for (const student of listed.values()) {
       const before = (student.afterschoolDays || []).slice(0, 5);
-      const flags = DAY_LABELS.map((_, i) => Boolean(before[i]) || picked[i]);
+      const flags = DAY_LABELS.map((_, i) => (removeMode ? Boolean(before[i]) && !picked[i] : Boolean(before[i]) || picked[i]));
       if (flags.every((f, i) => f === Boolean(before[i]))) unchanged++;
-      else changes.push({ student, flags });
+      else changes.push({ student, flags, removed: removeMode });
       lines.push(studentLine(student, daysText(before), daysText(flags)));
     }
-    // 목록에 없는 학생은 고른 요일을 끈다(그 요일 명단을 통째로 바꿈)
+    // "명단 새로 바꾸기": 불러온 목록에 없는 학생은 고른 요일에서 뺀다
     if (weekdayReplaceCheck.checked && listed.size > 0) {
       for (const student of state.studentsBySid.values()) {
         if (listed.has(student.id)) continue;
@@ -375,9 +377,10 @@ function renderWeekdayPreview() {
   const parts = [];
   if (lines.length > 0) {
     const removed = changes.filter((c) => c.removed).length;
-    const summary = [`켜기 ${changes.length - removed}명`];
-    if (unchanged) summary.push(`이미 켜짐 ${unchanged}명`);
-    if (weekdayReplaceCheck.checked) summary.push(`끄기 ${removed}명`);
+    const summary = removeMode ? [] : [`추가 ${changes.length - removed}명`];
+    if (unchanged) summary.push(removeMode ? `원래 없음 ${unchanged}명` : `이미 등록 ${unchanged}명`);
+    if (removeMode) summary.unshift(`이 요일에서 빼기 ${removed}명`);
+    if (weekdayReplaceCheck.checked) summary.push(`이 요일에서 빼기 ${removed}명`);
     parts.push(`<div class="bulk-preview__summary">${escapeHtml(summary.join(" · "))}</div>`);
     parts.push(`<div class="bulk-preview__list">${lines.join("")}</div>`);
   }
@@ -451,14 +454,19 @@ weekdayRosterBtn.addEventListener("click", () => {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 });
-weekdayReplaceCheck.addEventListener("change", renderWeekdayPreview);
+// 저장 방법(추가만 하기 / 명단 새로 바꾸기 / 빼기): weekdayReplaceCheck·weekdayRemoveCheck가 각 라디오
+for (const radio of document.querySelectorAll('input[name="weekdayMode"]')) radio.addEventListener("change", renderWeekdayPreview);
 
 weekdaySaveBtn.addEventListener("click", async () => {
   const rows = state.weekdayPlan;
   if (rows.length === 0) return;
   const removed = rows.filter((r) => r.removed).length;
   const dayText = DAY_LABELS.filter((_, i) => state.weekdayDays[i]).join("·");
-  if (removed > 0 && !confirm(`목록에 없는 ${removed}명은 ${dayText}요일 방과후가 꺼집니다. 저장할까요?`)) return;
+  const removeMode = weekdayRemoveCheck.checked;
+  const question = removeMode
+    ? `불러온 학생 ${removed}명을 ${dayText}요일 방과후에서 뺍니다. 저장할까요?`
+    : `불러온 목록에 없는 ${removed}명은 ${dayText}요일 방과후에서 빠집니다. 저장할까요?`;
+  if (removed > 0 && !confirm(question)) return;
   weekdaySaveBtn.disabled = true;
   weekdaySaveBtn.textContent = "저장 중...";
   const failures = await saveStudentDays(rows);
