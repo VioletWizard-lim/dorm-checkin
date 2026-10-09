@@ -160,6 +160,9 @@ test.describe("학생 계정 관리(학생 명단 화면)", () => {
     await openAs("homeroom01", "/students.html");
     await expect(rosterCard(page, "홍길동")).toBeVisible();
     await expect(page.locator("#bulkIssueBtn")).toBeHidden();
+    await page.click("#addStudentBtn");
+    await expect(page.locator("#issueOnSaveLabel")).toBeHidden(); // 담임은 저장하면서 발급하는 체크도 없음
+    await page.click("#cancelFormBtn");
     await expect(rosterCard(page, "최하늘").getByRole("button", { name: "계정 발급" })).toHaveCount(0);
     await expect(rosterCard(page, "홍길동").getByRole("button", { name: "삭제", exact: true })).toHaveCount(0);
     await expect(rosterCard(page, "최하늘").getByRole("button", { name: "삭제", exact: true })).toBeVisible(); // 계정 없는 학생은 삭제 가능
@@ -176,6 +179,53 @@ test.describe("학생 계정 관리(학생 명단 화면)", () => {
     }, { haneul: STUDENT.haneul, hong: STUDENT.hong });
     expect(result).toEqual({ issue: "학생 계정 발급은 관리자만 할 수 있습니다.", del: "계정이 있는 학생은 관리자만 삭제할 수 있습니다." });
     expect(await studentRow(env, STUDENT.hong)).not.toBeNull();
+  });
+
+  test("관리자는 학생을 추가하면서 계정도 함께 발급한다(체크를 끄면 명단만)", async ({ env, openAs, page }) => {
+    await openAs("admin01", "/students.html");
+    await expect(rosterCard(page, "홍길동")).toBeVisible();
+
+    // 한 명 추가: ID와 학생 연락처가 있으면 계정을 만들고 비밀번호는 문자로
+    await page.click("#addStudentBtn");
+    await expect(page.locator("#issueOnSaveCheck")).toBeChecked();
+    await page.fill("#inputName", "박새봄");
+    await page.fill("#inputSid", "10320");
+    await page.fill("#inputLoginId", "Spring.P");
+    await page.fill("#inputPhone", "010-3333-4444");
+    await page.click("#submitFormBtn");
+    await expect(page.locator("#formWrap")).toBeHidden();
+    await expect(rosterCard(page, "박새봄").locator(".account-chip")).toHaveText("계정 있음");
+    await expect(page.locator("#accountResultList .student-card", { hasText: "박새봄" })).toContainText("문자로 보냈습니다");
+    expect(env.sms.messages.map((m) => m.to)).toEqual(["01033334444"]);
+    expect(env.sms.messages[0].text).toContain("아이디: spring.p");
+
+    // 수정할 때는 체크가 안 보인다(정보만 고쳐도 계정이 생기지 않게)
+    await rosterCard(page, "최하늘").getByRole("button", { name: "수정" }).click();
+    await expect(page.locator("#issueOnSaveLabel")).toBeHidden();
+    await page.click("#cancelFormBtn");
+
+    // 여러 명 붙여넣기: 새 학생과 ID를 새로 넣은 기존 학생 모두 발급, ID 없는 학생은 명단만
+    await page.click("#bulkAddBtn");
+    await expect(page.locator("#issueOnBulkCheck")).toBeChecked();
+    await page.fill("#bulkInput", ["김여름\t10321\tsummer", "이가을\t10322", "최하늘\t10302\thaneul"].join("\n"));
+    await page.click("#bulkSaveBtn");
+    await expect(page.locator("#bulkFormWrap")).toBeHidden();
+    await expect(rosterCard(page, "김여름").locator(".account-chip")).toHaveText("계정 있음");
+    await expect(rosterCard(page, "최하늘").locator(".account-chip")).toHaveText("계정 있음");
+    await expect(rosterCard(page, "이가을").locator(".account-chip")).toHaveText("ID 미등록");
+    // 연락처가 없으니 비밀번호는 화면(엑셀 붙여넣기용)에
+    const lines = (await page.locator("#accountResultCopy").inputValue()).split("\n").map((l) => l.split("\t").slice(0, 3));
+    expect(lines).toEqual(expect.arrayContaining([["김여름", "10321", "summer"], ["최하늘", "10302", "haneul"]]));
+    expect(await studentAccount(env, STUDENT.haneul)).toMatchObject({ login_id: "haneul" });
+
+    // 체크를 끄면 명단만 저장
+    await page.click("#addStudentBtn");
+    await page.uncheck("#issueOnSaveCheck");
+    await page.fill("#inputName", "정겨울");
+    await page.fill("#inputSid", "10323");
+    await page.fill("#inputLoginId", "winter");
+    await page.click("#submitFormBtn");
+    await expect(rosterCard(page, "정겨울").locator(".account-chip")).toHaveText("계정 없음");
   });
 
   test("관리자는 반 단위로 학생을 한 번에 지운다(계정도 함께, \"삭제\" 입력 확인)", async ({ env, openAs, page }) => {

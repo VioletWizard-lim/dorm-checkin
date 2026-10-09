@@ -661,6 +661,11 @@ input {
   gap: 10px;
 }
 
+/* 학생 명단 저장 버튼 옆 "저장하면서 학생 계정도 발급"(관리자만) — 왼쪽에 붙인다 */
+.issue-on-save {
+  margin-right: auto;
+}
+
 .day-toggle-row {
   display: flex;
   gap: 8px;

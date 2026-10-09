@@ -49,6 +49,10 @@ const accountResultWrap = document.getElementById("accountResultWrap");
 const accountResultList = document.getElementById("accountResultList");
 const accountResultCopy = document.getElementById("accountResultCopy");
 const accountResultDownloadBtn = document.getElementById("accountResultDownloadBtn");
+const issueOnSaveLabel = document.getElementById("issueOnSaveLabel");
+const issueOnSaveCheck = document.getElementById("issueOnSaveCheck");
+const issueOnBulkLabel = document.getElementById("issueOnBulkLabel");
+const issueOnBulkCheck = document.getElementById("issueOnBulkCheck");
 const classDeleteBtn = document.getElementById("classDeleteBtn");
 const classDeleteWrap = document.getElementById("classDeleteWrap");
 const classDeleteChips = document.getElementById("classDeleteChips");
@@ -288,6 +292,7 @@ function openFormForAdd() {
 
   renderDayToggle();
   leaveFields.hidden = !state.canEditLeave;
+  issueOnSaveLabel.hidden = !state.isAdmin; // 새 학생을 추가할 때만(수정할 때는 숨김)
   formWrap.hidden = false;
   inputName.focus();
 }
@@ -319,6 +324,7 @@ function openFormForEdit(id) {
   leaveOnlyTitle.hidden = !state.leaveOnly;
   leaveOnlyTitle.textContent = `${s.name || "이름 없음"} (학번 ${s.sid || "-"}) 명령퇴사 기간`;
   leaveFields.hidden = !state.canEditLeave;
+  issueOnSaveLabel.hidden = true;
   formWrap.hidden = false;
   (state.leaveOnly ? inputLeaveFrom : inputName).focus();
 }
@@ -448,8 +454,10 @@ bulkSaveBtn.addEventListener("click", async () => {
   bulkSaveBtn.textContent = "저장 중...";
 
   // 새 학생은 한 번에 저장한다 — 하나라도 실패하면 새 학생은 전부 저장되지 않으므로 고친 뒤 다시 누르면 된다.
+  const savedWithId = []; // 저장한 학생 중 ID가 있는 학생(저장하면서 계정 발급용)
   if (newRows.length > 0) {
-    const { error } = await supabase.from("students").insert(newRows);
+    const { data: inserted, error } = await supabase.from("students").insert(newRows).select("id, login_id");
+    if (!error) savedWithId.push(...inserted.filter((r) => r.login_id).map((r) => r.id));
     if (error) {
       alert(`새 학생을 저장하지 못했습니다(정보 갱신도 하지 않았습니다): ${describeStudentSaveError(error)}`);
       renderBulkPreview();
@@ -467,9 +475,15 @@ bulkSaveBtn.addEventListener("click", async () => {
     const { data, error } = await supabase.from("students").update(patch).eq("id", row.existingId).select("id");
     if (error || data.length === 0) {
       failures.push(`${row.name}(${row.sid}): ${error ? describeStudentSaveError(error) : "권한이 없거나 이미 삭제된 학생입니다."}`);
+    } else if (row.loginId || findStudentInActiveGrade(row.existingId)?.loginId) {
+      savedWithId.push(row.existingId);
     }
   }
   await afterWrite(null);
+  if (issueOnSaveWanted(issueOnBulkCheck)) {
+    const ids = withoutAccount(savedWithId);
+    if (ids.length > 0) await issueAccounts(ids, bulkSaveBtn);
+  }
   if (failures.length > 0) {
     alert(`다음 학생은 정보를 갱신하지 못했습니다.\n${failures.join("\n")}`);
     renderBulkPreview();
@@ -538,6 +552,16 @@ rosterListEl.addEventListener("click", (event) => {
   const deleteAccountBtn = event.target.closest("[data-delete-account]");
   if (deleteAccountBtn) deleteAccount(deleteAccountBtn.dataset.deleteAccount, deleteAccountBtn);
 });
+
+// "저장하면서 학생 계정도 발급"(관리자만, 기본 체크) — 학생 추가와 계정 발급을 한 번에(사용자 요청)
+function issueOnSaveWanted(checkbox) {
+  return state.isAdmin && checkbox.checked;
+}
+
+// 아직 계정이 없는 학생만(저장 직후 afterWrite로 계정 목록을 다시 읽은 뒤에 부른다)
+function withoutAccount(ids) {
+  return [...new Set(ids)].filter((id) => id && !state.accounts[id]);
+}
 
 function findStudentInActiveGrade(id) {
   const s = (state.studentsByGrade[state.activeGrade] || {})[id];
@@ -949,6 +973,8 @@ studentForm.addEventListener("submit", async (event) => {
     return;
   }
   if (!(await afterWrite(error))) return;
+  const toIssue = !editingId && loginId && issueOnSaveWanted(issueOnSaveCheck) ? withoutAccount([saved[0].id]) : [];
+  if (toIssue.length > 0) await issueAccounts(toIssue, submitFormBtn);
   closeForm();
 });
 
@@ -970,6 +996,7 @@ function initForGrades(allowedGrades) {
   bulkAddBtn.hidden = state.leaveOnly;
   bulkIssueBtn.hidden = !state.isAdmin;
   classDeleteBtn.hidden = !state.isAdmin;
+  issueOnBulkLabel.hidden = !state.isAdmin;
 
   studentsLive = liveTable({
     table: "students",

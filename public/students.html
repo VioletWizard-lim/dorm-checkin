@@ -109,6 +109,11 @@
         </div>
       </div>
       <div class="roster-form__actions">
+        <!-- 관리자만: 저장하면서 학생 계정도 발급(ID가 있고 계정이 없는 학생) -->
+        <label class="remember-row issue-on-save" id="issueOnSaveLabel" hidden>
+          <input type="checkbox" id="issueOnSaveCheck" checked>
+          저장하면서 학생 계정도 발급 (ID가 있으면)
+        </label>
         <button type="button" class="btn-secondary" id="cancelFormBtn">취소</button>
         <button type="submit" class="btn-add" id="submitFormBtn">저장</button>
       </div>
@@ -125,6 +130,10 @@
       </div>
       <div class="bulk-preview" id="bulkPreview"></div>
       <div class="roster-form__actions">
+        <label class="remember-row issue-on-save" id="issueOnBulkLabel" hidden>
+          <input type="checkbox" id="issueOnBulkCheck" checked>
+          저장하면서 학생 계정도 발급 (ID가 있는 학생)
+        </label>
         <button type="button" class="btn-secondary" id="cancelBulkFormBtn">취소</button>
         <button type="button" class="btn-add" id="bulkSaveBtn" disabled>일괄 저장 (0명)</button>
       </div>
