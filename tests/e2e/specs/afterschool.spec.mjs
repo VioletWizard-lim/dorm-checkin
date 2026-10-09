@@ -117,6 +117,23 @@ test.describe("방과후 일정(관리자)", () => {
     ]);
   });
 
+  test("PDF 출석부(엑셀·한글에서 PDF로 저장한 것)도 글자 위치로 표를 맞춰 명단을 찾는다", async ({ env, openAs, page }) => {
+    await openAs("admin01", "/afterschool.html");
+    await page.click("#weekdayDays >> text=목");
+    // 제목 줄 + "번호(연번)·학년·반·번호·성명·비고·날짜" 머리글, 비고·날짜 칸이 비어 있는 줄도 있음
+    await page.setInputFiles("#weekdayFile", new URL("../fixtures/afterschool-attendance.pdf", import.meta.url).pathname);
+    await expect(page.locator("#weekdayFileNote")).toHaveText(/^afterschool-attendance\.pdf에서 \d+줄을 읽었습니다\.$/);
+    const preview = page.locator("#weekdayPreview");
+    await expect(preview.locator(".bulk-preview__summary")).toHaveText("켜기 3명 · 이미 켜짐 1명");
+    await expect(preview).toContainText("김민준 · 10101 · 1학년 1반 — 없음 → 목");
+    await expect(preview).toContainText("이서연 · 20101");
+    await expect(preview).toContainText("최하늘 · 10302");
+    await expect(preview.locator(".bulk-preview__errors")).toHaveText("7번째 줄: 학번 30909(없는학생) 학생이 명단에 없습니다.");
+    await page.click("#weekdaySaveBtn");
+    await expect(page.locator("#weekdayInput")).toHaveValue("");
+    expect(await days(env, STUDENT.minjun)).toEqual([false, false, false, true, false]);
+  });
+
   test("이름만 있는 출석부(CSV)도 이름으로 찾는다", async ({ openAs, page }) => {
     await openAs("admin01", "/afterschool.html");
     await page.click("#weekdayDays >> text=금");

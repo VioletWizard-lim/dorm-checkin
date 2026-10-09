@@ -10,6 +10,7 @@
     "@playwright/test": "1.56.1",
     "@supabase/supabase-js": "2.117.2",
     "esbuild": "^0.25.0",
+    "pdfjs-dist": "5.7.284",
     "pg": "^8.13.0"
   }
 }

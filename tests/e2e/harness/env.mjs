@@ -107,6 +107,19 @@ async function buildSupabaseBundle() {
   return result.outputFiles[0].text;
 }
 
+// 방과후 출석부 PDF 읽기(sheet-read.js)가 CDN에서 불러오는 PDF.js를 같은 버전의 로컬 패키지 파일로 대신 내려준다.
+function pdfjsDir() {
+  const require = createRequire(import.meta.url);
+  const pkgPath = require.resolve("pdfjs-dist/package.json");
+  const version = JSON.parse(readFileSync(pkgPath, "utf8")).version;
+  const source = readFileSync(join(PUBLIC_DIR, "js", "sheet-read.js"), "utf8");
+  const pinned = /PDFJS_VERSION = "([0-9.]+)"/.exec(source)?.[1];
+  if (pinned !== version) {
+    throw new Error(`sheet-read.js가 불러오는 pdfjs-dist(${pinned})와 테스트용 패키지(${version}) 버전이 다릅니다. tests/e2e/package.json을 맞춰 주세요.`);
+  }
+  return { dir: dirname(pkgPath), version };
+}
+
 export async function startEnv() {
   const postgrestBin = process.env.POSTGREST_BIN || join(E2E_ROOT, ".cache", "postgrest");
   if (!existsSync(postgrestBin)) {
@@ -193,6 +206,7 @@ export async function startEnv() {
     stops.push(() => realtime.stop());
 
     const bundle = await buildSupabaseBundle();
+    const pdfjs = pdfjsDir();
 
     const env = {
       db,
@@ -261,6 +275,13 @@ export async function startEnv() {
         await context.route("https://fonts.googleapis.com/**", (route) =>
           route.fulfill({ status: 200, contentType: "text/css", body: "" })
         );
+        await context.route(`https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjs.version}/**`, (route) => {
+          const relative = new URL(route.request().url()).pathname.replace(/^\/npm\/pdfjs-dist@[^/]+\//, "");
+          const file = normalize(join(pdfjs.dir, relative));
+          if (!file.startsWith(pdfjs.dir) || !existsSync(file)) return route.fulfill({ status: 404, body: "not found" });
+          const type = file.endsWith(".mjs") ? "text/javascript" : "application/octet-stream";
+          return route.fulfill({ status: 200, headers: { "content-type": type, "access-control-allow-origin": "*" }, body: readFileSync(file) });
+        });
         await context.route(/^https:\/\/cdn\.jsdelivr\.net\/npm\/@supabase\/supabase-js@[^/]+\/\+esm$/, (route) =>
           route.fulfill({ status: 200, contentType: "text/javascript", body: bundle })
         );
