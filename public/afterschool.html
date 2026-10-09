@@ -100,10 +100,20 @@
 
 (또는 학번만 줄마다)"></textarea>
       </div>
-      <label class="remember-row">
-        <input type="checkbox" id="weekdayReplace">
-        목록에 없는 학생은 이 요일을 끄기 (그 요일 방과후 명단을 이 목록으로 통째로 바꿈)
-      </label>
+      <div class="field">
+        <label>저장 방법</label>
+        <div class="save-mode">
+          <label class="save-mode__option">
+            <input type="radio" name="weekdayMode" value="add" checked>
+            <span><b>추가만 하기</b> (기본) — 불러온 학생을 고른 요일 방과후에 넣습니다. 이미 등록된 다른 학생은 그대로 둡니다.</span>
+          </label>
+          <label class="save-mode__option">
+            <input type="radio" name="weekdayMode" value="replace" id="weekdayReplace">
+            <span><b>명단 새로 바꾸기</b> — 고른 요일 방과후에 불러온 학생만 남기고, 나머지 학생은 그 요일에서 뺍니다.
+              <span class="save-mode__warn">같은 요일에 다른 방과후반이 있으면 그 반 학생도 빠지니, 이때는 "추가만 하기"를 쓰세요.</span></span>
+          </label>
+        </div>
+      </div>
       <div class="bulk-preview" id="weekdayPreview"></div>
       <div class="roster-form__actions">
         <button type="button" class="btn-secondary" id="weekdayRosterBtn">현재 명단 받기 (CSV)</button>

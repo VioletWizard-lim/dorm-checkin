@@ -2050,6 +2050,41 @@ body.is-dragging-seat * {
   color: var(--color-label);
 }
 
+.save-mode {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.save-mode__option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.save-mode__option input {
+  margin-top: 4px;
+}
+
+.save-mode__option:has(input:checked) {
+  border-color: var(--color-active);
+  background: var(--color-bg);
+}
+
+.save-mode__warn {
+  display: block;
+  color: var(--color-out);
+  font-size: 13px;
+}
+
 .afterschool-range {
   display: flex;
   align-items: flex-end;

@@ -358,7 +358,7 @@ function renderWeekdayPreview() {
       else changes.push({ student, flags });
       lines.push(studentLine(student, daysText(before), daysText(flags)));
     }
-    // 목록에 없는 학생은 고른 요일을 끈다(그 요일 명단을 통째로 바꿈)
+    // "명단 새로 바꾸기": 불러온 목록에 없는 학생은 고른 요일에서 뺀다
     if (weekdayReplaceCheck.checked && listed.size > 0) {
       for (const student of state.studentsBySid.values()) {
         if (listed.has(student.id)) continue;
@@ -375,9 +375,9 @@ function renderWeekdayPreview() {
   const parts = [];
   if (lines.length > 0) {
     const removed = changes.filter((c) => c.removed).length;
-    const summary = [`켜기 ${changes.length - removed}명`];
-    if (unchanged) summary.push(`이미 켜짐 ${unchanged}명`);
-    if (weekdayReplaceCheck.checked) summary.push(`끄기 ${removed}명`);
+    const summary = [`추가 ${changes.length - removed}명`];
+    if (unchanged) summary.push(`이미 등록 ${unchanged}명`);
+    if (weekdayReplaceCheck.checked) summary.push(`이 요일에서 빼기 ${removed}명`);
     parts.push(`<div class="bulk-preview__summary">${escapeHtml(summary.join(" · "))}</div>`);
     parts.push(`<div class="bulk-preview__list">${lines.join("")}</div>`);
   }
@@ -451,14 +451,15 @@ weekdayRosterBtn.addEventListener("click", () => {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 });
-weekdayReplaceCheck.addEventListener("change", renderWeekdayPreview);
+// 저장 방법(추가만 하기 / 명단 새로 바꾸기): weekdayReplaceCheck가 "명단 새로 바꾸기" 라디오
+for (const radio of document.querySelectorAll('input[name="weekdayMode"]')) radio.addEventListener("change", renderWeekdayPreview);
 
 weekdaySaveBtn.addEventListener("click", async () => {
   const rows = state.weekdayPlan;
   if (rows.length === 0) return;
   const removed = rows.filter((r) => r.removed).length;
   const dayText = DAY_LABELS.filter((_, i) => state.weekdayDays[i]).join("·");
-  if (removed > 0 && !confirm(`목록에 없는 ${removed}명은 ${dayText}요일 방과후가 꺼집니다. 저장할까요?`)) return;
+  if (removed > 0 && !confirm(`불러온 목록에 없는 ${removed}명은 ${dayText}요일 방과후에서 빠집니다. 저장할까요?`)) return;
   weekdaySaveBtn.disabled = true;
   weekdaySaveBtn.textContent = "저장 중...";
   const failures = await saveStudentDays(rows);
