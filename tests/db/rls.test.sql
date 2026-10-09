@@ -494,6 +494,21 @@ delete from public.students where id = :st3;
 select tests.expect_true(format($$(select not exists (select 1 from jsonb_each(seat_map) e where e.value = to_jsonb(%L::text))
   from public.rooms where id = %L)$$, :st3, :room1), 'deleting a student clears their seat');
 
+-- ─────────────────────────── 학년 바로잡기(20261009000000) ───────────────────────────
+-- 예전 화면이 고른 학년 탭으로 저장해서 생긴 "학년 1, 반 2학년 2반" 같은 학생과 담임 담당 반을 반 이름대로 고친다.
+insert into public.students (id, grade, name, sid, cls) values
+  ('00000000-0000-0000-0000-0000000000f1', 1, '잘못든이학년', '20299', '2학년 2반'),
+  ('00000000-0000-0000-0000-0000000000f2', 2, '반없음', '29999', '특별반');
+update public.profiles set managed_classes = '[{"grade": 1, "cls": "1학년 3반"}, {"grade": 1, "cls": "2학년 2반"}]' where id = :t13;
+select tests.expect_true('private.fix_student_grades() = 1', 'fixes only students whose class names another grade');
+select tests.expect_true($$(select grade from public.students where sid = '20299') = 2$$, 'misplaced student moves to the grade in the class name');
+select tests.expect_true($$(select grade from public.students where sid = '29999') = 2$$, 'class names without a grade are left alone');
+select tests.expect_true(format($$(select managed_classes from public.profiles where id = %L) =
+  '[{"grade": 1, "cls": "1학년 3반"}, {"grade": 2, "cls": "2학년 2반"}]'::jsonb$$, :t13), 'homeroom classes follow the class name too');
+select tests.expect_true('private.fix_student_grades() = 0', 'running it again changes nothing');
+delete from public.students where id in ('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000f2');
+update public.profiles set managed_classes = '[{"grade": 1, "cls": "1학년 3반"}]' where id = :t13;
+
 -- ─────────────────────────── service_role ───────────────────────────
 -- 이전 스크립트·Edge Function이 쓰는 역할: RLS를 우회하고 모든 테이블을 읽고 쓸 수 있어야 한다.
 set role service_role;
