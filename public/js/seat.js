@@ -299,7 +299,7 @@ function renderGrid(room) {
           actionButtonsHtml = `<button type="button" class="seat-cell__action-btn" data-seat-restore="${escapeHtml(studentId)}">재실로</button>`;
         }
         cells.push(`
-          <div class="seat-cell seat-cell--${status} seat-cell--action">
+          <div class="seat-cell seat-cell--${status} seat-cell--action" data-action-cell="${cellKey}">
             <div class="seat-cell__name">${escapeHtml(name)}</div>
             <div class="seat-cell__actions">
               ${actionButtonsHtml}
@@ -544,6 +544,14 @@ document.addEventListener("pointerup", (event) => {
 });
 
 document.addEventListener("pointercancel", endDrag);
+
+// Esc로도 열린 좌석 버튼을 닫는다
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && state.actionCellKey) {
+    state.actionCellKey = null;
+    render();
+  }
+});
 
 async function unassignSeat(cellKey) {
   const { error } = await supabase.rpc("unassign_seat", { p_room_id: state.activeRoomId, p_cell_key: cellKey });
@@ -810,6 +818,13 @@ seatGridEl.addEventListener("click", (event) => {
     // 자습 감독의 복귀는 한 번 더 확인한다(사용자 요청)
     if (restoreBtn.dataset.confirmReturn && !window.confirm(`${restoreBtn.dataset.confirmReturn} 학생이 복귀한 것이 확실한가요?`)) return;
     restoreToIn(restoreBtn.dataset.seatRestore);
+    state.actionCellKey = null;
+    render();
+    return;
+  }
+
+  // 버튼이 열린 좌석을 다시 누르면(버튼 말고 좌석 자리) 닫고 원래대로(사용자 요청)
+  if (event.target.closest("[data-action-cell]")) {
     state.actionCellKey = null;
     render();
     return;

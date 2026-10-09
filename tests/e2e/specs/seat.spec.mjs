@@ -35,6 +35,21 @@ test.describe("좌석 배치판 — 보기 모드", () => {
     expect(await outingStatus(env, STUDENT.hong)).toBe("in");
   });
 
+  test("버튼이 열린 좌석을 다시 누르거나 Esc를 누르면 닫힌다", async ({ openAs, page }) => {
+    await openAs("teacher01", "/seat.html");
+    await expect(cell(page, 0)).toContainText("홍길동");
+    await cell(page, 0).click();
+    await expect(cell(page, 0).getByRole("button", { name: "자리없음" })).toBeVisible();
+    await cell(page, 0).locator(".seat-cell__name").click(); // 같은 좌석을 다시(버튼이 아닌 곳)
+    await expect(page.locator("[data-action-cell]")).toHaveCount(0);
+    await expect(cell(page, 0)).toContainText("학번 10305"); // 원래 모양으로
+
+    await cell(page, 0).click();
+    await expect(page.locator("[data-action-cell]")).toHaveCount(1);
+    await page.keyboard.press("Escape");
+    await expect(page.locator("[data-action-cell]")).toHaveCount(0);
+  });
+
   test("외출 중 학생 복귀, 명령퇴사 좌석은 조작 불가", async ({ env, openAs, page }) => {
     await env.sql("insert into public.outings (date, student_id, status) values ($1, $2, 'out')", [todayKst(), STUDENT.seoyeon]);
     await openAs("admin01", "/seat.html");
