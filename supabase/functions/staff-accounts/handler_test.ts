@@ -144,6 +144,7 @@ Deno.test("create can give each account a role, but never admin", async () => {
       { loginId: "dorm1", name: "기숙사", role: "dormStaff" },
       { loginId: "super1", name: "감독", role: "studyHallSupervisor" },
       { loginId: "gm1", name: "학년", role: "gradeManager" },
+      { loginId: "after1", name: "방과후", role: "afterschoolTeacher" },
       { loginId: "boss", name: "관리", role: "admin" },
       { loginId: "odd", name: "이상", role: "student" },
     ],
@@ -152,11 +153,12 @@ Deno.test("create can give each account a role, but never admin", async () => {
     ["dorm1", "dormStaff"],
     ["super1", "studyHallSupervisor"],
     ["gm1", "gradeManager"],
+    ["after1", "afterschoolTeacher"],
   ]);
-  assertEquals(result.results.map((r) => r.ok), [true, true, true, false, false]);
-  assertEquals(result.results[3].error, "관리자는 일괄 생성으로 만들 수 없습니다.");
-  assertEquals(result.results[4].error, "알 수 없는 역할입니다.");
-  assertEquals(calls.created.length, 3); // 거부한 역할은 로그인 계정도 만들지 않는다
+  assertEquals(result.results.map((r) => r.ok), [true, true, true, true, false, false]);
+  assertEquals(result.results[4].error, "관리자는 일괄 생성으로 만들 수 없습니다.");
+  assertEquals(result.results[5].error, "알 수 없는 역할입니다.");
+  assertEquals(calls.created.length, 4); // 거부한 역할은 로그인 계정도 만들지 않는다
 });
 
 Deno.test("create rolls the auth user back when the profile cannot be saved", async () => {

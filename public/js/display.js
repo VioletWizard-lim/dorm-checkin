@@ -17,6 +17,7 @@ const currentUserNameEl = document.getElementById("currentUserName");
 const currentUserRoleBadgeEl = document.getElementById("currentUserRoleBadge");
 const manageLink = document.getElementById("manageLink");
 const accountsLink = document.getElementById("accountsLink");
+const afterschoolLink = document.getElementById("afterschoolLink");
 const historyLink = document.getElementById("historyLink");
 const navLoadingHint = document.getElementById("navLoadingHint");
 const dateEl = document.getElementById("todayDate");
@@ -32,6 +33,7 @@ const afterschoolListEl = document.getElementById("afterschoolPanelList");
 const afterschoolCountEl = document.getElementById("afterschoolPanelCount");
 
 const state = {
+  isAfterschoolDay: false, // 오늘이 방과후 있는 날인지(afterschool_dates)
   studentsByGrade: { "1": {}, "2": {}, "3": {} },
   outings: {},
   rooms: {},
@@ -126,7 +128,8 @@ function renderOutingPanel(students, statuses, listEl, countEl, extraLabel, empt
 }
 
 function renderAfterschoolPanel(students) {
-  const todayIdx = todayWeekdayIndex();
+  // 방과후는 방과후 일정(afterschool.html)에서 고른 "방과후 있는 날"에만, 학생의 방과후 요일대로
+  const todayIdx = state.isAfterschoolDay ? todayWeekdayIndex() : null;
   const afterschoolStudents = todayIdx === null
     ? []
     : students
@@ -136,7 +139,7 @@ function renderAfterschoolPanel(students) {
   afterschoolCountEl.textContent = `${afterschoolStudents.length}명`;
 
   if (afterschoolStudents.length === 0) {
-    const emptyText = todayIdx === null ? "오늘은 방과후가 없습니다." : "오늘 방과후 학생이 없습니다.";
+    const emptyText = todayIdx === null ? "오늘은 방과후가 없는 날입니다." : "오늘 방과후 학생이 없습니다.";
     afterschoolListEl.innerHTML = `<div class="display-panel__empty">${emptyText}</div>`;
     return;
   }
@@ -243,7 +246,20 @@ async function init() {
   navLoadingHint.hidden = true;
   manageLink.hidden = role !== "admin" && role !== "gradeManager" && role !== "dormStaff" && !hasManagedClasses;
   accountsLink.hidden = role !== "admin";
+  afterschoolLink.hidden = role !== "admin";
   historyLink.hidden = role !== "admin" && role !== "gradeManager" && !hasManagedClasses;
+
+  liveTable({
+    table: "afterschool_dates",
+    select: "date",
+    order: ["date"],
+    eq: { date: TODAY_KEY },
+    onRows: (rows) => {
+      state.isAfterschoolDay = rows.length > 0;
+      render();
+    },
+    onError: reportLoadError,
+  });
 
   liveTable({
     table: "students",

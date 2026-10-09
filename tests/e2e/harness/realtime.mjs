@@ -12,6 +12,7 @@ const PRIMARY_KEYS = {
   profiles: ["id"],
   outing_requests: ["id"],
   outings: ["date", "student_id"],
+  afterschool_dates: ["date"],
 };
 
 const pick = (row, keys) => Object.fromEntries(keys.map((k) => [k, row[k]]));

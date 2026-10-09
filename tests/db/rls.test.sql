@@ -539,6 +539,53 @@ select tests.expect_true('private.fix_student_grades() = 0', 'running it again c
 delete from public.students where id in ('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000f2');
 update public.profiles set managed_classes = '[{"grade": 1, "cls": "1학년 3반"}]' where id = :t13;
 
+-- ─────────────────────────── 방과후 있는 날(afterschool_dates) ───────────────────────────
+select tests.login(:admin);
+set role authenticated;
+select tests.expect_affected($$insert into public.afterschool_dates (date) values ('2026-10-12'), ('2026-10-13')$$, 2, 'admin adds afterschool dates');
+select tests.expect_affected($$delete from public.afterschool_dates where date = '2026-10-13'$$, 1, 'admin removes an afterschool date');
+reset role;
+select tests.login(:t13);
+set role authenticated;
+select tests.expect_count('select * from public.afterschool_dates', 1, 'staff read afterschool dates');
+select tests.expect_error($$insert into public.afterschool_dates (date) values ('2026-10-14')$$, 'non-admin cannot add afterschool dates', '%row-level security%');
+select tests.expect_affected('delete from public.afterschool_dates', 0, 'non-admin cannot remove afterschool dates');
+reset role;
+select tests.login(:s1);
+set role authenticated;
+select tests.expect_count('select * from public.afterschool_dates', 0, 'students do not read afterschool dates');
+reset role;
+select tests.logout();
+
+-- 방과후 선생님(afterschoolTeacher): 방과후 있는 날·학생 방과후 요일만 바꾼다
+\set aft '''00000000-0000-4000-8000-0000000000af'''
+insert into auth.users (id, email) values (:aft, 'aft01@test.local');
+insert into public.profiles (id, login_id, kind, role, name) values (:aft, 'aft01', 'staff', 'afterschoolTeacher', '방과후');
+select tests.login(:aft);
+set role authenticated;
+select tests.expect_count('select * from public.students', 2, 'afterschool teacher reads students');
+select tests.expect_affected($$insert into public.afterschool_dates (date) values ('2026-10-14')$$, 1, 'afterschool teacher adds afterschool dates');
+select tests.expect_affected($$delete from public.afterschool_dates where date = '2026-10-14'$$, 1, 'afterschool teacher removes afterschool dates');
+select tests.expect_affected(format($$update public.students set afterschool_days = '{t,f,t,f,f}' where id = %L$$, :st2), 1, 'afterschool teacher sets afterschool days of any student');
+select tests.expect_error(format($$update public.students set name = '바꿈' where id = %L$$, :st2), 'afterschool teacher cannot change other student fields', '%방과후 요일만%');
+select tests.expect_error(format($$update public.students set leave_from = '2026-10-01', leave_to = '2026-10-02' where id = %L$$, :st2), 'afterschool teacher cannot set leave', '%명령퇴사 기간은 관리자·기숙사부만%');
+select tests.expect_error(format($$insert into public.outings (date, student_id, status, expected_return) values (public.today_kst(), %L, 'out', '23:00')$$, :st2), 'afterschool teacher cannot write outings', '%row-level security%');
+select tests.expect_error($$insert into public.students (grade, name, sid, cls) values (1, '새학생', '10199', '1학년 1반')$$, 'afterschool teacher cannot add students', '%row-level security%');
+select tests.expect_affected(format('delete from public.students where id = %L', :st2), 0, 'afterschool teacher cannot delete students');
+reset role;
+select tests.logout();
+-- 기숙사부는 방과후 요일을 못 바꾼다(명령퇴사 기간만)
+select tests.login(:dorm);
+set role authenticated;
+select tests.expect_error(format($$update public.students set afterschool_days = '{f,f,f,f,f}' where id = %L$$, :st2), 'dorm staff cannot change afterschool days', '%명령퇴사 기간만%');
+select tests.expect_error($$insert into public.afterschool_dates (date) values ('2026-10-15')$$, 'dorm staff cannot add afterschool dates', '%row-level security%');
+reset role;
+select tests.logout();
+update public.students set afterschool_days = '{f,f,f,f,f}' where id = :st2;
+delete from public.profiles where id = :aft;
+delete from auth.users where id = :aft;
+delete from public.afterschool_dates;
+
 -- ─────────────────────────── service_role ───────────────────────────
 -- 이전 스크립트·Edge Function이 쓰는 역할: RLS를 우회하고 모든 테이블을 읽고 쓸 수 있어야 한다.
 set role service_role;
@@ -548,7 +595,7 @@ select tests.expect_affected('update public.profiles set name = name', 10, 'serv
 reset role;
 
 -- ─────────────────────────── Realtime ───────────────────────────
-select tests.expect_count($$select * from pg_publication_tables where pubname = 'supabase_realtime'$$, 5, 'realtime publishes the 5 app tables');
+select tests.expect_count($$select * from pg_publication_tables where pubname = 'supabase_realtime'$$, 6, 'realtime publishes the 6 app tables');
 
 -- ─────────────────────────── API로 열린 함수 ───────────────────────────
 -- Supabase 보안 점검과 같은 기준: public(API로 열린 스키마)의 security definer 함수를 anon·authenticated가 부를 수 없어야 한다.

@@ -19,6 +19,7 @@ const logoutBtn = document.getElementById("logoutBtn");
 const currentUserNameEl = document.getElementById("currentUserName");
 const currentUserRoleBadgeEl = document.getElementById("currentUserRoleBadge");
 const accountsLink = document.getElementById("accountsLink");
+const afterschoolLink = document.getElementById("afterschoolLink");
 const historyLink = document.getElementById("historyLink");
 const navLoadingHint = document.getElementById("navLoadingHint");
 const gradeTabsEl = document.getElementById("gradeTabs");
@@ -1057,6 +1058,7 @@ async function init() {
   const role = profile.role;
   navLoadingHint.hidden = true;
   accountsLink.hidden = role !== "admin";
+  afterschoolLink.hidden = role !== "admin";
   // 이 화면에 들어오는 사람 중 외출 기록을 못 보는 건 기숙사부뿐
   historyLink.hidden = role === "dormStaff";
 

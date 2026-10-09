@@ -128,20 +128,22 @@ test.describe("계정 관리", () => {
     await openAs("admin01", "/accounts.html");
     await page.fill(
       "#bulkAccountInput",
-      ["sup1\t감독1\t자습감독", "dorm2\t기숙2\t기숙사관리자\tdormpass1", "gm2\t학년2\t학년 관리자", "t3\t교사3\t교사", "t4\t교사4\tpw123456", "boss2\t관리2\t관리자"].join("\n")
+      ["sup1\t감독1\t자습감독", "dorm2\t기숙2\t기숙사관리자\tdormpass1", "gm2\t학년2\t학년 관리자", "t3\t교사3\t교사", "t4\t교사4\tpw123456", "boss2\t관리2\t관리자", "after2\t방과후2\t방과후 선생님"].join("\n")
     );
     const preview = page.locator("#bulkAccountPreview .bulk-preview__row");
-    await expect(preview).toHaveCount(5);
+    await expect(preview).toHaveCount(6);
     await expect(preview.nth(0)).toContainText("sup1 · 감독1 · 자습감독 · 비밀번호");
+    await expect(preview.nth(5)).toContainText("after2 · 방과후2 · 방과후선생님");
     await expect(preview.nth(1)).toContainText("dorm2 · 기숙2 · 기숙사관리자 · 비밀번호 dormpass1");
     await expect(preview.nth(2)).toContainText("gm2 · 학년2 · 학년관리자");
     await expect(preview.nth(4)).toContainText("t4 · 교사4 · 교사 · 비밀번호 pw123456"); // 역할 없이 비밀번호만(예전 형식)
     await expect(page.locator("#bulkAccountPreview .bulk-preview__errors")).toContainText("6번째 줄: 관리자는 일괄 생성으로 만들 수 없습니다");
 
     await page.click("#bulkCreateBtn");
-    await expect(page.locator("#resultList .student-card")).toHaveCount(5);
-    const roles = await env.sql("select login_id, role from public.profiles where login_id = any($1) order by login_id", [["dorm2", "gm2", "sup1", "t3", "t4", "boss2"]]);
+    await expect(page.locator("#resultList .student-card")).toHaveCount(6);
+    const roles = await env.sql("select login_id, role from public.profiles where login_id = any($1) order by login_id", [["after2", "dorm2", "gm2", "sup1", "t3", "t4", "boss2"]]);
     expect(roles).toEqual([
+      { login_id: "after2", role: "afterschoolTeacher" },
       { login_id: "dorm2", role: "dormStaff" },
       { login_id: "gm2", role: "gradeManager" },
       { login_id: "sup1", role: "studyHallSupervisor" },

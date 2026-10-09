@@ -209,6 +209,7 @@ export async function startEnv() {
         realtime.setPaused(false);
         sms.reset();
         await db.pool.query(`
+          delete from public.afterschool_dates;
           delete from public.outing_log;
           delete from public.outings;
           delete from public.outing_requests;
@@ -313,6 +314,20 @@ export async function startEnv() {
           `insert into public.profiles (id, login_id, kind, role, name, student_id)
            select $1, $2, 'student', 'student', s.name, s.id from public.students s where s.id = $3`,
           [user.id, loginId, studentId]
+        );
+        return user;
+      },
+
+      // 교직원 계정을 바로 만든다(기본 데이터에 없는 역할을 시험할 때)
+      async createStaffAccount(loginId, role, name, password = PASSWORD) {
+        const user = await auth.createUser({
+          email: `${loginId}@${STAFF_EMAIL_DOMAIN}`,
+          password,
+          app_metadata: { kind: "staff" },
+        });
+        await db.pool.query(
+          "insert into public.profiles (id, login_id, kind, role, name) values ($1, $2, 'staff', $3, $4)",
+          [user.id, loginId, role, name]
         );
         return user;
       },

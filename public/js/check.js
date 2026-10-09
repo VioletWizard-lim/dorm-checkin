@@ -18,6 +18,7 @@ let currentTeacherName = "";
 
 const manageLink = document.getElementById("manageLink");
 const accountsLink = document.getElementById("accountsLink");
+const afterschoolLink = document.getElementById("afterschoolLink");
 const historyLink = document.getElementById("historyLink");
 const displayLink = document.getElementById("displayLink");
 const seatLink = document.getElementById("seatLink");
@@ -499,6 +500,7 @@ async function init() {
   manageLink.hidden =
     profile.role !== "admin" && profile.role !== "gradeManager" && profile.role !== "dormStaff" && !hasManagedClasses;
   accountsLink.hidden = profile.role !== "admin";
+  afterschoolLink.hidden = profile.role !== "admin";
   // 외출 기록: 관리자·학년부장·담임(담당 반이 있을 때)
   historyLink.hidden = profile.role !== "admin" && profile.role !== "gradeManager" && !hasManagedClasses;
   // 자습 감독도 현황판·좌석 배치판은 볼 수 있다(사용자 요청)

@@ -6,6 +6,7 @@ import { GRADES, groupStudentsByGrade } from "./adapters.js";
 
 const navLoadingHint = document.getElementById("navLoadingHint");
 const accountsLink = document.getElementById("accountsLink");
+const afterschoolLink = document.getElementById("afterschoolLink");
 const logoutBtn = document.getElementById("logoutBtn");
 const currentUserNameEl = document.getElementById("currentUserName");
 const currentUserRoleBadgeEl = document.getElementById("currentUserRoleBadge");
@@ -172,6 +173,7 @@ async function init() {
   }
   navLoadingHint.hidden = true;
   accountsLink.hidden = role !== "admin";
+  afterschoolLink.hidden = role !== "admin";
   currentUserNameEl.textContent = profile.name || loginId;
   currentUserRoleBadgeEl.textContent = role;
   currentUserRoleBadgeEl.className = `role-badge role-badge--${role}`;

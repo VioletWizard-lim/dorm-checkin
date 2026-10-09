@@ -3,7 +3,7 @@ import { escapeHtml, insertTabOnKeydown } from "./util.js";
 import { liveTable } from "./live-table.js";
 import { GRADES, groupStudentsByGrade, managedClassesToRows, roomsById, userFromProfile } from "./adapters.js";
 
-const ROLES = ["teacher", "gradeManager", "admin", "studyHallSupervisor", "dormStaff"];
+const ROLES = ["teacher", "gradeManager", "admin", "studyHallSupervisor", "dormStaff", "afterschoolTeacher"];
 // 서버(staff-accounts 함수)와 같은 규칙: 영문·숫자 32자 이하, 소문자로 저장
 const ID_PATTERN = /^[A-Za-z0-9]{1,32}$/;
 const PASSWORD_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
@@ -30,6 +30,7 @@ const ACCOUNT_GROUPS = [
   { key: "teacher", label: "일반 교사 (담당 반 없음)" },
   { key: "studyHallSupervisor", label: "자습 감독" },
   { key: "dormStaff", label: "기숙사부" },
+  { key: "afterschoolTeacher", label: "방과후 선생님" },
   { key: "disabled", label: "삭제됨" },
 ];
 
@@ -87,6 +88,10 @@ const BULK_ROLE_NAMES = {
   기숙사관리자: "dormStaff",
   기숙사부: "dormStaff",
   dormstaff: "dormStaff",
+  방과후선생님: "afterschoolTeacher",
+  방과후교사: "afterschoolTeacher",
+  방과후: "afterschoolTeacher",
+  afterschoolteacher: "afterschoolTeacher",
 };
 const ADMIN_ROLE_NAMES = new Set(["관리자", "admin"]);
 const ROLE_LABELS = {
@@ -94,6 +99,7 @@ const ROLE_LABELS = {
   gradeManager: "학년관리자",
   studyHallSupervisor: "자습감독",
   dormStaff: "기숙사관리자",
+  afterschoolTeacher: "방과후선생님",
 };
 
 function roleKeyOf(text) {

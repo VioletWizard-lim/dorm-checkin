@@ -84,6 +84,11 @@ export async function requireStaff() {
     await signOutTo("./login.html?disabled=1");
     return null;
   }
+  // 방과후 선생님은 방과후 일정 화면만 쓴다(사용자 요청)
+  if (row.role === "afterschoolTeacher" && !/\/afterschool\.html$/.test(window.location.pathname)) {
+    window.location.replace("./afterschool.html");
+    return null;
+  }
   return { uid: row.id, loginId: row.login_id, profile: userFromProfile(row) };
 }
 
