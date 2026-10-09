@@ -36,7 +36,7 @@
   - RTDB: 이전 직전 데이터가 백업으로 남아 있음(마지막으로 배포한 규칙 그대로). 코드에서는 읽지도 쓰지도 않는다
   - Firebase Auth의 예전 교사 계정: 쓰이지 않음. 지금 로그인은 모두 Supabase Auth
 - 파일 위치:
-  - `supabase/migrations/`: 테이블(`profiles`·`students`·`rooms`·`outings`·`outing_requests`), 권한 함수(`private.is_staff`·`private.can_manage_student`·`private.can_edit_room` 등), RLS, RPC(좌석 배정·크기 변경·외출 신청/취소/승인/반려 — 본체는 `private`, `public`에는 껍데기)
+  - `supabase/migrations/`: 테이블(`profiles`·`students`·`rooms`·`outings`·`outing_requests`), 권한 함수(`private.is_staff`·`private.can_manage_student`·`private.can_edit_room` 등), RLS, RPC(좌석 배정·이동/맞바꿈(`move_seat`)·일괄 등록(`set_room_seats`)·크기 변경·외출 신청/취소/승인/반려 — 본체는 `private`, `public`에는 껍데기)
   - `supabase/functions/`: Edge Functions(Deno)
     - `staff-accounts`: 교사 계정 생성(역할 teacher·gradeManager·studyHallSupervisor·dormStaff 지정 가능, admin은 거부)·비밀번호 재발급·비활성화(ban), 관리자 전용
     - `student-accounts`: 학생 계정 발급(여러 명)·비밀번호 재발급·삭제(`withStudent`면 명단 행까지)·여러 학생 한 번에 삭제(`delete-students`, 계정까지). 발급·재발급·계정이 있는 학생 삭제·여러 명 삭제는 관리자만. 담임·학년부장은 계정 없는 학생의 명단 삭제(`withStudent`)만(`_shared/scope.ts`의 `canManageStudent` — DB `can_manage_student`와 같은 규칙)
@@ -140,6 +140,8 @@
   - 실 추가("+ 실 추가", 추가한 실이 바로 선택됨) / 실 이름 변경 / 실 삭제(최소 1개는 유지) — 관리자만
   - 실의 **대상 학년** 지정 (1/2/3학년 토글) — 지정된 학년 학생만 그 실의 배정 후보로 노출
   - 그리드 행/열 크기 조정(+/−) — RPC `resize_room`이 줄어든 범위 밖의 배정을 함께 지움
+  - **끌어서 옮기기**(사용자 요청): 배정된 좌석을 끌어 다른 칸에 놓으면 빈자리면 이동, 학생 자리면 맞바꿈 — RPC `move_seat`(한 번에 처리). 마우스·터치(전자칠판) 모두 Pointer Events, 6px 넘게 움직여야 끌기(그보다 적으면 보통 클릭). 편집 중인 좌석은 `touch-action: none`
+  - **좌석 일괄 등록**(사용자 요청, [좌석 일괄 등록] 버튼 — 그 실을 편집할 수 있을 때): 엑셀에 좌석 모양대로 적은 학번표를 붙여넣으면 같은 모양으로(탭이 있는 줄 = 행, 빈 칸 = 빈자리, 칸에서 다섯 자리 숫자만 읽어 "10305 홍길동"도 됨), 탭 없이 학번만 줄마다 붙여넣으면 앞자리부터 차례로. 미리보기(좌석 모양 표)에서 없는 학번·다른 학년·중복·실보다 큰 표는 빨갛게 + 안내, 오류가 하나라도 있으면 저장 안 됨. 저장 = RPC `set_room_seats`(실 하나의 좌석표 전체를 한 번에 바꾸고, 다른 실에 있던 학생은 그 자리를 비움, 서버도 학년·중복·범위 확인)
   - 빈 좌석 클릭 → **학번 입력칸**(사용자 요청: 학번 입력 후 Enter로 배정하고 다음 빈자리(오른쪽→다음 줄)가 바로 열려 이어서 입력, Esc로 닫기. 대상 학년이 아니거나 없는 학번은 알림, 다른 자리에 앉아 있으면 확인 후 옮김) 또는 드롭다운으로 학생 배정 / 배정된 좌석 × 클릭 → 해제 — RPC `assign_seat`(다른 자리·다른 실에 있던 배정은 서버가 함께 지움)·`unassign_seat`
 - 좌석 카드 색상 우선순위: **명령퇴사(보라) > 자리 없음(황금) > 외출중(빨강) > 오늘 방과후(파랑) > 재실(회색) > 빈자리(점선)** — 자리 없음/명령퇴사의 의미는 check.html/students.html 참고. 좌석 배치판은 항상 오늘 기준만 표시함
 - 학년관리자는 자기 `managed_rooms`에 속한 실의 좌석 배정만 할 수 있음(실 추가·삭제·이름·대상 학년·크기는 admin만) — 서버(RPC·RLS)도 같은 범위를 강제함

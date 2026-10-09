@@ -1194,6 +1194,69 @@ input {
   gap: 6px;
 }
 
+/* 좌석 끌어서 옮기기(편집 모드) — 터치에서는 끄는 동안 화면이 스크롤되지 않게 */
+.seat-cell--draggable {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.seat-cell--dragging {
+  opacity: 0.35;
+}
+
+.seat-cell--drop-target {
+  outline: 3px solid var(--color-active);
+  outline-offset: 2px;
+}
+
+.seat-cell--ghost {
+  position: fixed;
+  z-index: 1000;
+  pointer-events: none;
+  opacity: 0.9;
+  box-shadow: 0 8px 24px rgba(28, 34, 48, 0.25);
+  transform: rotate(-2deg);
+}
+
+body.is-dragging-seat,
+body.is-dragging-seat * {
+  cursor: grabbing !important;
+}
+
+/* 좌석 일괄 등록 미리보기: 좌석 모양 그대로 작은 표 */
+.seat-bulk-grid {
+  display: grid;
+  gap: 4px;
+  overflow-x: auto;
+}
+
+.seat-bulk-grid__cell {
+  min-height: 34px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-border);
+  font-size: 12px;
+  color: var(--color-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.seat-bulk-grid__cell--empty {
+  border-style: dashed;
+  color: var(--color-text-faint);
+}
+
+.seat-bulk-grid__cell--error {
+  border-color: var(--color-out);
+  background: var(--color-out-bg);
+  color: var(--color-out);
+}
+
 /* 좌석 배정: 학번 입력칸 + 목록 */
 .seat-cell__pick {
   flex-grow: 1;

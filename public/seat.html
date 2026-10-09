@@ -43,6 +43,7 @@
     <span class="loading-hint" id="editControlsLoadingHint">권한 확인 중...</span>
     <button type="button" class="btn-add" id="addRoomBtn" hidden>+ 실 추가</button>
     <div class="roster-toolbar__actions ml-auto">
+      <button type="button" class="btn-secondary" id="seatBulkBtn" hidden>좌석 일괄 등록</button>
       <button type="button" class="btn-secondary" id="editModeToggle" hidden>편집 모드</button>
     </div>
   </div>
@@ -77,6 +78,23 @@
       </div>
       <div class="roster-form__actions">
         <button type="button" class="btn-danger" id="deleteRoomBtn">이 실 삭제</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 좌석 일괄 등록(편집 모드, 이 실을 편집할 수 있을 때): 엑셀에 자리 모양대로 적은 학번표를 붙여넣는다 -->
+  <div class="roster-form-wrap" id="seatBulkWrap" hidden>
+    <div class="roster-form">
+      <div class="field">
+        <label for="seatBulkInput">좌석 일괄 등록 — <span id="seatBulkRoomName"></span></label>
+        <span class="field-hint">엑셀에 좌석 모양대로 학번을 적고 그 칸들을 복사해 붙여넣으면 같은 모양으로 배정됩니다(빈 칸 = 빈자리, 칸에 "10305 홍길동"처럼 이름이 같이 있어도 됨). 학번만 한 줄에 하나씩 붙여넣으면 앞자리부터(왼쪽→오른쪽, 위→아래) 차례로 채웁니다. 저장하면 이 실의 지금 좌석표는 새 좌석표로 바뀝니다.</span>
+        <textarea id="seatBulkInput" rows="6" placeholder="10301	10302	10303
+10304		10306"></textarea>
+      </div>
+      <div class="bulk-preview" id="seatBulkPreview"></div>
+      <div class="roster-form__actions">
+        <button type="button" class="btn-secondary" id="seatBulkCancelBtn">취소</button>
+        <button type="button" class="btn-add" id="seatBulkSaveBtn" disabled>좌석표 저장 (0명)</button>
       </div>
     </div>
   </div>
