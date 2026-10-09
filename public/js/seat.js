@@ -8,6 +8,7 @@ import {
   roomsById,
   isScheduledOuting,
   createStartTimeTicker,
+  isRoomInView,
 } from "./adapters.js";
 import { outingPassData } from "./outing-pass.js";
 import { createPassDialog } from "./pass-dialog.js";
@@ -123,6 +124,19 @@ function canManageStudent(student) {
   return false;
 }
 
+// 좌석을 배정·해제·이동할 수 있는 학생: 관리자는 전체, 학년부장은 담당 학년 학생만(서버 can_seat_student, 사용자 요청).
+// 명단에서 지워진 학생의 자리는 누구나 비울 수 있다
+function canSeatStudent(student) {
+  if (!student || state.role === "admin") return true;
+  if (state.role === "gradeManager") return Boolean((state.profile.managedGrades || {})[student.grade]);
+  return false;
+}
+
+// 학년부장에게 보이는 실: 담당 실 + 담당 학년이 앉는 실(사용자 요청 — 다른 학년 면학실은 안 보이게). 다른 역할은 전체
+function visibleRoomIds() {
+  return Object.keys(state.rooms).filter((id) => isRoomInView(state.profile, id, state.rooms[id]));
+}
+
 function canEditRoom(roomId) {
   if (!state.editMode || !roomId) return false;
   if (state.role === "admin") return true;
@@ -135,18 +149,18 @@ function canManageRoomsGlobally() {
 }
 
 function ensureActiveRoom() {
-  const ids = Object.keys(state.rooms);
+  const ids = visibleRoomIds();
   if (ids.length === 0) {
     state.activeRoomId = null;
     return;
   }
-  if (!state.activeRoomId || !state.rooms[state.activeRoomId]) {
+  if (!state.activeRoomId || !ids.includes(state.activeRoomId)) {
     state.activeRoomId = ids[0];
   }
 }
 
 function renderRoomTabs() {
-  const entries = Object.entries(state.rooms);
+  const entries = visibleRoomIds().map((id) => [id, state.rooms[id]]);
   if (entries.length === 0) {
     roomTabsEl.innerHTML = `<span class="loading-hint">등록된 실이 없습니다.</span>`;
     return;
@@ -224,7 +238,7 @@ function renderGrid(room) {
 
       if (state.editingCellKey === cellKey && editable) {
         const options = Object.values(studentsById)
-          .filter((s) => (room.grades || []).includes(s.grade))
+          .filter((s) => (room.grades || []).includes(s.grade) && canSeatStudent(s))
           .sort((a, b) => a.grade.localeCompare(b.grade) || (a.sid || "").localeCompare(b.sid || ""));
         const optionsHtml = options
           .map((s) => {
@@ -249,6 +263,10 @@ function renderGrid(room) {
         continue;
       }
 
+      const student = studentsById[studentId];
+      // 학년부장은 다른 학년 학생 자리를 옮기거나 비울 수 없다(그 자리에 놓을 수도 없음 — data-cell-key가 없어서)
+      const cellEditable = editable && canSeatStudent(student);
+
       if (!studentId) {
         const clickable = editable ? " seat-cell--clickable" : "";
         cells.push(
@@ -257,7 +275,6 @@ function renderGrid(room) {
         continue;
       }
 
-      const student = studentsById[studentId];
       const status = getStudentStatus(studentId, studentsById);
       const name = student ? student.name || "이름 없음" : "(삭제된 학생)";
       const scheduledOuting = isScheduledOuting(state.outings[studentId], TODAY_KEY, TODAY_KEY);
@@ -314,12 +331,13 @@ function renderGrid(room) {
       }
 
       // 편집 모드에서는 배정된 좌석을 끌어서 다른 자리로 옮긴다(빈자리 = 이동, 학생 자리 = 맞바꿈)
-      const dragAttrs = editable ? ` data-drag-cell="${cellKey}" data-cell-key="${cellKey}"` : "";
+      const dragAttrs = cellEditable ? ` data-drag-cell="${cellKey}" data-cell-key="${cellKey}"` : "";
+      const lockedTitle = editable && !cellEditable ? ` title="다른 학년 학생 자리 — 담당 학년 학생만 바꿀 수 있습니다"` : "";
       cells.push(`
-        <div class="seat-cell seat-cell--${status}${canAct ? " seat-cell--clickable" : ""}${editable ? " seat-cell--draggable" : ""}" ${canAct ? `data-attendance-cell="${cellKey}"` : ""}${dragAttrs}>
+        <div class="seat-cell seat-cell--${status}${canAct ? " seat-cell--clickable" : ""}${cellEditable ? " seat-cell--draggable" : ""}${editable && !cellEditable ? " seat-cell--locked" : ""}" ${canAct ? `data-attendance-cell="${cellKey}"` : ""}${dragAttrs}${lockedTitle}>
           <div class="seat-cell__name">${escapeHtml(name)}</div>
           ${meta ? `<div class="seat-cell__meta">${escapeHtml(meta)}</div>` : ""}
-          ${editable ? `<button type="button" class="seat-cell__unassign" data-unassign-cell="${cellKey}">×</button>` : ""}
+          ${cellEditable ? `<button type="button" class="seat-cell__unassign" data-unassign-cell="${cellKey}">×</button>` : ""}
         </div>
       `);
     }
@@ -454,6 +472,10 @@ function assignBySid(cellKey, rawSid) {
     return;
   }
   const student = matches[0];
+  if (!canSeatStudent(student)) {
+    alert(`학번 ${sid} ${student.name || ""} 학생은 ${student.grade}학년입니다. 담당 학년 학생만 배정할 수 있습니다.`);
+    return;
+  }
   const seatedElsewhere = getSeatedRoomNameByStudentId()[student.id];
   if (seatedElsewhere && !confirm(`${student.name}(${sid})은(는) 지금 ${seatedElsewhere}에 앉아 있습니다. 이 자리로 옮길까요?`)) return;
   assignStudent(cellKey, student.id, { continueToNext: true });
@@ -611,25 +633,45 @@ function parseSeatBulk(text, room) {
   const rows = Number(room.rows) || 1;
   const cols = Number(room.cols) || 1;
   const lines = text.replace(/\s+$/, "").split(/\r?\n/);
+  const studentsById = getStudentsById();
+  // 학년부장: 다른 학년 학생의 지금 자리는 그대로 남는다(서버 set_room_seats도 같음)
+  const kept = {}; // cellKey → student
+  for (const [key, id] of Object.entries(room.seatMap || {})) {
+    if (studentsById[id] && !canSeatStudent(studentsById[id])) kept[key] = studentsById[id];
+  }
   const cells = []; // { r, c, raw }
   if (lines.some((line) => line.includes("\t"))) {
     lines.forEach((line, r) => line.split("\t").forEach((raw, c) => cells.push({ r, c, raw: raw.trim() })));
   } else {
+    // 학번 목록은 앞자리부터 차례로 — 다른 학년 학생 자리는 건너뛴다
     const tokens = text.split(/[\s,]+/).filter(Boolean);
-    tokens.forEach((raw, i) => cells.push({ r: Math.floor(i / cols), c: i % cols, raw }));
+    let i = 0;
+    for (const raw of tokens) {
+      while (kept[`r${Math.floor(i / cols)}c${i % cols}`]) i++;
+      cells.push({ r: Math.floor(i / cols), c: i % cols, raw });
+      i++;
+    }
   }
-  const bySid = new Map(Object.values(getStudentsById()).map((s) => [s.sid, s]));
+  const bySid = new Map(Object.values(studentsById).map((s) => [s.sid, s]));
   const grades = room.grades || [];
   const seatMap = {};
   const grid = {}; // 미리보기: cellKey → { text, error }
   const errors = [];
   const seen = new Map(); // studentId → cellKey
+  for (const [key, student] of Object.entries(kept)) {
+    grid[key] = { text: student.name, kept: true };
+    seen.set(student.id, key);
+  }
   for (const { r, c, raw } of cells) {
     if (!raw) continue;
     const key = `r${r}c${c}`;
     const match = /(\d{5})/.exec(raw);
     if (r >= rows || c >= cols) {
       errors.push(`${r + 1}행 ${c + 1}열 "${raw}": 이 실(${rows}행×${cols}열)보다 큽니다. 편집 모드에서 행·열을 먼저 늘려 주세요.`);
+      continue;
+    }
+    if (kept[key]) {
+      errors.push(`${r + 1}행 ${c + 1}열 "${raw}": ${kept[key].grade}학년 ${kept[key].name} 학생 자리입니다. 담당 학년 학생 자리만 바꿀 수 있습니다.`);
       continue;
     }
     if (!match) {
@@ -646,6 +688,11 @@ function parseSeatBulk(text, room) {
     if (!grades.includes(student.grade)) {
       grid[key] = { text: student.name, error: true };
       errors.push(`${r + 1}행 ${c + 1}열: ${student.name}(${student.sid})은(는) ${student.grade}학년이라 이 실(대상 학년 ${grades.join("·") || "없음"})에 앉을 수 없습니다.`);
+      continue;
+    }
+    if (!canSeatStudent(student)) {
+      grid[key] = { text: student.name, error: true };
+      errors.push(`${r + 1}행 ${c + 1}열: ${student.name}(${student.sid})은(는) ${student.grade}학년입니다. 담당 학년 학생만 배정할 수 있습니다.`);
       continue;
     }
     if (seen.has(student.id)) {
@@ -678,7 +725,13 @@ function renderSeatBulkPreview() {
   for (let r = 0; r < plan.rows; r++) {
     for (let c = 0; c < plan.cols; c++) {
       const g = plan.grid[`r${r}c${c}`];
-      const cls = !g ? " seat-bulk-grid__cell--empty" : g.error ? " seat-bulk-grid__cell--error" : "";
+      const cls = !g
+        ? " seat-bulk-grid__cell--empty"
+        : g.error
+          ? " seat-bulk-grid__cell--error"
+          : g.kept
+            ? " seat-bulk-grid__cell--kept"
+            : "";
       cellsHtml.push(`<div class="seat-bulk-grid__cell${cls}">${g ? escapeHtml(g.text) : "빈자리"}</div>`);
     }
   }
@@ -713,10 +766,12 @@ seatBulkInput.addEventListener("input", renderSeatBulkPreview);
 seatBulkSaveBtn.addEventListener("click", async () => {
   const room = state.rooms[state.activeRoomId];
   if (!room || !seatBulkPlan || seatBulkPlan.errors.length > 0 || seatBulkPlan.count === 0) return;
-  const filled = Object.keys(room.seatMap || {}).length;
+  const keptCount = Object.values(seatBulkPlan.grid).filter((g) => g.kept).length;
+  const filled = Object.keys(room.seatMap || {}).length - keptCount;
   const ok = confirm(
     `${room.name || "이 실"}의 좌석표를 새로 저장합니다(${seatBulkPlan.count}명).` +
       (filled > 0 ? `\n지금 배정된 ${filled}자리는 새 좌석표로 바뀝니다.` : "") +
+      (keptCount > 0 ? `\n다른 학년 학생 ${keptCount}자리는 그대로 둡니다.` : "") +
       "\n다른 실에 앉아 있던 학생은 그 자리가 비워집니다."
   );
   if (!ok) return;

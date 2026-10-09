@@ -8,6 +8,8 @@ import {
   roomsById,
   isScheduledOuting,
   createStartTimeTicker,
+  isGradeInView,
+  isRoomInView,
 } from "./adapters.js";
 
 const TODAY_KEY = getDateKey();
@@ -39,11 +41,12 @@ const state = {
   rooms: {},
   activeGradeFilter: "all",
   activeRoomFilter: "all",
+  profile: null, // 학년부장은 담당 학년 학생·담당 실만 보인다(isGradeInView·isRoomInView)
 };
 
 function getAllStudents() {
   const list = [];
-  for (const grade of GRADES) {
+  for (const grade of GRADES.filter((g) => isGradeInView(state.profile, g))) {
     const group = state.studentsByGrade[grade] || {};
     for (const [id, data] of Object.entries(group)) {
       list.push({ id, grade, ...data });
@@ -66,7 +69,7 @@ function getRoomIdByStudentId() {
 function renderGradeChips() {
   const chips = [
     `<button type="button" class="filter-chip${state.activeGradeFilter === "all" ? " is-active" : ""}" data-grade-filter="all">전체</button>`,
-    ...GRADES.map((grade) => {
+    ...GRADES.filter((g) => isGradeInView(state.profile, g)).map((grade) => {
       const active = state.activeGradeFilter === grade;
       return `<button type="button" class="filter-chip${active ? " is-active" : ""}" data-grade-filter="${grade}">${grade}학년</button>`;
     }),
@@ -75,7 +78,8 @@ function renderGradeChips() {
 }
 
 function renderRoomChips() {
-  const roomEntries = Object.entries(state.rooms);
+  const roomEntries = Object.entries(state.rooms).filter(([id, room]) => isRoomInView(state.profile, id, room));
+  if (state.activeRoomFilter !== "all" && !roomEntries.some(([id]) => id === state.activeRoomFilter)) state.activeRoomFilter = "all";
   const chips = [
     `<button type="button" class="filter-chip${state.activeRoomFilter === "all" ? " is-active" : ""}" data-room-filter="all">전체</button>`,
     ...roomEntries.map(([roomId, room]) => {
@@ -237,6 +241,7 @@ async function init() {
   if (!session) return;
   const { loginId, profile } = session;
   const role = profile.role || "teacher";
+  state.profile = profile;
   currentUserNameEl.textContent = profile.name || loginId;
   currentUserRoleBadgeEl.textContent = role;
   currentUserRoleBadgeEl.className = `role-badge role-badge--${role}`;

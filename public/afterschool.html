@@ -76,8 +76,8 @@
 
   <div class="section-heading">요일별 방과후 학생 등록</div>
   <div class="section-subtext">
-    요일을 고르고 그 요일에 방과후를 하는 학생들의 학번을 붙여넣으면, 그 학생들의 방과후 요일에 그 요일이 켜집니다(다른 요일은 그대로).
-    엑셀의 학번 열을 그대로 복사해도 되고, "10305 홍길동"처럼 이름이 같이 있어도 됩니다.
+    요일을 고르고 그 요일 <b>방과후 출석부</b>(엑셀 .xlsx·CSV 파일)를 불러오거나 표를 복사해 붙여넣으면, 출석부에서 학생 명단을 찾아 그 학생들의 방과후 요일에 그 요일을 켭니다(다른 요일은 그대로).
+    출석부에 "학번" 칸이 있으면 학번으로, "학년·반·번호" 칸이 있으면 그 세 칸으로, 둘 다 없으면 "이름" 칸으로 찾습니다. 학번만 줄마다 적어도 됩니다.
   </div>
   <div class="roster-form-wrap">
     <div class="roster-form">
@@ -86,10 +86,19 @@
         <div class="day-toggle-row" id="weekdayDays"></div>
       </div>
       <div class="field">
-        <label for="weekdayInput">학번 붙여넣기</label>
-        <textarea id="weekdayInput" rows="6" placeholder="10305
-10302
-20101"></textarea>
+        <label for="weekdayInput">출석부 불러오기 또는 붙여넣기</label>
+        <div class="afterschool-file-row">
+          <label class="btn-secondary btn-small afterschool-file-btn">
+            출석부 파일 불러오기 (.xlsx·.csv)
+            <input type="file" id="weekdayFile" accept=".xlsx,.csv,.txt" hidden>
+          </label>
+          <span class="afterschool-file-note" id="weekdayFileNote"></span>
+        </div>
+        <textarea id="weekdayInput" rows="6" placeholder="번호	학번	이름
+1	10305	홍길동
+2	10302	최하늘
+
+(또는 학번만 줄마다)"></textarea>
       </div>
       <label class="remember-row">
         <input type="checkbox" id="weekdayReplace">
@@ -97,6 +106,7 @@
       </label>
       <div class="bulk-preview" id="weekdayPreview"></div>
       <div class="roster-form__actions">
+        <button type="button" class="btn-secondary" id="weekdayRosterBtn">현재 명단 받기 (CSV)</button>
         <button type="button" class="btn-add" id="weekdaySaveBtn" disabled>저장 (0명)</button>
       </div>
     </div>

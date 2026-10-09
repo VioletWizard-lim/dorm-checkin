@@ -37,37 +37,77 @@
     </div>
   </header>
 
-  <div class="section-heading">등록된 계정</div>
-  <div class="section-subtext section-subtext--with-action">
-    <span>"비밀번호 재발급"을 누르면 새 비밀번호가 아래 결과 목록에 표시됩니다. 지금 쓰는 비밀번호로는 더 이상 로그인할 수 없게 됩니다.</span>
-    <button type="button" class="btn-secondary btn-small" id="bulkResetBtn" disabled>비밀번호 일괄 재발급 (0명)</button>
-  </div>
-  <!-- 역할별 분류 탭(사용자 요청). "전체"에서는 역할별로 묶어서 보여 준다 -->
-  <div class="filter-chips account-filter" id="accountFilter"></div>
-  <div class="student-list" id="accountList"><div class="student-list__empty">불러오는 중...</div></div>
-
-  <div class="section-heading">교사 계정 일괄 생성</div>
-  <div class="section-subtext">
-    한 줄에 한 명씩 "아이디[탭]이름[탭]역할[탭]비밀번호" 형식으로 붙여넣으세요. 역할과 비밀번호는 생략할 수 있습니다.
-    역할은 <b>교사</b>·<b>학년관리자</b>·<b>자습감독</b>·<b>기숙사관리자</b>·<b>방과후선생님</b> 중 하나이고, 생략하면 교사로 만들어집니다. 관리자는 여기서 만들 수 없고, 만든 뒤 위 목록의 "정보 수정"에서 바꿉니다.
-    학년관리자의 담당 학년·실과 담임의 담당 반도 만든 뒤 "정보 수정"에서 지정합니다.
-    비밀번호를 생략하면 자동으로 생성됩니다(직접 입력 시 6자 이상). 아이디는 영문+숫자 32자 이하만 가능하고 소문자로 저장됩니다(로그인할 때 대소문자는 구분하지 않음).
-  </div>
-
-  <div class="roster-form-wrap">
-    <div class="roster-form">
-      <div class="field">
-        <label for="bulkAccountInput">여러 명 붙여넣기</label>
-        <textarea id="bulkAccountInput" rows="6" placeholder="teacher01	김선생
-super01	이감독	자습감독
-dorm01	박기숙	기숙사관리자	mypassword123"></textarea>
-      </div>
-      <div class="bulk-preview" id="bulkAccountPreview"></div>
-      <div class="roster-form__actions">
-        <button type="button" class="btn-add" id="bulkCreateBtn" disabled>계정 생성 (0명)</button>
-      </div>
+  <!-- 화면 탭(사용자 요청): 계정 확인 / 계정 등록 -->
+  <div class="page-tabs-wrap">
+    <div class="login-tabs page-tabs" id="pageTabs" role="tablist">
+      <button type="button" class="login-tab is-active" role="tab" data-page-tab="list" aria-selected="true">교사 계정 확인</button>
+      <button type="button" class="login-tab" role="tab" data-page-tab="create" aria-selected="false">교사 계정 등록</button>
     </div>
   </div>
+
+  <section id="listSection">
+    <div class="section-heading">등록된 계정</div>
+    <div class="section-subtext section-subtext--with-action">
+      <span>"비밀번호 재발급"을 누르면 새 비밀번호가 아래 결과 목록에 표시됩니다. 지금 쓰는 비밀번호로는 더 이상 로그인할 수 없게 됩니다.</span>
+      <button type="button" class="btn-secondary btn-small" id="bulkResetBtn" disabled>비밀번호 일괄 재발급 (0명)</button>
+    </div>
+    <!-- 역할별 분류 탭(사용자 요청). "전체"에서는 역할별로 묶어서 보여 준다 -->
+    <div class="filter-chips account-filter" id="accountFilter"></div>
+    <div class="student-list" id="accountList"><div class="student-list__empty">불러오는 중...</div></div>
+  </section>
+
+  <section id="createSection" hidden>
+    <div class="section-heading">교사 계정 일괄 생성</div>
+    <div class="roster-form-wrap">
+      <div class="roster-form account-guide">
+        <div class="account-guide__title">1. 엑셀에서 한 줄에 한 명씩, 이 순서로 칸을 채워 복사해 붙여넣으세요</div>
+        <table class="account-guide__table">
+          <thead>
+            <tr><th>아이디</th><th>이름</th><th>역할</th><th>비밀번호</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><b>필수</b><br>영문·숫자 32자 이하<br>(소문자로 저장, 로그인 때 대소문자 구분 안 함)</td>
+              <td><b>필수</b></td>
+              <td>비워도 됨<br>(비우면 <b>교사</b>)</td>
+              <td>비워도 됨<br>(비우면 자동 생성, 직접 넣으면 6자 이상)</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="account-guide__title">2. 역할 칸에 쓸 수 있는 이름</div>
+        <table class="account-guide__table account-guide__table--roles">
+          <tbody>
+            <tr><th>교사</th><td>일반교사·담임도 같음. 담당 반은 만든 뒤 지정</td></tr>
+            <tr><th>학년관리자</th><td>학년부장도 같음. 담당 학년·실은 만든 뒤 지정</td></tr>
+            <tr><th>자습감독</th><td>복귀 체크·자리 없음 표시만</td></tr>
+            <tr><th>기숙사관리자</th><td>기숙사부도 같음. 명령퇴사 기간만 입력</td></tr>
+            <tr><th>방과후선생님</th><td>방과후교사·방과후도 같음. 방과후 일정만 관리</td></tr>
+          </tbody>
+        </table>
+
+        <ul class="account-guide__notes">
+          <li><b>관리자</b>는 여기서 만들 수 없습니다. 만든 뒤 "교사 계정 확인" 탭의 "정보 수정"에서 바꿉니다.</li>
+          <li>담당 학년·실(학년관리자)과 담당 반(담임)도 만든 뒤 "정보 수정"에서 지정합니다.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="roster-form-wrap">
+      <div class="roster-form">
+        <div class="field">
+          <label for="bulkAccountInput">여러 명 붙여넣기</label>
+          <textarea id="bulkAccountInput" rows="6" placeholder="teacher01	김선생
+super01	이감독	자습감독
+dorm01	박기숙	기숙사관리자	mypassword123"></textarea>
+        </div>
+        <div class="bulk-preview" id="bulkAccountPreview"></div>
+        <div class="roster-form__actions">
+          <button type="button" class="btn-add" id="bulkCreateBtn" disabled>계정 생성 (0명)</button>
+        </div>
+      </div>
+    </div>
+  </section>
 
   <div class="roster-form-wrap" id="resultWrap" hidden>
     <div class="roster-form">

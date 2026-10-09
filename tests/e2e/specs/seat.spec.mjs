@@ -262,7 +262,7 @@ test.describe("좌석 배치판 — 편집 모드", () => {
     expect(alerts[0]).toContain("대상 학년");
   });
 
-  test("학년부장: 담당 실만 좌석 배정 가능, 실 설정은 못 함", async ({ env, openAs, page }) => {
+  test("학년부장: 담당 실만 보이고 좌석 배정 가능, 실 설정은 못 함", async ({ env, openAs, page }) => {
     await openAs("gm01", "/seat.html");
     await page.click("#editModeToggle");
     await expect(page.locator("#addRoomBtn")).toBeHidden();
@@ -275,10 +275,8 @@ test.describe("좌석 배치판 — 편집 모드", () => {
     await expect(cell(page, 2)).toContainText("최하늘");
     expect((await room(env, ROOM.first)).seat_map.r1c0).toBe(STUDENT.haneul);
 
-    // 담당 아닌 실: 편집 불가
-    await page.click("#roomTabs >> text=2·3학년실");
-    await expect(page.locator("#seatGrid .seat-cell--clickable")).toHaveCount(0);
-    await expect(page.locator("#seatGrid .seat-cell__unassign")).toHaveCount(0);
+    // 담당 학년이 앉지 않는 다른 실(2·3학년실)은 탭에도 안 보인다(사용자 요청)
+    await expect(page.locator("#roomTabs .filter-chip")).toHaveText(["1학년실"]);
   });
 
   test("서버도 담당 밖 실의 좌석 배정을 거부한다", async ({ env, openAs, page }) => {

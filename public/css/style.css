@@ -219,6 +219,64 @@ input {
   box-shadow: 0 1px 3px rgba(28, 34, 48, 0.12);
 }
 
+/* 계정 관리 화면 탭(교사 계정 확인 / 등록) */
+.page-tabs-wrap {
+  padding: 20px 40px 0;
+}
+
+.page-tabs {
+  max-width: 420px;
+}
+
+/* 계정 일괄 생성 안내 */
+.account-guide {
+  gap: 12px;
+}
+
+.account-guide__title {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--color-text);
+}
+
+.account-guide__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.account-guide__table th,
+.account-guide__table td {
+  border: 1px solid var(--color-border);
+  padding: 8px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.account-guide__table:not(.account-guide__table--roles) {
+  table-layout: fixed;
+}
+
+.account-guide__table thead th {
+  background: var(--color-bg);
+  font-weight: 800;
+}
+
+.account-guide__table--roles th {
+  width: 140px;
+  background: var(--color-bg);
+  white-space: nowrap;
+}
+
+.account-guide__notes {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--color-label);
+}
+
 /* Shared */
 
 .sr-only {
@@ -1257,6 +1315,16 @@ body.is-dragging-seat * {
   color: var(--color-text-faint);
 }
 
+.seat-bulk-grid__cell--kept {
+  color: var(--color-text-faint);
+  background: #F3F4F7;
+  border-style: dashed;
+}
+
+.seat-cell--locked {
+  opacity: 0.55;
+}
+
 .seat-bulk-grid__cell--error {
   border-color: var(--color-out);
   background: var(--color-out-bg);
@@ -1963,6 +2031,23 @@ body.is-dragging-seat * {
   font-size: 11px;
   font-weight: 700;
   color: var(--color-afterschool);
+}
+
+.afterschool-file-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.afterschool-file-btn {
+  cursor: pointer;
+}
+
+.afterschool-file-note {
+  font-size: 13px;
+  color: var(--color-label);
 }
 
 .afterschool-range {

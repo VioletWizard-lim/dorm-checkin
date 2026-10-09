@@ -9,6 +9,8 @@ import {
   isScheduledOuting,
   createStartTimeTicker,
   currentHHMM,
+  isGradeInView,
+  isRoomInView,
 } from "./adapters.js";
 import { outingPassData } from "./outing-pass.js";
 import { createPassDialog } from "./pass-dialog.js";
@@ -68,9 +70,10 @@ function describeNotice(notice) {
   };
 }
 
+// 학년부장은 담당 학년 학생만 보인다(사용자 요청 — isGradeInView). 다른 역할은 전체
 function getAllStudents() {
   const list = [];
-  for (const grade of GRADES) {
+  for (const grade of GRADES.filter((g) => isGradeInView(currentProfile, g))) {
     const group = state.studentsByGrade[grade] || {};
     for (const [id, data] of Object.entries(group)) {
       list.push({ id, grade, ...data });
@@ -139,7 +142,8 @@ function getOutingStatus(student) {
 const updateStartTicker = createStartTimeTicker(() => render());
 
 function renderChips() {
-  const roomEntries = Object.entries(state.rooms);
+  const roomEntries = Object.entries(state.rooms).filter(([id, room]) => isRoomInView(currentProfile, id, room));
+  if (state.activeFilter !== "all" && !roomEntries.some(([id]) => id === state.activeFilter)) state.activeFilter = "all";
   const chips = [
     `<button type="button" class="filter-chip${state.activeFilter === "all" ? " is-active" : ""}" data-filter="all">전체</button>`,
     ...roomEntries.map(([roomId, room]) => {
