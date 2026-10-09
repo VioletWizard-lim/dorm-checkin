@@ -291,6 +291,8 @@ test("학생 탭: 마지막으로 고른 탭과 아이디를 기억하고, 교�
   await page.check("#rememberMe");
   await page.click("#submitBtn");
   await expect(page).toHaveURL(/student\.html$/);
+  // 화면 스크립트가 다 뜬 뒤(이름이 그려진 뒤)에 로그아웃을 눌러야 버튼이 동작한다
+  await expect(page.locator("#studentName")).toContainText("홍길동");
   await page.click("#logoutBtn");
   await expect(page).toHaveURL(/login\.html$/);
   await expect(page.locator("[data-login-mode='student']")).toHaveClass(/is-active/);
