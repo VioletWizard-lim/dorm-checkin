@@ -1,4 +1,4 @@
-import { supabase, requireStaff, signOutTo, describeError, showPageError, callFunction } from "./supabase-client.js";
+import { supabase, requireStaff, signOutTo, describeError, callFunction, reportLoadError } from "./supabase-client.js";
 import { getDateKey, isOnLeave, escapeHtml, insertTabOnKeydown } from "./util.js";
 import { liveTable } from "./live-table.js";
 import {
@@ -48,6 +48,12 @@ const bulkIssueBtn = document.getElementById("bulkIssueBtn");
 const accountResultWrap = document.getElementById("accountResultWrap");
 const accountResultList = document.getElementById("accountResultList");
 const accountResultCopy = document.getElementById("accountResultCopy");
+const accountResultDownloadBtn = document.getElementById("accountResultDownloadBtn");
+const classDeleteBtn = document.getElementById("classDeleteBtn");
+const classDeleteWrap = document.getElementById("classDeleteWrap");
+const classDeleteChips = document.getElementById("classDeleteChips");
+const classDeleteSaveBtn = document.getElementById("classDeleteSaveBtn");
+const cancelClassDeleteBtn = document.getElementById("cancelClassDeleteBtn");
 
 const TODAY_KEY = getDateKey();
 
@@ -79,8 +85,9 @@ const state = {
   leaveOnly: false,
   // 명령퇴사 기간은 관리자·기숙사부만(담임·학년부장은 칸이 안 보임 — 서버 트리거도 막음)
   canEditLeave: false,
-  // 학생 계정 비밀번호 재발급·계정 삭제는 관리자만(발급은 담당 교사도 가능)
+  // 학생 계정 발급·비밀번호 재발급·계정 삭제·반 단위 삭제는 관리자만
   isAdmin: false,
+  classDeleteSelected: new Set(), // 반 단위 삭제에서 고른 반(cls)
 };
 
 // 해당 학년에 반 단위 제한이 있으면 허용된 반 목록을, 없으면(학년 전체 담당) null을 반환
@@ -395,6 +402,7 @@ addStudentBtn.addEventListener("click", () => {
 
 bulkAddBtn.addEventListener("click", () => {
   if (!state.activeGrade) return;
+  closeClassDelete();
   openBulkForm();
 });
 
@@ -494,6 +502,7 @@ gradeTabsEl.addEventListener("click", (event) => {
   state.activeGrade = btn.dataset.grade;
   closeForm();
   closeBulkForm();
+  closeClassDelete();
   renderGradeTabs();
   renderRoster();
   renderBulkIssueButton();
@@ -635,7 +644,8 @@ bulkIssueBtn.addEventListener("click", async () => {
 });
 
 function addAccountResults(results) {
-  state.accountResults = [...results, ...state.accountResults];
+  const at = new Date();
+  state.accountResults = [...results.map((r) => ({ ...r, at })), ...state.accountResults];
   renderAccountResults();
   accountResultWrap.scrollIntoView({ behavior: "smooth", block: "start" });
 }
@@ -670,10 +680,152 @@ function renderAccountResults() {
     )
     .join("");
   accountResultCopy.value = results
-    .filter((r) => r.ok && r.password)
+    .filter((r) => r.ok && r.password && r.sms !== "sent")
     .map((r) => [r.name, r.sid, r.loginId, r.password].join("\t"))
     .join("\n");
 }
+
+// 발급·재발급한 비밀번호를 CSV 파일로 내려받는다(서버에 저장하지 않으므로 관리자가 따로 보관 — 사용자 요청).
+// 엑셀에서 한글이 깨지지 않게 BOM을 붙이고, 수식으로 읽히지 않게 =·+·-·@로 시작하는 칸은 앞에 '를 붙인다.
+function csvCell(value) {
+  let text = String(value ?? "");
+  if (/^[=+\-@]/.test(text)) text = `'${text}`;
+  return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+function formatDateTime(date) {
+  return `${getDateKey(date)} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
+accountResultDownloadBtn.addEventListener("click", () => {
+  const rows = state.accountResults.filter((r) => r.ok && r.password);
+  if (rows.length === 0) {
+    alert("파일로 받을 비밀번호가 없습니다.");
+    return;
+  }
+  const lines = [
+    ["이름", "학번", "아이디", "비밀번호", "구분", "전달", "시각"],
+    ...rows.map((r) => [
+      r.name,
+      r.sid,
+      r.loginId,
+      r.password,
+      r.kind === "reset" ? "재발급" : "발급",
+      r.sms === "sent" ? "문자 보냄" : "직접 전달",
+      formatDateTime(r.at),
+    ]),
+  ];
+  const csv = "﻿" + lines.map((cells) => cells.map(csvCell).join(",")).join("\r\n") + "\r\n";
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `student-passwords_${formatDateTime(new Date()).replace(" ", "_").replace(":", "")}.csv`;
+  document.body.append(link);
+  link.click();
+  setTimeout(() => {
+    link.remove();
+    URL.revokeObjectURL(url);
+  }, 1000);
+});
+
+// 반 단위 삭제(관리자만): 지금 학년 탭의 반을 골라 그 반 학생을 한 번에 지운다(테스트로 넣은 반 정리 등).
+// 서버 함수(student-accounts, delete-students)가 학생 계정까지 함께 지운다.
+function studentsByClassInActiveGrade() {
+  const byClass = new Map();
+  for (const [id, s] of Object.entries(state.studentsByGrade[state.activeGrade] || {})) {
+    const cls = s.cls || "(반 없음)";
+    if (!byClass.has(cls)) byClass.set(cls, []);
+    byClass.get(cls).push(id);
+  }
+  return new Map([...byClass.entries()].sort((a, b) => a[0].localeCompare(b[0], "ko", { numeric: true })));
+}
+
+function selectedClassDeleteIds() {
+  const byClass = studentsByClassInActiveGrade();
+  return [...state.classDeleteSelected].flatMap((cls) => byClass.get(cls) || []);
+}
+
+function renderClassDelete() {
+  const byClass = studentsByClassInActiveGrade();
+  for (const cls of [...state.classDeleteSelected]) if (!byClass.has(cls)) state.classDeleteSelected.delete(cls);
+  classDeleteChips.innerHTML =
+    byClass.size === 0
+      ? `<span class="field-hint">이 학년에 등록된 학생이 없습니다.</span>`
+      : [...byClass.entries()]
+          .map(([cls, ids]) => {
+            const active = state.classDeleteSelected.has(cls);
+            return `<button type="button" class="filter-chip${active ? " is-active" : ""}" data-delete-cls="${escapeHtml(cls)}">${escapeHtml(cls)} (${ids.length}명)</button>`;
+          })
+          .join("");
+  const count = selectedClassDeleteIds().length;
+  classDeleteSaveBtn.disabled = count === 0;
+  classDeleteSaveBtn.textContent = `삭제 (${count}명)`;
+}
+
+function closeClassDelete() {
+  classDeleteWrap.hidden = true;
+  state.classDeleteSelected.clear();
+}
+
+classDeleteBtn.addEventListener("click", () => {
+  if (!state.activeGrade || !state.isAdmin) return;
+  closeForm();
+  closeBulkForm();
+  state.classDeleteSelected.clear();
+  renderClassDelete();
+  classDeleteWrap.hidden = false;
+});
+
+cancelClassDeleteBtn.addEventListener("click", closeClassDelete);
+
+classDeleteChips.addEventListener("click", (event) => {
+  const btn = event.target.closest("[data-delete-cls]");
+  if (!btn) return;
+  const cls = btn.dataset.deleteCls;
+  if (state.classDeleteSelected.has(cls)) state.classDeleteSelected.delete(cls);
+  else state.classDeleteSelected.add(cls);
+  renderClassDelete();
+});
+
+classDeleteSaveBtn.addEventListener("click", async () => {
+  const ids = selectedClassDeleteIds();
+  if (ids.length === 0) return;
+  const classes = [...state.classDeleteSelected].join(", ");
+  const withAccount = ids.filter((id) => state.accounts[id]).length;
+  const accountNote = withAccount > 0 ? `\n학생 계정 ${withAccount}개도 함께 지워집니다.` : "";
+  const answer = prompt(
+    `${classes} 학생 ${ids.length}명을 명단에서 지웁니다.${accountNote}\n좌석 배정·외출 기록도 함께 지워지고 되돌릴 수 없습니다.\n\n계속하려면 "삭제"라고 입력하세요.`
+  );
+  if (answer === null) return;
+  if (answer.trim() !== "삭제") {
+    alert('"삭제"라고 입력하지 않아 지우지 않았습니다.');
+    return;
+  }
+  classDeleteSaveBtn.disabled = true;
+  classDeleteSaveBtn.textContent = "삭제 중...";
+  let failed = 0;
+  let failure = "";
+  for (let start = 0; start < ids.length; start += MAX_ACCOUNTS_PER_REQUEST) {
+    const chunk = ids.slice(start, start + MAX_ACCOUNTS_PER_REQUEST);
+    try {
+      const data = await callFunction("student-accounts", { action: "delete-students", studentIds: chunk });
+      const results = Array.isArray(data && data.results) ? data.results : [];
+      failed += chunk.length - results.filter((r) => r.ok).length;
+      const firstError = results.find((r) => !r.ok);
+      if (firstError && !failure) failure = firstError.error;
+    } catch (err) {
+      failed += chunk.length;
+      if (!failure) failure = err.message;
+    }
+  }
+  await afterWrite(null);
+  if (failed > 0) {
+    alert(`${ids.length - failed}명을 지웠고 ${failed}명은 지우지 못했습니다: ${failure}`);
+    renderClassDelete();
+    return;
+  }
+  closeClassDelete();
+});
 
 // 권한 밖의 행은 서버(RLS)가 조용히 건너뛰므로, 실제로 바뀐 행이 있는지 확인한다.
 // 계정이 있는 학생은 로그인 정보가 남지 않도록 서버 함수가 계정과 명단을 함께 지운다.
@@ -817,10 +969,8 @@ function initForGrades(allowedGrades) {
   addStudentBtn.hidden = state.leaveOnly;
   bulkAddBtn.hidden = state.leaveOnly;
   bulkIssueBtn.hidden = !state.isAdmin;
+  classDeleteBtn.hidden = !state.isAdmin;
 
-  const reportLoadError = (error) => {
-    showPageError(`데이터를 불러오지 못했습니다(${describeError(error)}). 잠시 후 자동으로 다시 시도합니다.`);
-  };
   studentsLive = liveTable({
     table: "students",
     order: ["id"],
@@ -828,6 +978,7 @@ function initForGrades(allowedGrades) {
       state.studentsByGrade = groupStudentsByGrade(rows);
       renderRoster();
       renderBulkIssueButton();
+      if (!classDeleteWrap.hidden) renderClassDelete();
     },
     onError: reportLoadError,
   });
