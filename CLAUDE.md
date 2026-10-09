@@ -195,6 +195,7 @@
 ### 8. 계정 관리 (`accounts.html`)
 - admin 전용(admin이 아니면 `check.html`로 리다이렉트 — dormStaff도 예외 없이 포함). 다른 화면들(자기 자신인 accounts.html 제외) 상단에 이 화면으로 가는 "계정 관리" 링크가 admin에게만 노출됨
 - 상단: 등록된 교직원 계정 목록(`profiles` 중 `kind = 'staff'`, 학생 계정은 제외) — 아이디·이름·역할 배지(teacher/gradeManager/admin/studyHallSupervisor/dormStaff), gradeManager는 담당 학년·담당 실을, teacher는 담당 반(있는 경우만)을 함께 표시
+  - **역할별 분류**(사용자 요청): 목록 위에 분류 탭(전체 N·관리자·학년부장·담임·일반 교사(담당 반 없음)·자습 감독·기숙사부·삭제됨, 계정이 있는 분류만). "전체"에서는 이 순서로 묶어서 제목("담임 (3명)")과 함께 보여 주고, 탭을 고르면 그 분류만. 담임/일반 교사는 teacher의 담당 반 유무로 나눔. 역할을 바꿔 고른 분류가 비면 전체로
   - 본인 계정 행에는 버튼이 없음(관리자가 실수로 자기 자신을 강등·삭제해 잠기는 것을 방지 — 서버 RLS·함수도 본인 대상은 거부)
   - "정보 수정" 클릭 시 그 계정 행이 인라인 편집 폼으로 바뀜: 이름 입력란, 역할 토글(teacher/gradeManager/admin/studyHallSupervisor/dormStaff) → 저장 시 `profiles` 수정. 역할에서 쓰지 않는 담당 범위는 비운다. 이름은 매년 같은 아이디를 다른 담당자가 이어받는 경우(예: "1학년부장" 계정)를 대비해 언제든 바꿀 수 있게 함
   - **역할 = gradeManager**(예: "1학년부장", 한 학년 전체 담당): 담당 학년(1/2/3학년 토글)·담당 실(rooms 목록에서 토글) 노출 → `managed_grades`/`managed_rooms`에 반영. 반 단위로 더 좁힐 수 없음(학년 전체가 기본 단위)

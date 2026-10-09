@@ -12,8 +12,12 @@ async function profile(env, loginId) {
 test.describe("계정 관리", () => {
   test("관리자만 들어올 수 있고 목록에 역할·담당 범위가 보인다", async ({ openAs, page }) => {
     await openAs("admin01", "/accounts.html");
+    // 역할별로 묶어서 보여 준다(관리자 → 학년부장 → 담임 → 일반 교사 → 자습 감독 → 기숙사부 → 삭제됨)
     await expect(page.locator("#accountList .student-name")).toHaveText([
-      "admin01", "dorm01", "gm01", "gone01", "homeroom01", "super01", "teacher01",
+      "admin01", "gm01", "homeroom01", "teacher01", "super01", "dorm01", "gone01",
+    ]);
+    await expect(page.locator("#accountList .account-group__title")).toHaveText([
+      "관리자 (1명)", "학년부장 (1명)", "담임 (1명)", "일반 교사 (담당 반 없음) (1명)", "자습 감독 (1명)", "기숙사부 (1명)", "삭제됨 (1명)",
     ]);
     await expect(row(page, "admin01")).toContainText("본인 계정");
     await expect(row(page, "admin01").locator("button")).toHaveCount(0);
@@ -21,6 +25,26 @@ test.describe("계정 관리", () => {
     await expect(row(page, "gm01")).toContainText("1학년 · 1학년실");
     await expect(row(page, "homeroom01")).toContainText("담당 반: 1학년 3반");
     await expect(page.locator("#bulkResetBtn")).toHaveText("비밀번호 일괄 재발급 (5명)");
+  });
+
+  test("분류 탭으로 역할별 계정만 볼 수 있고, 역할을 바꾸면 분류도 바뀐다", async ({ openAs, page }) => {
+    await openAs("admin01", "/accounts.html");
+    const chips = page.locator("#accountFilter [data-account-filter]");
+    await expect(chips).toHaveText([
+      "전체 7", "관리자 1", "학년부장 1", "담임 1", "일반 교사 (담당 반 없음) 1", "자습 감독 1", "기숙사부 1", "삭제됨 1",
+    ]);
+    await chips.filter({ hasText: "일반 교사" }).click();
+    await expect(page.locator("#accountList .student-name")).toHaveText(["teacher01"]);
+
+    // 일반 교사를 자습 감독으로 바꾸면 그 분류가 비어서 전체로 돌아간다
+    await row(page, "teacher01").getByRole("button", { name: "정보 수정" }).click();
+    await page.click("[data-edit-set-role='studyHallSupervisor']");
+    await page.click("[data-save-role]");
+    await expect(chips.filter({ hasText: "전체" })).toHaveClass(/is-active/);
+    await expect(chips.filter({ hasText: "자습 감독" })).toHaveText("자습 감독 2");
+    await expect(chips.filter({ hasText: "일반 교사" })).toHaveCount(0);
+    await chips.filter({ hasText: "자습 감독" }).click();
+    await expect(page.locator("#accountList .student-name")).toHaveText(["super01", "teacher01"]);
   });
 
   test("정보 수정: 이름·역할·담당 학년/실·담당 반", async ({ env, openAs, page }) => {

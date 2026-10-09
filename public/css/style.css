@@ -1261,6 +1261,22 @@ input {
   color: var(--color-text-muted);
 }
 
+/* 계정 관리: 역할별 분류 탭과 묶음 제목 */
+.account-filter {
+  padding: 0 40px 8px;
+}
+
+.account-group__title {
+  margin-top: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+}
+
+.account-group__title:first-child {
+  margin-top: 0;
+}
+
 .section-subtext--with-action {
   display: flex;
   align-items: center;

@@ -20,6 +20,26 @@ const resultWrap = document.getElementById("resultWrap");
 const resultListEl = document.getElementById("resultList");
 const resultCopyEl = document.getElementById("resultCopy");
 const bulkResetBtn = document.getElementById("bulkResetBtn");
+const accountFilterEl = document.getElementById("accountFilter");
+
+// 계정 목록 분류(사용자 요청: 역할별로 나눠 보기). 담임과 담당 반 없는 일반 교사는 나눠서 보여 준다
+const ACCOUNT_GROUPS = [
+  { key: "admin", label: "관리자" },
+  { key: "gradeManager", label: "학년부장" },
+  { key: "homeroom", label: "담임" },
+  { key: "teacher", label: "일반 교사 (담당 반 없음)" },
+  { key: "studyHallSupervisor", label: "자습 감독" },
+  { key: "dormStaff", label: "기숙사부" },
+  { key: "disabled", label: "삭제됨" },
+];
+
+function accountGroupOf(u) {
+  if (u.disabled) return "disabled";
+  const role = u.role || "teacher";
+  if (role !== "teacher") return role;
+  const classes = u.managedClasses || {};
+  return Object.values(classes).some((c) => Object.keys(c || {}).length > 0) ? "homeroom" : "teacher";
+}
 
 const state = {
   users: {},
@@ -32,6 +52,7 @@ const state = {
   editGrades: [],
   editRooms: [],
   editClasses: {}, // { [grade]: string[] } — 비어있으면 그 학년 전체 담당
+  accountFilter: "all", // 분류 탭: "all" 또는 ACCOUNT_GROUPS의 key
   // 이 화면에서 만든 계정·재발급한 비밀번호(다시 조회할 수 없어서 새로고침 전까지만 보여줌)
   passwordResults: [],
 };
@@ -182,18 +203,46 @@ function renderResults() {
     .join("\n");
 }
 
+function renderAccountFilter(groups) {
+  const total = Object.keys(state.users).length;
+  const chip = (key, label, count) =>
+    `<button type="button" class="filter-chip${state.accountFilter === key ? " is-active" : ""}" data-account-filter="${key}">${label} ${count}</button>`;
+  accountFilterEl.innerHTML = [
+    chip("all", "전체", total),
+    ...ACCOUNT_GROUPS.filter((g) => groups.get(g.key).length > 0).map((g) => chip(g.key, g.label, groups.get(g.key).length)),
+  ].join("");
+}
+
 function renderAccountList() {
   const entries = Object.entries(state.users);
+  entries.sort((a, b) => (a[1].id || a[0]).localeCompare(b[1].id || b[0]));
+  const groups = new Map(ACCOUNT_GROUPS.map((g) => [g.key, []]));
+  for (const entry of entries) groups.get(accountGroupOf(entry[1])).push(entry);
+  // 고른 분류에 계정이 없어지면(역할을 바꾼 뒤 등) 전체로
+  if (state.accountFilter !== "all" && !(groups.get(state.accountFilter) || []).length) state.accountFilter = "all";
+  renderAccountFilter(groups);
+
   if (entries.length === 0) {
     accountListEl.innerHTML = `<div class="student-list__empty">등록된 계정이 없습니다.</div>`;
     return;
   }
-  entries.sort((a, b) => (a[1].id || a[0]).localeCompare(b[1].id || b[0]));
-
-  accountListEl.innerHTML = entries
-    .map(([uid, u]) => (state.editingUid === uid ? renderEditRow(uid, u) : renderAccountRow(uid, u)))
+  const renderEntry = ([uid, u]) => (state.editingUid === uid ? renderEditRow(uid, u) : renderAccountRow(uid, u));
+  accountListEl.innerHTML = ACCOUNT_GROUPS.filter((g) => state.accountFilter === "all" || state.accountFilter === g.key)
+    .filter((g) => groups.get(g.key).length > 0)
+    .map(
+      (g) =>
+        `<div class="account-group__title">${g.label} (${groups.get(g.key).length}명)</div>` +
+        groups.get(g.key).map(renderEntry).join("")
+    )
     .join("");
 }
+
+accountFilterEl.addEventListener("click", (event) => {
+  const btn = event.target.closest("[data-account-filter]");
+  if (!btn) return;
+  state.accountFilter = btn.dataset.accountFilter;
+  renderAccountList();
+});
 
 function renderAccountRow(uid, u) {
   const isSelf = uid === state.currentUid;
