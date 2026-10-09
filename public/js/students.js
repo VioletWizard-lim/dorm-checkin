@@ -253,6 +253,11 @@ function renderRoster() {
         : ban && ban.to >= TODAY_KEY
           ? `<div class="since-text">외출 금지 예정: ${escapeHtml(ban.from)} ~ ${escapeHtml(ban.to)}</div>`
           : "";
+      // 외출 금지 해제는 버튼 하나로(사용자 요청 — 수정 폼에서 날짜를 지우지 않아도 됨)
+      const liftBanButton =
+        state.canEditBan && ban && ban.to >= TODAY_KEY
+          ? `<button type="button" class="btn-secondary btn-small" data-lift-ban="${escapeHtml(id)}">외출 금지 해제</button>`
+          : "";
       // 목록에는 학번·이름·반·번호만 보여준다(ID·연락처·이메일은 "수정"을 눌러야 보임).
       const seatNo = deriveNumberFromSid(s.sid);
       const hasAccount = Boolean(state.accounts[id]);
@@ -282,6 +287,7 @@ function renderRoster() {
           ${banBadge}
           ${accountChip}
           <div class="roster-actions">
+            ${liftBanButton}
             ${accountButtons}
             ${
               state.leaveOnly
@@ -576,6 +582,11 @@ rosterListEl.addEventListener("click", (event) => {
     if (confirm(`${name}을(를) 명단에서 삭제할까요?${accountNote}`)) {
       deleteStudent(id);
     }
+    return;
+  }
+  const liftBanBtn = event.target.closest("[data-lift-ban]");
+  if (liftBanBtn) {
+    liftOutingBan(liftBanBtn.dataset.liftBan, liftBanBtn);
     return;
   }
   const issueBtn = event.target.closest("[data-issue-account]");
@@ -910,6 +921,22 @@ async function deleteStudent(id) {
   const { data, error } = await supabase.from("students").delete().eq("id", id).select("id");
   if (!error && data.length === 0) {
     alert("삭제하지 못했습니다: 권한이 없거나 이미 삭제된 학생입니다.");
+    return;
+  }
+  await afterWrite(error);
+}
+
+// 외출 금지 해제(관리자·학년부장, 서버 students_ban_editors도 확인) — 확인 창 없이 바로
+async function liftOutingBan(id, btn) {
+  btn.disabled = true;
+  const { data, error } = await supabase
+    .from("students")
+    .update({ ban_from: null, ban_to: null, ban_reason: null })
+    .eq("id", id)
+    .select("id");
+  btn.disabled = false;
+  if (!error && data.length === 0) {
+    alert("해제하지 못했습니다: 권한이 없거나 이미 삭제된 학생입니다.");
     return;
   }
   await afterWrite(error);

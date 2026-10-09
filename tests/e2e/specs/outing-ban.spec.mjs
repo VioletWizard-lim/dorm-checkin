@@ -37,6 +37,20 @@ test.describe("외출 금지", () => {
     await expect(other.locator("#banFields")).toBeHidden();
   });
 
+  test("[외출 금지 해제] 버튼 하나로 해제되고, 담임에게는 버튼이 없다", async ({ env, openAs, openOtherAs, page }) => {
+    await banHong(env);
+    const other = await openOtherAs("homeroom01", "/students.html");
+    await expect(rosterCard(other, "홍길동").locator(".status-badge--ban")).toHaveText(untilText());
+    await expect(rosterCard(other, "홍길동").getByRole("button", { name: "외출 금지 해제" })).toHaveCount(0);
+
+    await openAs("gm01", "/students.html");
+    await rosterCard(page, "홍길동").getByRole("button", { name: "외출 금지 해제" }).click();
+    await expect(rosterCard(page, "홍길동").locator(".status-badge--ban")).toHaveCount(0);
+    await expect(rosterCard(page, "홍길동").getByRole("button", { name: "외출 금지 해제" })).toHaveCount(0);
+    const [row] = await env.sql("select ban_from, ban_to, ban_reason from public.students where id = $1", [STUDENT.hong]);
+    expect(row).toEqual({ ban_from: null, ban_to: null, ban_reason: null });
+  });
+
   test("체크 화면: 담임은 외출 체크를 못 하고, 학년부장은 확인 창 뒤 외출 처리한다", async ({ env, openAs, openOtherAs, page }) => {
     await banHong(env);
     await openAs("homeroom01", "/check.html");
