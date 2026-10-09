@@ -35,6 +35,13 @@ const colsMinusBtn = document.getElementById("colsMinusBtn");
 const colsPlusBtn = document.getElementById("colsPlusBtn");
 const deleteRoomBtn = document.getElementById("deleteRoomBtn");
 const seatGridEl = document.getElementById("seatGrid");
+const seatBulkBtn = document.getElementById("seatBulkBtn");
+const seatBulkWrap = document.getElementById("seatBulkWrap");
+const seatBulkRoomName = document.getElementById("seatBulkRoomName");
+const seatBulkInput = document.getElementById("seatBulkInput");
+const seatBulkPreview = document.getElementById("seatBulkPreview");
+const seatBulkSaveBtn = document.getElementById("seatBulkSaveBtn");
+const seatBulkCancelBtn = document.getElementById("seatBulkCancelBtn");
 const logoutBtn = document.getElementById("logoutBtn");
 const manageLink = document.getElementById("manageLink");
 const accountsLink = document.getElementById("accountsLink");
@@ -156,6 +163,9 @@ function renderEditToggle() {
   editModeToggle.hidden = !showToggle;
   editModeToggle.textContent = state.editMode ? "보기 모드로 전환" : "편집 모드";
   addRoomBtn.hidden = !canManageRoomsGlobally();
+  const canBulk = canEditRoom(state.activeRoomId);
+  seatBulkBtn.hidden = !canBulk;
+  if (!canBulk && !seatBulkWrap.hidden) closeSeatBulk();
 }
 
 function renderRoomSettingsPanel(room) {
@@ -222,7 +232,7 @@ function renderGrid(room) {
           .join("");
         // 학번을 입력하고 Enter → 배정 후 다음 빈자리로(사용자 요청: 학번으로 빠르게 연속 배정). 목록에서 골라도 됨
         cells.push(`
-          <div class="seat-cell seat-cell--editing">
+          <div class="seat-cell seat-cell--editing" data-cell-key="${cellKey}">
             <div class="seat-cell__pick">
               <input type="text" class="seat-cell__sid" data-assign-sid="${cellKey}" inputmode="numeric" autocomplete="off" placeholder="학번 입력 후 Enter">
               <select class="seat-cell__select" data-assign-select="${cellKey}">
@@ -239,7 +249,7 @@ function renderGrid(room) {
       if (!studentId) {
         const clickable = editable ? " seat-cell--clickable" : "";
         cells.push(
-          `<div class="seat-cell seat-cell--empty${clickable}" ${editable ? `data-empty-cell="${cellKey}"` : ""}>${editable ? "+" : ""}</div>`
+          `<div class="seat-cell seat-cell--empty${clickable}" ${editable ? `data-empty-cell="${cellKey}" data-cell-key="${cellKey}"` : ""}>${editable ? "+" : ""}</div>`
         );
         continue;
       }
@@ -300,8 +310,10 @@ function renderGrid(room) {
         continue;
       }
 
+      // 편집 모드에서는 배정된 좌석을 끌어서 다른 자리로 옮긴다(빈자리 = 이동, 학생 자리 = 맞바꿈)
+      const dragAttrs = editable ? ` data-drag-cell="${cellKey}" data-cell-key="${cellKey}"` : "";
       cells.push(`
-        <div class="seat-cell seat-cell--${status}${canAct ? " seat-cell--clickable" : ""}" ${canAct ? `data-attendance-cell="${cellKey}"` : ""}>
+        <div class="seat-cell seat-cell--${status}${canAct ? " seat-cell--clickable" : ""}${editable ? " seat-cell--draggable" : ""}" ${canAct ? `data-attendance-cell="${cellKey}"` : ""}${dragAttrs}>
           <div class="seat-cell__name">${escapeHtml(name)}</div>
           ${meta ? `<div class="seat-cell__meta">${escapeHtml(meta)}</div>` : ""}
           ${editable ? `<button type="button" class="seat-cell__unassign" data-unassign-cell="${cellKey}">×</button>` : ""}
@@ -328,6 +340,7 @@ function render() {
   renderEditToggle();
   const activeRoom = state.activeRoomId ? state.rooms[state.activeRoomId] : null;
   renderRoomSettingsPanel(activeRoom);
+  if (!seatBulkWrap.hidden) renderSeatBulkPreview(); // 실을 바꾸거나 명단·좌석이 바뀌면 미리보기도 다시
   renderGrid(activeRoom);
   updateStartTicker(Object.values(state.outings));
   passDialog.refresh();
@@ -443,6 +456,95 @@ function assignBySid(cellKey, rawSid) {
   render();
 }
 
+// 끌어서 옮기기: 빈자리면 이동, 다른 학생이 있으면 맞바꾼다(서버 move_seat가 한 번에 처리)
+async function moveSeat(fromCellKey, toCellKey) {
+  const { error } = await supabase.rpc("move_seat", {
+    p_room_id: state.activeRoomId,
+    p_from_cell: fromCellKey,
+    p_to_cell: toCellKey,
+  });
+  await afterWrite(error, roomsLive);
+}
+
+// 마우스·터치(전자칠판) 모두 Pointer Events로 처리한다. 조금(6px) 움직여야 끌기로 보고,
+// 그보다 적게 움직이면 보통 클릭(× 해제 등)으로 둔다.
+const DRAG_THRESHOLD = 6;
+let drag = null; // { fromCellKey, startX, startY, ghost, targetEl, pointerId }
+let suppressNextClick = false;
+
+function dropTargetAt(x, y) {
+  const el = document.elementFromPoint(x, y);
+  const cell = el && el.closest("#seatGrid [data-cell-key]");
+  return cell || null;
+}
+
+function setDropTarget(el) {
+  if (drag.targetEl === el) return;
+  if (drag.targetEl) drag.targetEl.classList.remove("seat-cell--drop-target");
+  drag.targetEl = el && el.dataset.cellKey !== drag.fromCellKey ? el : null;
+  if (drag.targetEl) drag.targetEl.classList.add("seat-cell--drop-target");
+}
+
+function endDrag() {
+  if (!drag) return;
+  if (drag.ghost) drag.ghost.remove();
+  if (drag.targetEl) drag.targetEl.classList.remove("seat-cell--drop-target");
+  const source = seatGridEl.querySelector(`[data-drag-cell="${drag.fromCellKey}"]`);
+  if (source) source.classList.remove("seat-cell--dragging");
+  document.body.classList.remove("is-dragging-seat");
+  drag = null;
+}
+
+seatGridEl.addEventListener("pointerdown", (event) => {
+  if (!state.editMode || event.button > 0) return;
+  if (event.target.closest("button, input, select")) return;
+  const cell = event.target.closest("[data-drag-cell]");
+  if (!cell || !canEditRoom(state.activeRoomId)) return;
+  drag = { fromCellKey: cell.dataset.dragCell, startX: event.clientX, startY: event.clientY, ghost: null, targetEl: null, pointerId: event.pointerId };
+});
+
+document.addEventListener("pointermove", (event) => {
+  if (!drag || event.pointerId !== drag.pointerId) return;
+  if (!drag.ghost) {
+    if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < DRAG_THRESHOLD) return;
+    const source = seatGridEl.querySelector(`[data-drag-cell="${drag.fromCellKey}"]`);
+    if (!source) {
+      endDrag();
+      return;
+    }
+    state.editingCellKey = null;
+    const rect = source.getBoundingClientRect();
+    drag.ghost = source.cloneNode(true);
+    drag.ghost.classList.add("seat-cell--ghost");
+    drag.ghost.style.width = `${rect.width}px`;
+    drag.ghost.style.height = `${rect.height}px`;
+    drag.offsetX = drag.startX - rect.left;
+    drag.offsetY = drag.startY - rect.top;
+    document.body.append(drag.ghost);
+    source.classList.add("seat-cell--dragging");
+    document.body.classList.add("is-dragging-seat");
+  }
+  event.preventDefault();
+  drag.ghost.style.left = `${event.clientX - drag.offsetX}px`;
+  drag.ghost.style.top = `${event.clientY - drag.offsetY}px`;
+  setDropTarget(dropTargetAt(event.clientX, event.clientY));
+});
+
+document.addEventListener("pointerup", (event) => {
+  if (!drag || event.pointerId !== drag.pointerId) return;
+  const wasDragging = Boolean(drag.ghost);
+  const from = drag.fromCellKey;
+  const target = wasDragging ? dropTargetAt(event.clientX, event.clientY) : null;
+  endDrag();
+  if (!wasDragging) return;
+  suppressNextClick = true; // 끌기를 마친 뒤 따라오는 click(빈자리 열기 등)은 무시
+  setTimeout(() => (suppressNextClick = false), 0);
+  const to = target && target.dataset.cellKey;
+  if (to && to !== from) moveSeat(from, to);
+});
+
+document.addEventListener("pointercancel", endDrag);
+
 async function unassignSeat(cellKey) {
   const { error } = await supabase.rpc("unassign_seat", { p_room_id: state.activeRoomId, p_cell_key: cellKey });
   await afterWrite(error, roomsLive);
@@ -474,6 +576,130 @@ roomTabsEl.addEventListener("click", (event) => {
   state.editingCellKey = null;
   state.actionCellKey = null;
   render();
+});
+
+// ───────────── 좌석 일괄 등록(사용자 요청) ─────────────
+// 탭이 있는 줄이 있으면 "자리 모양 그대로"(줄 = 행, 칸 = 열), 없으면 학번 목록을 앞자리부터 차례로 채운다.
+// 칸에서 다섯 자리 숫자(학번)만 읽으므로 "10305 홍길동"처럼 이름이 같이 있어도 된다.
+let seatBulkPlan = null; // { seatMap, count, errors }
+
+function parseSeatBulk(text, room) {
+  const rows = Number(room.rows) || 1;
+  const cols = Number(room.cols) || 1;
+  const lines = text.replace(/\s+$/, "").split(/\r?\n/);
+  const cells = []; // { r, c, raw }
+  if (lines.some((line) => line.includes("\t"))) {
+    lines.forEach((line, r) => line.split("\t").forEach((raw, c) => cells.push({ r, c, raw: raw.trim() })));
+  } else {
+    const tokens = text.split(/[\s,]+/).filter(Boolean);
+    tokens.forEach((raw, i) => cells.push({ r: Math.floor(i / cols), c: i % cols, raw }));
+  }
+  const bySid = new Map(Object.values(getStudentsById()).map((s) => [s.sid, s]));
+  const grades = room.grades || [];
+  const seatMap = {};
+  const grid = {}; // 미리보기: cellKey → { text, error }
+  const errors = [];
+  const seen = new Map(); // studentId → cellKey
+  for (const { r, c, raw } of cells) {
+    if (!raw) continue;
+    const key = `r${r}c${c}`;
+    const match = /(\d{5})/.exec(raw);
+    if (r >= rows || c >= cols) {
+      errors.push(`${r + 1}행 ${c + 1}열 "${raw}": 이 실(${rows}행×${cols}열)보다 큽니다. 편집 모드에서 행·열을 먼저 늘려 주세요.`);
+      continue;
+    }
+    if (!match) {
+      grid[key] = { text: raw, error: true };
+      errors.push(`${r + 1}행 ${c + 1}열 "${raw}": 학번(다섯 자리 숫자)을 찾지 못했습니다.`);
+      continue;
+    }
+    const student = bySid.get(match[1]);
+    if (!student) {
+      grid[key] = { text: match[1], error: true };
+      errors.push(`${r + 1}행 ${c + 1}열: 학번 ${match[1]} 학생이 명단에 없습니다.`);
+      continue;
+    }
+    if (!grades.includes(student.grade)) {
+      grid[key] = { text: student.name, error: true };
+      errors.push(`${r + 1}행 ${c + 1}열: ${student.name}(${student.sid})은(는) ${student.grade}학년이라 이 실(대상 학년 ${grades.join("·") || "없음"})에 앉을 수 없습니다.`);
+      continue;
+    }
+    if (seen.has(student.id)) {
+      grid[key] = { text: student.name, error: true };
+      errors.push(`${r + 1}행 ${c + 1}열: ${student.name}(${student.sid})이(가) 위에 이미 있습니다.`);
+      continue;
+    }
+    seen.set(student.id, key);
+    seatMap[key] = student.id;
+    grid[key] = { text: student.name, error: false };
+  }
+  return { seatMap, grid, count: Object.keys(seatMap).length, errors, rows, cols };
+}
+
+function renderSeatBulkPreview() {
+  const room = state.rooms[state.activeRoomId];
+  if (!room) return;
+  seatBulkRoomName.textContent = `${room.name || "이름 없음"} (${room.rows}행×${room.cols}열)`;
+  const text = seatBulkInput.value;
+  if (!text.trim()) {
+    seatBulkPlan = null;
+    seatBulkPreview.innerHTML = "";
+    seatBulkSaveBtn.disabled = true;
+    seatBulkSaveBtn.textContent = "좌석표 저장 (0명)";
+    return;
+  }
+  const plan = parseSeatBulk(text, room);
+  seatBulkPlan = plan;
+  const cellsHtml = [];
+  for (let r = 0; r < plan.rows; r++) {
+    for (let c = 0; c < plan.cols; c++) {
+      const g = plan.grid[`r${r}c${c}`];
+      const cls = !g ? " seat-bulk-grid__cell--empty" : g.error ? " seat-bulk-grid__cell--error" : "";
+      cellsHtml.push(`<div class="seat-bulk-grid__cell${cls}">${g ? escapeHtml(g.text) : "빈자리"}</div>`);
+    }
+  }
+  seatBulkPreview.innerHTML =
+    `<div class="seat-bulk-grid" style="grid-template-columns: repeat(${plan.cols}, minmax(64px, 1fr))">${cellsHtml.join("")}</div>` +
+    (plan.errors.length > 0
+      ? `<div class="bulk-preview__errors">${plan.errors.map((e) => `<div>${escapeHtml(e)}</div>`).join("")}</div>`
+      : "");
+  // 오류가 하나라도 있으면 저장하지 않는다(고친 뒤 다시) — 일부만 들어간 좌석표가 생기지 않게
+  seatBulkSaveBtn.disabled = plan.count === 0 || plan.errors.length > 0;
+  seatBulkSaveBtn.textContent = `좌석표 저장 (${plan.count}명)`;
+}
+
+function closeSeatBulk() {
+  seatBulkWrap.hidden = true;
+  seatBulkPlan = null;
+}
+
+seatBulkBtn.addEventListener("click", () => {
+  if (!canEditRoom(state.activeRoomId)) return;
+  state.editingCellKey = null;
+  seatBulkInput.value = "";
+  renderSeatBulkPreview();
+  seatBulkWrap.hidden = false;
+  render();
+  seatBulkInput.focus();
+});
+
+seatBulkCancelBtn.addEventListener("click", closeSeatBulk);
+seatBulkInput.addEventListener("input", renderSeatBulkPreview);
+
+seatBulkSaveBtn.addEventListener("click", async () => {
+  const room = state.rooms[state.activeRoomId];
+  if (!room || !seatBulkPlan || seatBulkPlan.errors.length > 0 || seatBulkPlan.count === 0) return;
+  const filled = Object.keys(room.seatMap || {}).length;
+  const ok = confirm(
+    `${room.name || "이 실"}의 좌석표를 새로 저장합니다(${seatBulkPlan.count}명).` +
+      (filled > 0 ? `\n지금 배정된 ${filled}자리는 새 좌석표로 바뀝니다.` : "") +
+      "\n다른 실에 앉아 있던 학생은 그 자리가 비워집니다."
+  );
+  if (!ok) return;
+  seatBulkSaveBtn.disabled = true;
+  const { error } = await supabase.rpc("set_room_seats", { p_room_id: state.activeRoomId, p_seat_map: seatBulkPlan.seatMap });
+  if (await afterWrite(error, roomsLive)) closeSeatBulk();
+  else renderSeatBulkPreview();
 });
 
 editModeToggle.addEventListener("click", () => {
@@ -536,6 +762,10 @@ colsMinusBtn.addEventListener("click", () => resizeRoom("cols", -1));
 colsPlusBtn.addEventListener("click", () => resizeRoom("cols", 1));
 
 seatGridEl.addEventListener("click", (event) => {
+  if (suppressNextClick) {
+    suppressNextClick = false;
+    return;
+  }
   const unassignBtn = event.target.closest("[data-unassign-cell]");
   if (unassignBtn) {
     unassignSeat(unassignBtn.dataset.unassignCell);

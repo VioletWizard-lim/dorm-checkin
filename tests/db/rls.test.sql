@@ -176,6 +176,34 @@ select tests.expect_error(format($$select public.assign_seat(%L, 'r0c1', %L)$$, 
   'room grade mismatch is rejected', '%대상 학년%');
 select tests.expect_error(format($$select public.assign_seat(%L, 'r5c0', %L)$$, :room1, :st3),
   'out-of-range seat is rejected', '%좌석 위치%');
+-- 끌어서 옮기기(move_seat): 빈자리로는 이동, 학생이 있는 자리로는 맞바꿈
+select public.assign_seat(:room1, 'r1c0', :st3);
+select public.move_seat(:room1, 'r0c0', 'r0c1');
+select tests.expect_true(format($$(select not seat_map ? 'r0c0' and seat_map ->> 'r0c1' = %L from public.rooms where id = %L)$$, :st1, :room1),
+  'moving a seat onto an empty cell moves the student');
+select public.move_seat(:room1, 'r0c1', 'r1c0');
+select tests.expect_true(format($$(select seat_map ->> 'r1c0' = %L and seat_map ->> 'r0c1' = %L from public.rooms where id = %L)$$, :st1, :st3, :room1),
+  'moving onto an occupied cell swaps the two students');
+select public.move_seat(:room1, 'r1c0', 'r0c0');
+select tests.expect_true(format($$(select seat_map ->> 'r0c0' = %L and not seat_map ? 'r1c0' from public.rooms where id = %L)$$, :st1, :room1),
+  'moving back restores the seat');
+select tests.expect_error(format($$select public.move_seat(%L, 'r1c1', 'r1c0')$$, :room1), 'moving an empty cell is rejected', '%옮길 학생%');
+select tests.expect_error(format($$select public.move_seat(%L, 'r0c0', 'r9c9')$$, :room1), 'moving out of the grid is rejected', '%좌석 위치%');
+select tests.expect_error(format($$select public.move_seat(%L, 'r0c0', 'r0c1')$$, :room2), 'grade manager cannot move seats in an unmanaged room', '%권한%');
+-- 좌석 일괄 등록(set_room_seats): 실 하나의 좌석표를 한 번에 바꾼다
+select public.set_room_seats(:room1, jsonb_build_object('r1c1', :st1::text, 'r1c0', :st3::text));
+select tests.expect_true(format($$(select seat_map = jsonb_build_object('r1c1', %L, 'r1c0', %L) from public.rooms where id = %L)$$, :st1, :st3, :room1),
+  'bulk seat map replaces the whole room');
+select tests.expect_error(format($$select public.set_room_seats(%L, jsonb_build_object('r0c0', %L, 'r0c1', %L))$$, :room1, :st1, :st1),
+  'bulk seat map rejects a student in two seats', '%두 자리%');
+select tests.expect_error(format($$select public.set_room_seats(%L, jsonb_build_object('r0c0', %L))$$, :room1, :st2),
+  'bulk seat map rejects other grades', '%대상 학년%');
+select tests.expect_error(format($$select public.set_room_seats(%L, jsonb_build_object('r3c0', %L))$$, :room1, :st1),
+  'bulk seat map rejects seats outside the grid', '%좌석 위치%');
+select tests.expect_error(format($$select public.set_room_seats(%L, '{}')$$, :room2), 'grade manager cannot bulk-set an unmanaged room', '%권한%');
+select tests.expect_true(format($$(select seat_map = jsonb_build_object('r1c1', %L, 'r1c0', %L) from public.rooms where id = %L)$$, :st1, :st3, :room1),
+  'a rejected bulk seat map changes nothing');
+select public.set_room_seats(:room1, jsonb_build_object('r0c0', :st1::text));
 select tests.expect_affected(format($$update public.rooms set name = 'x' where id = %L$$, :room1), 0, 'grade manager cannot rename rooms');
 select tests.expect_error(format($$select public.resize_room(%L, 1, 1)$$, :room1), 'grade manager cannot resize rooms', '%권한%');
 reset role;
@@ -216,6 +244,8 @@ select tests.expect_error(format($$insert into public.outings (date, student_id,
   'dorm staff cannot check outings', '%row-level security%');
 select tests.expect_affected($$update public.outings set status = 'in'$$, 0, 'dorm staff cannot return or cancel outings');
 select tests.expect_error(format($$select public.assign_seat(%L, 'r0c0', %L)$$, :room1, :st2), 'dorm staff cannot assign seats', '%권한%');
+select tests.expect_error(format($$select public.move_seat(%L, 'r0c0', 'r1c1')$$, :room1), 'dorm staff cannot move seats', '%권한%');
+select tests.expect_error(format($$select public.set_room_seats(%L, '{}')$$, :room1), 'dorm staff cannot bulk-set seats', '%권한%');
 select tests.expect_error(format($$select public.resize_room(%L, 2, 2)$$, :room1), 'dorm staff cannot resize rooms', '%권한%');
 select tests.expect_error($$insert into public.rooms (name) values ('임시실')$$, 'dorm staff cannot add rooms', '%row-level security%');
 select tests.expect_affected($$update public.rooms set name = '바뀐 실'$$, 0, 'dorm staff cannot rename rooms');

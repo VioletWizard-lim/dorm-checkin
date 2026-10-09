@@ -63,6 +63,83 @@ test.describe("좌석 배치판 — 보기 모드", () => {
 });
 
 test.describe("좌석 배치판 — 편집 모드", () => {
+  test("좌석을 끌어서 옮긴다: 빈자리면 이동, 학생 자리면 맞바꿈", async ({ env, openAs, page }) => {
+    await openAs("gm01", "/seat.html"); // 학년부장(1학년실 담당)
+    await page.click("#editModeToggle");
+    await expect(cell(page, 0)).toContainText("홍길동");
+
+    async function dragCell(fromIndex, toIndex) {
+      const from = await cell(page, fromIndex).boundingBox();
+      const to = await cell(page, toIndex).boundingBox();
+      await page.mouse.move(from.x + 20, from.y + 20);
+      await page.mouse.down();
+      await page.mouse.move(from.x + 40, from.y + 40, { steps: 3 });
+      await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 8 });
+      await expect(cell(page, toIndex)).toHaveClass(/seat-cell--drop-target/);
+      await page.mouse.up();
+    }
+
+    // 1학년실(2×2): r0c0 홍길동, r0c1 김민준 → 홍길동을 빈자리 r1c1로
+    await dragCell(0, 3);
+    await expect(cell(page, 3)).toContainText("홍길동");
+    await expect(cell(page, 0)).not.toContainText("홍길동");
+    expect((await room(env, ROOM.first)).seat_map).toEqual({ r0c1: STUDENT.minjun, r1c1: STUDENT.hong });
+    // 끈 뒤에 빈자리 입력칸이 열리지 않는다
+    await expect(page.locator("[data-assign-sid]")).toHaveCount(0);
+
+    // 김민준을 홍길동 자리로 → 맞바꿈
+    await dragCell(1, 3);
+    await expect(cell(page, 3)).toContainText("김민준");
+    await expect(cell(page, 1)).toContainText("홍길동");
+    expect((await room(env, ROOM.first)).seat_map).toEqual({ r0c1: STUDENT.hong, r1c1: STUDENT.minjun });
+
+    // 조금만 움직이면 끌기가 아니라 보통 클릭(× 해제는 그대로 동작)
+    await cell(page, 1).locator("[data-unassign-cell]").click();
+    await expect(cell(page, 1)).not.toContainText("홍길동");
+  });
+
+  test("좌석 일괄 등록: 엑셀 좌석표 모양 그대로, 오류가 있으면 저장 안 됨", async ({ env, openAs, page }) => {
+    answerDialogs(page, [true]);
+    await openAs("gm01", "/seat.html"); // 학년부장(1학년실 담당)
+    await expect(page.locator("#seatBulkBtn")).toBeHidden(); // 보기 모드에서는 없음
+    await page.click("#editModeToggle");
+    await page.click("#seatBulkBtn");
+    await expect(page.locator("#seatBulkRoomName")).toHaveText("1학년실 (2행×2열)");
+    const cellsText = () => page.locator("#seatBulkPreview .seat-bulk-grid__cell");
+    const errors = page.locator("#seatBulkPreview .bulk-preview__errors");
+
+    // 다른 학년·중복·없는 학번·실보다 큰 표는 오류로 보여 주고 저장 버튼이 꺼진다
+    await page.fill("#seatBulkInput", "20101\t10305\n10305\t99999\t10101");
+    await expect(errors).toContainText("2학년이라 이 실");
+    await expect(errors).toContainText("위에 이미 있습니다");
+    await expect(errors).toContainText("99999 학생이 명단에 없습니다");
+    await expect(errors).toContainText("이 실(2행×2열)보다 큽니다");
+    await expect(page.locator("#seatBulkSaveBtn")).toBeDisabled();
+
+    // 좌석 모양 그대로(빈 칸 = 빈자리, 칸에 이름이 같이 있어도 됨)
+    await page.fill("#seatBulkInput", "10302\t\n10305 홍길동\t10101\n");
+    await expect(errors).toHaveCount(0);
+    await expect(cellsText()).toHaveText(["최하늘", "빈자리", "홍길동", "김민준"]);
+    await expect(page.locator("#seatBulkSaveBtn")).toHaveText("좌석표 저장 (3명)");
+    await page.click("#seatBulkSaveBtn");
+    await expect(page.locator("#seatBulkWrap")).toBeHidden();
+    await expect(cell(page, 0)).toContainText("최하늘");
+    await expect(cell(page, 2)).toContainText("홍길동");
+    expect((await room(env, ROOM.first)).seat_map).toEqual({ r0c0: STUDENT.haneul, r1c0: STUDENT.hong, r1c1: STUDENT.minjun });
+  });
+
+  test("좌석 일괄 등록: 학번 목록만 붙여넣으면 앞자리부터 차례로", async ({ env, openAs, page }) => {
+    answerDialogs(page, [true]);
+    await openAs("admin01", "/seat.html");
+    await page.click("#editModeToggle");
+    await page.click("#seatBulkBtn");
+    await page.fill("#seatBulkInput", "10101\n10302\n10305");
+    await expect(page.locator("#seatBulkPreview .seat-bulk-grid__cell")).toHaveText(["김민준", "최하늘", "홍길동", "빈자리"]);
+    await page.click("#seatBulkSaveBtn");
+    await expect(page.locator("#seatBulkWrap")).toBeHidden();
+    expect((await room(env, ROOM.first)).seat_map).toEqual({ r0c0: STUDENT.minjun, r0c1: STUDENT.haneul, r1c0: STUDENT.hong });
+  });
+
   test("학번을 입력하고 Enter로 배정하면 다음 빈자리로 넘어간다", async ({ env, openAs, page }) => {
     const dialogs = answerDialogs(page, [true, true, true]);
     await openAs("admin01", "/seat.html");
@@ -199,5 +276,28 @@ test.describe("좌석 배치판 — 편집 모드", () => {
     }, [ROOM.second, STUDENT.seoyeon]);
     expect(result).toBe("이 실의 좌석을 편집할 권한이 없습니다.");
     expect((await room(env, ROOM.second)).seat_map).toEqual({ r0c0: STUDENT.seoyeon, r1c2: STUDENT.jihun });
+  });
+});
+
+// 전자칠판(터치)에서도 끌어서 옮길 수 있어야 한다 — 실제 터치 입력(CDP)으로 확인
+test.describe("좌석 배치판 — 터치", () => {
+  test.use({ hasTouch: true });
+
+  test("터치로 끌어서 빈자리로 옮긴다", async ({ env, openAs, page }) => {
+    await openAs("admin01", "/seat.html");
+    await page.click("#editModeToggle");
+    await expect(cell(page, 0)).toContainText("홍길동");
+    const from = await cell(page, 0).boundingBox();
+    const to = await cell(page, 3).boundingBox();
+    const cdp = await page.context().newCDPSession(page);
+    const touch = (type, x, y) =>
+      cdp.send("Input.dispatchTouchEvent", { type, touchPoints: type === "touchEnd" ? [] : [{ x, y, id: 1 }] });
+    await touch("touchStart", from.x + 20, from.y + 20);
+    for (let i = 1; i <= 10; i++) {
+      await touch("touchMove", from.x + 20 + (to.x + to.width / 2 - from.x - 20) * (i / 10), from.y + 20 + (to.y + to.height / 2 - from.y - 20) * (i / 10));
+    }
+    await touch("touchEnd");
+    await expect(cell(page, 3)).toContainText("홍길동");
+    expect((await room(env, ROOM.first)).seat_map).toEqual({ r0c1: STUDENT.minjun, r1c1: STUDENT.hong });
   });
 });
