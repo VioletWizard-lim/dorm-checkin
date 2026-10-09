@@ -151,6 +151,78 @@ test.describe("방과후 일정(관리자)", () => {
     expect(await days(env, STUDENT.minjun)).toEqual([false, false, false, true, false]);
   });
 
+  test("양식이 달라도 자동으로: 칸 이름 비슷한 말, 1-3-5·1학년 3반 5번 모양, 머리글 없는 이름", async ({ openAs, page }) => {
+    await openAs("admin01", "/afterschool.html");
+    await page.click("#weekdayDays >> text=화");
+    const preview = page.locator("#weekdayPreview");
+    // 머리글: "학년반번호" 한 칸, "성 명(한글)" — 띄어쓰기·괄호 무시
+    await page.fill("#weekdayInput", ["연번\t학년반번호\t성 명(한글)", "1\t1-3-5\t홍길동", "2\t1학년 1반 1번\t김민준", "3\t2.01.01\t이서연", "4\t1302\t최하늘"].join("\n"));
+    await expect(preview.locator(".bulk-preview__summary")).toHaveText("추가 3명 · 이미 등록 1명");
+    await expect(preview).toContainText("최하늘 · 10302"); // 학년반번호 칸의 네 자리(1302)
+    await expect(page.locator("#columnMapStatus")).toHaveText("지금: 자동으로 찾는 중");
+    // 머리글 없이 이름만(띄어쓴 이름도) + "1학년 3반 2번" 모양
+    await page.fill("#weekdayInput", "김 민준\n이서연 (2학년)\n1학년 3반 2번 최하늘");
+    await expect(preview.locator(".bulk-preview__summary")).toHaveText("추가 2명");
+    await expect(preview).toContainText("김민준 · 10101");
+    await expect(preview).toContainText("최하늘 · 10302");
+  });
+
+  test("요일 자동: 요일을 안 골랐으면 출석부의 요일 글자·날짜로 고르고, 이미 골랐으면 안내와 바꾸기 버튼만", async ({ openAs, page }) => {
+    await openAs("admin01", "/afterschool.html");
+    const active = page.locator("#weekdayDays .day-toggle.is-active");
+    const note = page.locator("#weekdayDetectNote");
+    // 제목 "(코딩반 · 월)" → 월
+    await page.setInputFiles("#weekdayFile", new URL("../fixtures/afterschool-attendance.xlsx", import.meta.url).pathname);
+    await expect(active).toHaveText(["월"]);
+    await expect(note).toHaveText("출석부 글자에서 요일을 찾아 월을(를) 골랐습니다. 맞는지 확인하세요.");
+    await expect(page.locator("#weekdayPreview .bulk-preview__summary")).toHaveText("추가 3명 · 이미 등록 1명");
+
+    // 날짜 칸만 있으면 날짜의 요일로(2026-10-06·13은 화요일) — 요일을 비운 뒤 새 표
+    await page.click("#weekdayDays >> text=월");
+    await page.fill("#weekdayInput", "번호\t이름\t2026-10-06\t2026-10-13\n1\t홍길동\tO\tO");
+    await expect(active).toHaveText(["화"]);
+    await expect(note).toContainText("출석 날짜에서 요일을 찾아 화을(를) 골랐습니다");
+
+    // 이미 다른 요일(수)을 골라 둔 상태면 바꾸지 않고 안내 → [월요일로 바꾸기]
+    await page.click("#weekdayDays >> text=화");
+    await page.click("#weekdayDays >> text=수");
+    await page.fill("#weekdayInput", "방과후 코딩반 출석부 (월)\n학번\t이름\n10101\t김민준");
+    await expect(active).toHaveText(["수"]);
+    await expect(note).toContainText("출석부에는 월요일로 보입니다(지금 고른 요일: 수)");
+    await note.getByRole("button", { name: "월요일로 바꾸기" }).click();
+    await expect(active).toHaveText(["월"]);
+    await expect(page.locator("#weekdayPreview")).toContainText("김민준 · 10101 · 1학년 1반 — 없음 → 월");
+  });
+
+  test("칸 직접 고르기: 자동으로 못 찾으면 펼쳐지고, 고른 칸으로 찾으며, 같은 양식은 기억한다", async ({ env, openAs, page }) => {
+    answerDialogs(page, [true]);
+    await openAs("admin01", "/afterschool.html");
+    await page.click("#weekdayDays >> text=금");
+    const table = "가\t1\t3\t5\n나\t1\t1\t1";
+    await page.fill("#weekdayInput", table);
+    const preview = page.locator("#weekdayPreview");
+    await expect(preview.locator(".bulk-preview__errors")).toContainText("칸 직접 고르기");
+    await expect(page.locator("#columnMapWrap")).toHaveAttribute("open", "");
+    const selects = page.locator("#columnMapTable [data-col-role]");
+    await expect(selects).toHaveCount(4);
+    await selects.nth(1).selectOption("grade");
+    await selects.nth(2).selectOption("cls");
+    await selects.nth(3).selectOption("num");
+    await expect(page.locator("#columnMapStatus")).toHaveText("지금: 고른 칸으로 찾는 중");
+    await expect(preview.locator(".bulk-preview__summary")).toHaveText("추가 1명 · 이미 등록 1명");
+    await page.click("#weekdaySaveBtn");
+    await expect(page.locator("#weekdayInput")).toHaveValue("");
+    expect(await days(env, STUDENT.minjun)).toEqual([false, false, false, false, true]);
+
+    // 같은 양식을 다시 넣으면 고른 칸을 기억해서 쓴다 → 자동으로 되돌리기
+    await page.fill("#weekdayInput", table);
+    await expect(page.locator("#columnMapStatus")).toHaveText("지금: 지난번에 이 양식에서 고른 칸으로 찾는 중");
+    await expect(preview.locator(".bulk-preview__summary")).toHaveText("추가 0명 · 이미 등록 2명");
+    await page.click("#columnMapResetBtn");
+    await expect(page.locator("#columnMapStatus")).toHaveText("지금: 자동으로 찾는 중");
+    await expect(preview.locator(".bulk-preview__summary")).toHaveCount(0);
+  });
+
   test("이름만 있는 출석부(CSV)도 이름으로 찾는다", async ({ openAs, page }) => {
     await openAs("admin01", "/afterschool.html");
     await page.click("#weekdayDays >> text=금");

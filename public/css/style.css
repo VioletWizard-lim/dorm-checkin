@@ -2050,6 +2050,89 @@ body.is-dragging-seat * {
   color: var(--color-label);
 }
 
+.weekday-detect {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--color-afterschool);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.weekday-detect--warn {
+  color: var(--color-out);
+}
+
+.column-map {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  padding: 10px 14px;
+}
+
+.column-map summary {
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.column-map__hint {
+  font-weight: 400;
+  color: var(--color-label);
+}
+
+.column-map__status {
+  display: block;
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-afterschool);
+}
+
+.column-map__body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+  align-items: flex-start;
+}
+
+.column-map__note {
+  font-size: 13px;
+  color: var(--color-label);
+  line-height: 1.6;
+}
+
+.column-map__scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.column-map__table {
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.column-map__table th,
+.column-map__table td {
+  border: 1px solid var(--color-border);
+  padding: 4px 8px;
+  white-space: nowrap;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.column-map__table th {
+  background: var(--color-bg);
+}
+
+.column-map__table select {
+  font-size: 13px;
+  padding: 2px 4px;
+}
+
 .save-mode {
   display: flex;
   flex-direction: column;
