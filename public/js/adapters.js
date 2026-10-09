@@ -22,6 +22,9 @@ export function studentFromRow(row) {
   if (row.leave_from && row.leave_to) {
     student.leaveOfAbsence = { from: row.leave_from, to: row.leave_to, reason: row.leave_reason || "" };
   }
+  if (row.ban_from && row.ban_to) {
+    student.outingBan = { from: row.ban_from, to: row.ban_to, reason: row.ban_reason || "" };
+  }
   return student;
 }
 
@@ -38,6 +41,7 @@ export function groupStudentsByGrade(rows) {
 // 학생 추가·수정 폼 값 → students 행
 export function studentToRow(grade, data) {
   const leave = data.leaveOfAbsence;
+  const ban = data.outingBan;
   return {
     grade: Number(grade),
     name: data.name,
@@ -51,6 +55,9 @@ export function studentToRow(grade, data) {
     leave_from: leave ? leave.from : null,
     leave_to: leave ? leave.to : null,
     leave_reason: leave ? leave.reason || null : null,
+    ban_from: ban ? ban.from : null,
+    ban_to: ban ? ban.to : null,
+    ban_reason: ban ? ban.reason || null : null,
   };
 }
 

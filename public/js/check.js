@@ -1,5 +1,5 @@
 import { supabase, requireStaff, signOutTo, describeError, showPageError, callFunction, reportLoadError } from "./supabase-client.js";
-import { getDateKey, isOnLeave, escapeHtml, formatToday, formatTime } from "./util.js";
+import { getDateKey, isOnLeave, escapeHtml, formatToday, formatTime, outingBanOn, outingBanText } from "./util.js";
 import { liveTable } from "./live-table.js";
 import {
   GRADES,
@@ -103,6 +103,21 @@ function canApprove(student) {
   return false;
 }
 
+// 외출 금지 학생의 외출 처리(외출 체크·신청 승인)는 학년부장(그 학년)·관리자만(서버 outings_check_ban과 같은 규칙)
+function canOverrideBan(student) {
+  const p = currentProfile;
+  if (!p || !student) return false;
+  return p.role === "admin" || (p.role === "gradeManager" && Boolean((p.managedGrades || {})[student.grade]));
+}
+
+// 외출 금지 학생을 외출 처리하기 전 확인 창 문구에 쓰는 data 속성
+function banConfirmAttr(student, ban) {
+  return ` data-confirm-ban="${escapeHtml(`${student.name || "이 학생"} 학생은 외출 금지 기간입니다(${outingBanText(ban, { withReason: true }).replace("외출 금지 ", "")}). 그래도 외출 처리할까요?`)}"`;
+}
+
+const banChip = (ban) =>
+  ` <span class="ban-chip" title="${escapeHtml(ban.reason || "")}">${escapeHtml(outingBanText(ban))}</span>`;
+
 // 보기만 하는 경우 — 외출 체크·복귀·외출 취소·자리 없음 해제 버튼이 없음(서버 정책도 막음)
 //   기숙사부(can_write_outings), 지난 날짜(오늘 기록만 쓸 수 있음, 사용자 요청)
 function isReadOnly() {
@@ -181,6 +196,8 @@ function renderList(filtered) {
       const initial = (s.name || "?").charAt(0);
       const hasPendingRequest =
         state.selectedDate === TODAY_KEY && state.pendingRequests.some((r) => r.student_id === s.id);
+      // 외출 금지(사용자 요청): 이름 옆에 표시, 외출 체크는 학년부장·관리자만(확인 창)
+      const ban = status === "leave" ? null : outingBanOn(s, state.selectedDate);
 
       // 외출 체크·외출 취소는 담당 범위(담임 담당 반·학년부장 담당 학년·관리자 전체)만,
       // 복귀 체크는 담당 범위 + 자습 감독(확인 창 한 번) — 서버 트리거 outings_check_scope와 같은 규칙
@@ -190,9 +207,11 @@ function renderList(filtered) {
       let actionsHtml;
       if (isReadOnly()) {
         actionsHtml = isOut ? `<div class="roster-actions">${passBtn}</div>` : `<div class="ml-auto"></div>`;
+      } else if (status === "in" && ban && canManage && !canOverrideBan(s)) {
+        actionsHtml = `<div class="since-text ml-auto">외출 금지 — 학년부장·관리자만 외출 처리</div>`;
       } else if (status === "in") {
         actionsHtml = canManage
-          ? `<button type="button" class="toggle-btn toggle-btn--mark-out" data-toggle-id="${escapeHtml(s.id)}" data-grade="${escapeHtml(s.grade)}" data-current-status="in">외출 체크</button>`
+          ? `<button type="button" class="toggle-btn toggle-btn--mark-out" data-toggle-id="${escapeHtml(s.id)}" data-grade="${escapeHtml(s.grade)}" data-current-status="in"${ban ? banConfirmAttr(s, ban) : ""}>외출 체크</button>`
           : `<div class="ml-auto"></div>`;
       } else if (isOut) {
         // 외출중·외출 예정: 학생 화면과 같은 외출증을 볼 수 있다
@@ -218,7 +237,7 @@ function renderList(filtered) {
         <div class="student-card">
           <div class="student-avatar ${meta.avatarClass}">${escapeHtml(initial)}</div>
           <div class="student-info">
-            <div class="student-name">${escapeHtml(s.name || "이름 없음")}${hasPendingRequest ? ` <span class="pending-chip">외출 신청 대기</span>` : ""}</div>
+            <div class="student-name">${escapeHtml(s.name || "이름 없음")}${ban ? banChip(ban) : ""}${hasPendingRequest ? ` <span class="pending-chip">외출 신청 대기</span>` : ""}</div>
             <div class="student-meta">학번 ${escapeHtml(s.sid || "-")} · ${escapeHtml(s.cls || "-")}</div>
             ${
               notice && notice.text
@@ -292,6 +311,12 @@ function renderRequestPanel() {
   requestCountEl.textContent = `${items.length}건`;
   requestListEl.innerHTML = items
     .map(({ request, student }) => {
+      const ban = outingBanOn(student, request.date || TODAY_KEY);
+      // 금지 기간 전에 들어온 신청: 승인은 학년부장·관리자만(확인 창), 다른 교사는 반려만
+      const approveBtn =
+        ban && !canOverrideBan(student)
+          ? `<span class="since-text">학년부장·관리자만 승인</span>`
+          : `<button type="button" class="btn-add btn-small" data-approve-request="${escapeHtml(request.id)}"${ban ? banConfirmAttr(student, ban) : ""}>승인</button>`;
       const timeText =
         request.start_time || request.expected_return
           ? ` (${request.start_time || ""}~${request.expected_return || ""})`
@@ -299,7 +324,7 @@ function renderRequestPanel() {
       return `
         <div class="request-row">
           <div class="request-row__who">
-            <div class="student-name">${escapeHtml(student.name || "이름 없음")}</div>
+            <div class="student-name">${escapeHtml(student.name || "이름 없음")}${ban ? banChip(ban) : ""}</div>
             <div class="student-meta">학번 ${escapeHtml(student.sid || "-")} · ${escapeHtml(student.cls || "-")}</div>
           </div>
           <div class="request-row__what">
@@ -307,7 +332,7 @@ function renderRequestPanel() {
             <div class="since-text">${escapeHtml(formatTime(request.created_at))} 신청</div>
           </div>
           <div class="roster-actions">
-            <button type="button" class="btn-add btn-small" data-approve-request="${escapeHtml(request.id)}">승인</button>
+            ${approveBtn}
             <button type="button" class="btn-danger btn-small" data-reject-request="${escapeHtml(request.id)}">반려</button>
           </div>
         </div>
@@ -350,6 +375,7 @@ async function rejectRequest(requestId, btn) {
 requestListEl.addEventListener("click", (event) => {
   const approveBtn = event.target.closest("[data-approve-request]");
   if (approveBtn) {
+    if (approveBtn.dataset.confirmBan && !window.confirm(approveBtn.dataset.confirmBan)) return;
     approveRequest(approveBtn.dataset.approveRequest, approveBtn);
     return;
   }
@@ -427,6 +453,8 @@ listEl.addEventListener("click", (event) => {
   const currentStatus = btn.dataset.currentStatus;
   // 승인된 외출(외출 예정)을 취소할 때는 한 번 확인한다(잘못 누르면 승인이 없어지므로).
   if (btn.dataset.confirmCancel && !window.confirm(`${btn.dataset.confirmCancel} 학생의 외출을 취소할까요?`)) return;
+  // 외출 금지 학생의 외출 체크는 학년부장·관리자만 — 한 번 더 확인한다
+  if (btn.dataset.confirmBan && !window.confirm(btn.dataset.confirmBan)) return;
   // 자습 감독의 복귀 체크는 한 번 더 확인한다(사용자 요청)
   if (btn.dataset.confirmReturn && !window.confirm(`${btn.dataset.confirmReturn} 학생이 복귀한 것이 확실한가요?`)) return;
   let reason = "";

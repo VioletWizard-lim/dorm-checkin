@@ -40,6 +40,18 @@ export function isOnLeave(student, dateKey) {
   return dateKey >= leave.from && dateKey <= leave.to;
 }
 
+// 외출 금지 기간(ban_from~ban_to, 학년부장·관리자가 정함)이 그 날짜를 포함하면 { from, to, reason }, 아니면 null
+export function outingBanOn(student, dateKey) {
+  const ban = student && student.outingBan;
+  return ban && ban.from && ban.to && dateKey >= ban.from && dateKey <= ban.to ? ban : null;
+}
+
+// "외출 금지 ~10/13" (+ " · 사유")
+export function outingBanText(ban, { withReason = false } = {}) {
+  const until = `${Number(ban.to.slice(5, 7))}/${Number(ban.to.slice(8, 10))}`;
+  return `외출 금지 ~${until}${withReason && ban.reason ? ` · ${ban.reason}` : ""}`;
+}
+
 // 오늘의 방과후 요일 칸(월=0 … 금=4), 주말이면 null
 export function todayWeekdayIndex() {
   const idx = new Date().getDay() - 1;

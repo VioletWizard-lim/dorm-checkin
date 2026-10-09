@@ -1,7 +1,7 @@
 // 학생 화면: 오늘 내 상태 보기, 외출 신청·취소, 오늘 신청 내역(승인·반려 결과 실시간 반영).
 // 신청·취소는 RPC(create_outing_request·cancel_outing_request)로만 한다 — 학생 정보는 서버가 로그인 계정으로 찾는다.
 import { supabase, requireStudent, signOutTo, describeError, reportLoadError } from "./supabase-client.js";
-import { getDateKey, escapeHtml, formatTime } from "./util.js";
+import { getDateKey, escapeHtml, formatTime, outingBanOn, outingBanText } from "./util.js";
 import { liveTable } from "./live-table.js";
 import { studentFromRow, isScheduledOuting, createStartTimeTicker } from "./adapters.js";
 import { drawOutingPass, outingPassData } from "./outing-pass.js";
@@ -140,8 +140,9 @@ function renderStatus() {
   } else if (status === "away") {
     detail = `${formatTime(state.outing.since)}에 자리 없음으로 표시되었습니다. 사감 선생님께 확인해 주세요.`;
   }
+  const ban = status === "leave" ? null : outingBanOn(state.student, TODAY_KEY);
   statusBox.innerHTML = `
-    <div class="status-badge ${meta.badgeClass}">${meta.badge}</div>
+    <div class="status-badge ${meta.badgeClass}">${meta.badge}</div>${ban ? ` <span class="ban-chip">${escapeHtml(outingBanText(ban))}</span>` : ""}
     <div class="my-status__detail">${escapeHtml(detail)}</div>
   `;
 }
@@ -150,6 +151,11 @@ function renderStatus() {
 function blockedReason() {
   const status = currentStatus();
   if (status === "leave") return "명령퇴사 기간에는 외출을 신청할 수 없습니다.";
+  // 외출 금지(학년부장·관리자가 정함) — 서버(outing_requests_ban_check)도 거부
+  const ban = outingBanOn(state.student, TODAY_KEY);
+  if (ban && status === "in") {
+    return `외출 금지 기간입니다(${outingBanText(ban, { withReason: true }).replace("외출 금지 ", "")}). 외출이 꼭 필요하면 학년부장 선생님께 말씀드리세요.`;
+  }
   if (status === "out") return "이미 외출 중입니다. 복귀 체크는 사감 선생님이 합니다.";
   if (status === "scheduled") return "승인된 외출이 있습니다.";
   if (state.requests.some((r) => r.status === "pending")) {

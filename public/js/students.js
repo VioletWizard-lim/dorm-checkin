@@ -1,5 +1,5 @@
 import { supabase, requireStaff, signOutTo, describeError, callFunction, reportLoadError } from "./supabase-client.js";
-import { getDateKey, isOnLeave, escapeHtml, insertTabOnKeydown } from "./util.js";
+import { getDateKey, isOnLeave, escapeHtml, insertTabOnKeydown, outingBanOn, outingBanText } from "./util.js";
 import { liveTable } from "./live-table.js";
 import {
   GRADES as ALL_GRADES,
@@ -39,6 +39,10 @@ const dayToggleRow = document.getElementById("dayToggleRow");
 const inputLeaveFrom = document.getElementById("inputLeaveFrom");
 const inputLeaveTo = document.getElementById("inputLeaveTo");
 const inputLeaveReason = document.getElementById("inputLeaveReason");
+const banFields = document.getElementById("banFields");
+const inputBanFrom = document.getElementById("inputBanFrom");
+const inputBanTo = document.getElementById("inputBanTo");
+const inputBanReason = document.getElementById("inputBanReason");
 const cancelFormBtn = document.getElementById("cancelFormBtn");
 const submitFormBtn = document.getElementById("submitFormBtn");
 const inputLoginId = document.getElementById("inputLoginId");
@@ -90,6 +94,7 @@ const state = {
   leaveOnly: false,
   // 명령퇴사 기간은 관리자·기숙사부만(담임·학년부장은 칸이 안 보임 — 서버 트리거도 막음)
   canEditLeave: false,
+  canEditBan: false, // 외출 금지: 관리자·학년부장만(서버 students_ban_editors)
   // 학생 계정 발급·비밀번호 재발급·계정 삭제·반 단위 삭제는 관리자만
   isAdmin: false,
   classDeleteSelected: new Set(), // 반 단위 삭제에서 고른 반(cls)
@@ -241,6 +246,13 @@ function renderRoster() {
         : leave && leave.from && leave.to
           ? `<div class="since-text">명령퇴사 예정: ${escapeHtml(leave.from)} ~ ${escapeHtml(leave.to)}</div>`
           : "";
+      const banNow = outingBanOn(s, TODAY_KEY);
+      const ban = s.outingBan;
+      const banBadge = banNow
+        ? `<div class="status-badge status-badge--ban" title="${escapeHtml(banNow.reason || "")}">${escapeHtml(outingBanText(banNow))}</div>`
+        : ban && ban.to >= TODAY_KEY
+          ? `<div class="since-text">외출 금지 예정: ${escapeHtml(ban.from)} ~ ${escapeHtml(ban.to)}</div>`
+          : "";
       // 목록에는 학번·이름·반·번호만 보여준다(ID·연락처·이메일은 "수정"을 눌러야 보임).
       const seatNo = deriveNumberFromSid(s.sid);
       const hasAccount = Boolean(state.accounts[id]);
@@ -267,6 +279,7 @@ function renderRoster() {
           </div>
           <div class="day-pill-row">${days}</div>
           ${leaveBadge}
+          ${banBadge}
           ${accountChip}
           <div class="roster-actions">
             ${accountButtons}
@@ -300,6 +313,9 @@ function openFormForAdd() {
   inputLeaveFrom.value = "";
   inputLeaveTo.value = "";
   inputLeaveReason.value = "";
+  inputBanFrom.value = "";
+  inputBanTo.value = "";
+  inputBanReason.value = "";
   state.dayFlags = [false, false, false, false, false];
 
   const classRestriction = getClassRestriction(state.activeGrade);
@@ -313,6 +329,7 @@ function openFormForAdd() {
 
   renderDayToggle();
   leaveFields.hidden = !state.canEditLeave;
+  banFields.hidden = !state.canEditBan;
   issueOnSaveLabel.hidden = !state.isAdmin; // 새 학생을 추가할 때만(수정할 때는 숨김)
   formWrap.hidden = false;
   inputName.focus();
@@ -336,6 +353,10 @@ function openFormForEdit(id) {
   inputLeaveFrom.value = leave.from || "";
   inputLeaveTo.value = leave.to || "";
   inputLeaveReason.value = leave.reason || "";
+  const ban = s.outingBan || {};
+  inputBanFrom.value = ban.from || "";
+  inputBanTo.value = ban.to || "";
+  inputBanReason.value = ban.reason || "";
   state.dayFlags = (s.afterschoolDays || [false, false, false, false, false]).slice();
   // 기존 학생은 이미 반이 저장되어 있으니, 학번을 고치더라도 자동으로 덮어쓰지 않는다.
   state.clsManuallyEdited = true;
@@ -345,6 +366,7 @@ function openFormForEdit(id) {
   leaveOnlyTitle.hidden = !state.leaveOnly;
   leaveOnlyTitle.textContent = `${s.name || "이름 없음"} (학번 ${s.sid || "-"}) 명령퇴사 기간`;
   leaveFields.hidden = !state.canEditLeave;
+  banFields.hidden = !state.canEditBan;
   issueOnSaveLabel.hidden = true;
   formWrap.hidden = false;
   (state.leaveOnly ? inputLeaveFrom : inputName).focus();
@@ -908,6 +930,21 @@ function readLeaveInputs() {
   return leaveFrom && leaveTo ? { from: leaveFrom, to: leaveTo, reason: inputLeaveReason.value.trim() } : {};
 }
 
+// 외출 금지 기간 검사(학년부장·관리자). 문제가 있으면 alert하고 null
+function readBanInputs() {
+  const from = inputBanFrom.value;
+  const to = inputBanTo.value;
+  if ((from && !to) || (!from && to)) {
+    alert("외출 금지 기간은 시작일과 종료일을 모두 입력해 주세요.");
+    return null;
+  }
+  if (from && to && from > to) {
+    alert("외출 금지 종료일은 시작일보다 빠를 수 없습니다.");
+    return null;
+  }
+  return from && to ? { from, to, reason: inputBanReason.value.trim() } : {};
+}
+
 // 기숙사부: 명령퇴사 칸만 저장한다(서버도 다른 칸이 바뀌면 거부)
 async function saveLeaveOnly(id) {
   const leave = readLeaveInputs();
@@ -969,6 +1006,8 @@ studentForm.addEventListener("submit", async (event) => {
 
   const leave = readLeaveInputs();
   if (!leave) return;
+  const ban = state.canEditBan ? readBanInputs() : {};
+  if (!ban) return;
 
   const data = {
     name,
@@ -981,8 +1020,15 @@ studentForm.addEventListener("submit", async (event) => {
     afterschoolDays: state.dayFlags.slice(),
   };
   if (leave.from) data.leaveOfAbsence = leave;
+  if (ban.from) data.outingBan = ban;
 
   const row = studentToRow(grade, data);
+  if (!state.canEditBan) {
+    // 외출 금지 칸은 학년부장·관리자만(지금 값을 그대로 둠)
+    delete row.ban_from;
+    delete row.ban_to;
+    delete row.ban_reason;
+  }
   if (!state.canEditLeave) {
     // 담임·학년부장은 명령퇴사 칸을 건드리지 않는다(지금 값을 그대로 둠)
     delete row.leave_from;
@@ -1069,6 +1115,7 @@ async function init() {
   }
   state.isAdmin = role === "admin";
   state.canEditLeave = role === "admin" || role === "dormStaff";
+  state.canEditBan = role === "admin" || role === "gradeManager";
 
   if (role === "admin" || role === "dormStaff") {
     showCurrentUser();
