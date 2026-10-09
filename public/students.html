@@ -109,6 +109,11 @@
         </div>
       </div>
       <div class="roster-form__actions">
+        <!-- 관리자만: 저장하면서 학생 계정도 발급(ID가 있고 계정이 없는 학생) -->
+        <label class="remember-row issue-on-save" id="issueOnSaveLabel" hidden>
+          <input type="checkbox" id="issueOnSaveCheck" checked>
+          저장하면서 학생 계정도 발급 (ID가 있으면)
+        </label>
         <button type="button" class="btn-secondary" id="cancelFormBtn">취소</button>
         <button type="submit" class="btn-add" id="submitFormBtn">저장</button>
       </div>
@@ -119,12 +124,16 @@
     <div class="roster-form">
       <div class="field">
         <label for="bulkInput">여러 명 붙여넣기</label>
-        <span class="field-hint">한 줄에 한 명씩 "이름 · 학번 · ID · 학생 연락처 · 학부모 연락처 · 이메일" 순서입니다(학번 뒤는 모두 선택, 빈 칸 가능). 엑셀에서 열을 이 순서로 선택해 그대로 복사·붙여넣기 하면 됩니다. 반은 학번으로 자동 계산되고, 이미 있는 학번이면 새로 추가하지 않고 입력한 정보만 갱신합니다.</span>
+        <span class="field-hint">한 줄에 한 명씩 "이름 · 학번 · ID · 학생 연락처 · 학부모 연락처 · 이메일" 순서입니다(학번 뒤는 모두 선택, 빈 칸 가능). 엑셀에서 열을 이 순서로 선택해 그대로 복사·붙여넣기 하면 됩니다. 학년·반은 학번으로 자동 계산되므로(예: 20105 → 2학년 1반) 어느 학년 탭에서 붙여넣어도 그 학년으로 들어갑니다. 이미 있는 학번이면 새로 추가하지 않고 입력한 정보만 갱신합니다.</span>
         <textarea id="bulkInput" rows="8" placeholder="홍길동	10305	hong123	010-1234-5678	010-9876-5432	hong@example.com
 김민준	10312"></textarea>
       </div>
       <div class="bulk-preview" id="bulkPreview"></div>
       <div class="roster-form__actions">
+        <label class="remember-row issue-on-save" id="issueOnBulkLabel" hidden>
+          <input type="checkbox" id="issueOnBulkCheck" checked>
+          저장하면서 학생 계정도 발급 (ID가 있는 학생)
+        </label>
         <button type="button" class="btn-secondary" id="cancelBulkFormBtn">취소</button>
         <button type="button" class="btn-add" id="bulkSaveBtn" disabled>일괄 저장 (0명)</button>
       </div>

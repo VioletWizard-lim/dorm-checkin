@@ -49,6 +49,10 @@ const accountResultWrap = document.getElementById("accountResultWrap");
 const accountResultList = document.getElementById("accountResultList");
 const accountResultCopy = document.getElementById("accountResultCopy");
 const accountResultDownloadBtn = document.getElementById("accountResultDownloadBtn");
+const issueOnSaveLabel = document.getElementById("issueOnSaveLabel");
+const issueOnSaveCheck = document.getElementById("issueOnSaveCheck");
+const issueOnBulkLabel = document.getElementById("issueOnBulkLabel");
+const issueOnBulkCheck = document.getElementById("issueOnBulkCheck");
 const classDeleteBtn = document.getElementById("classDeleteBtn");
 const classDeleteWrap = document.getElementById("classDeleteWrap");
 const classDeleteChips = document.getElementById("classDeleteChips");
@@ -104,6 +108,15 @@ function deriveClsFromSid(sid) {
   return `${grade}학년 ${Number(cls)}반`;
 }
 
+// 학생의 학년: 반("2학년 1반")에서, 없으면 학번 첫 자리에서. 둘 다 아니면 null(지금 학년 탭으로 저장)
+// 고른 학년 탭과 상관없이 학번대로 저장되게 한다(사용자 요청 — 1학년 탭에서 2학년 학번을 넣으면 2학년으로)
+function gradeOfStudent(cls, sid) {
+  const fromCls = /^([1-3])학년/.exec((cls || "").trim());
+  if (fromCls) return fromCls[1];
+  const fromSid = /^([1-3])\d{4}$/.exec((sid || "").trim());
+  return fromSid ? fromSid[1] : null;
+}
+
 // 엑셀에서 복사한 줄: 이름 · 학번 · ID · 학생 연락처 · 학부모 연락처 · 이메일(학번 뒤는 선택, 빈 칸 가능).
 // 예전 형식("이름 학번 이메일")도 세 번째 칸에 @가 있으면 이메일로 읽는다.
 // 지금 학년에 같은 학번이 있으면 새로 추가하지 않고 그 학생의 정보를 갱신한다(existingId).
@@ -113,10 +126,14 @@ function deriveNumberFromSid(sid) {
   return match ? String(Number(match[1])) : "";
 }
 
-function parseBulkInput(text, classRestriction, studentsInGrade) {
+// 학년은 학번으로 정한다(어느 학년 탭에서 붙여넣어도 됨). 학번 형식이 아니면 지금 학년 탭으로
+function parseBulkInput(text) {
   const rows = [];
   const errors = [];
-  const existingBySid = new Map(Object.entries(studentsInGrade || {}).map(([id, s]) => [s.sid, { id, ...s }]));
+  const existingBySid = new Map();
+  for (const grade of state.allowedGrades) {
+    for (const [id, s] of Object.entries(state.studentsByGrade[grade] || {})) existingBySid.set(s.sid, { id, grade, ...s });
+  }
   const seenSids = new Set();
   const seenLoginIds = new Set();
   text.split(/\r?\n/).forEach((line, i) => {
@@ -152,6 +169,12 @@ function parseBulkInput(text, classRestriction, studentsInGrade) {
     }
     const existing = existingBySid.get(sid) || null;
     const cls = existing ? existing.cls : deriveClsFromSid(sid) || "";
+    const grade = existing ? existing.grade : gradeOfStudent(cls, sid) || state.activeGrade;
+    if (!state.allowedGrades.includes(grade)) {
+      errors.push(`${label}: "${name}"(학번 ${sid})은(는) ${grade}학년이라 추가할 수 없습니다(담당 학년이 아님).`);
+      return;
+    }
+    const classRestriction = getClassRestriction(grade);
     if (classRestriction && cls && !classRestriction.includes(cls)) {
       errors.push(`${label}: "${name}"(${cls})은(는) 담당 반(${classRestriction.join(", ")})이 아닙니다.`);
       return;
@@ -160,6 +183,7 @@ function parseBulkInput(text, classRestriction, studentsInGrade) {
     if (loginId) seenLoginIds.add(loginId);
     rows.push({
       existingId: existing ? existing.id : null,
+      grade,
       name,
       sid,
       cls,
@@ -288,6 +312,7 @@ function openFormForAdd() {
 
   renderDayToggle();
   leaveFields.hidden = !state.canEditLeave;
+  issueOnSaveLabel.hidden = !state.isAdmin; // 새 학생을 추가할 때만(수정할 때는 숨김)
   formWrap.hidden = false;
   inputName.focus();
 }
@@ -319,6 +344,7 @@ function openFormForEdit(id) {
   leaveOnlyTitle.hidden = !state.leaveOnly;
   leaveOnlyTitle.textContent = `${s.name || "이름 없음"} (학번 ${s.sid || "-"}) 명령퇴사 기간`;
   leaveFields.hidden = !state.canEditLeave;
+  issueOnSaveLabel.hidden = true;
   formWrap.hidden = false;
   (state.leaveOnly ? inputLeaveFrom : inputName).focus();
 }
@@ -348,11 +374,7 @@ function closeBulkForm() {
 }
 
 function renderBulkPreview() {
-  const { rows, errors } = parseBulkInput(
-    bulkInput.value,
-    getClassRestriction(state.activeGrade),
-    state.studentsByGrade[state.activeGrade]
-  );
+  const { rows, errors } = parseBulkInput(bulkInput.value);
   bulkPreviewRows = rows;
 
   const parts = [];
@@ -363,7 +385,7 @@ function renderBulkPreview() {
           const fields = [
             r.name,
             r.sid,
-            r.cls || "반 확인 필요",
+            r.cls || `${r.grade}학년 · 반 확인 필요`,
             r.loginId ? `ID ${r.loginId}` : "",
             r.phone ? `학생 ${formatPhone(r.phone)}` : "",
             r.parentPhone ? `학부모 ${formatPhone(r.parentPhone)}` : "",
@@ -432,7 +454,7 @@ bulkSaveBtn.addEventListener("click", async () => {
   const newRows = bulkPreviewRows
     .filter((row) => !row.existingId)
     .map((row) =>
-      studentToRow(state.activeGrade, {
+      studentToRow(row.grade, {
         name: row.name,
         sid: row.sid,
         cls: row.cls,
@@ -448,8 +470,10 @@ bulkSaveBtn.addEventListener("click", async () => {
   bulkSaveBtn.textContent = "저장 중...";
 
   // 새 학생은 한 번에 저장한다 — 하나라도 실패하면 새 학생은 전부 저장되지 않으므로 고친 뒤 다시 누르면 된다.
+  const savedWithId = []; // 저장한 학생 중 ID가 있는 학생(저장하면서 계정 발급용)
   if (newRows.length > 0) {
-    const { error } = await supabase.from("students").insert(newRows);
+    const { data: inserted, error } = await supabase.from("students").insert(newRows).select("id, login_id");
+    if (!error) savedWithId.push(...inserted.filter((r) => r.login_id).map((r) => r.id));
     if (error) {
       alert(`새 학생을 저장하지 못했습니다(정보 갱신도 하지 않았습니다): ${describeStudentSaveError(error)}`);
       renderBulkPreview();
@@ -467,9 +491,15 @@ bulkSaveBtn.addEventListener("click", async () => {
     const { data, error } = await supabase.from("students").update(patch).eq("id", row.existingId).select("id");
     if (error || data.length === 0) {
       failures.push(`${row.name}(${row.sid}): ${error ? describeStudentSaveError(error) : "권한이 없거나 이미 삭제된 학생입니다."}`);
+    } else if (row.loginId || findStudent(row.existingId)?.loginId) {
+      savedWithId.push(row.existingId);
     }
   }
   await afterWrite(null);
+  if (issueOnSaveWanted(issueOnBulkCheck)) {
+    const ids = withoutAccount(savedWithId);
+    if (ids.length > 0) await issueAccounts(ids, bulkSaveBtn);
+  }
   if (failures.length > 0) {
     alert(`다음 학생은 정보를 갱신하지 못했습니다.\n${failures.join("\n")}`);
     renderBulkPreview();
@@ -539,9 +569,23 @@ rosterListEl.addEventListener("click", (event) => {
   if (deleteAccountBtn) deleteAccount(deleteAccountBtn.dataset.deleteAccount, deleteAccountBtn);
 });
 
-function findStudentInActiveGrade(id) {
-  const s = (state.studentsByGrade[state.activeGrade] || {})[id];
-  return s ? { id, ...s } : null;
+// "저장하면서 학생 계정도 발급"(관리자만, 기본 체크) — 학생 추가와 계정 발급을 한 번에(사용자 요청)
+function issueOnSaveWanted(checkbox) {
+  return state.isAdmin && checkbox.checked;
+}
+
+// 아직 계정이 없는 학생만(저장 직후 afterWrite로 계정 목록을 다시 읽은 뒤에 부른다)
+function withoutAccount(ids) {
+  return [...new Set(ids)].filter((id) => id && !state.accounts[id]);
+}
+
+// 학생 찾기(모든 학년 — 붙여넣기로 다른 학년 학생도 함께 저장·발급할 수 있어서)
+function findStudent(id) {
+  for (const grade of Object.keys(state.studentsByGrade)) {
+    const s = (state.studentsByGrade[grade] || {})[id];
+    if (s) return { id, grade, ...s };
+  }
+  return null;
 }
 
 // 학생 계정 발급(여러 명). 서버(student-accounts)가 권한·아이디·중복을 확인하고 6자리 비밀번호를 만든다.
@@ -563,7 +607,7 @@ async function issueAccounts(studentIds, btn) {
     }
     for (const [i, studentId] of chunk.entries()) {
       const res = chunkResults ? chunkResults.find((r) => r.studentId === studentId) || chunkResults[i] : null;
-      const s = findStudentInActiveGrade(studentId) || { name: "", sid: "" };
+      const s = findStudent(studentId) || { name: "", sid: "" };
       results.push({
         kind: "issue",
         name: s.name,
@@ -584,7 +628,7 @@ async function issueAccounts(studentIds, btn) {
 }
 
 async function resetAccountPassword(studentId, btn) {
-  const s = findStudentInActiveGrade(studentId) || { name: "이 학생", sid: "" };
+  const s = findStudent(studentId) || { name: "이 학생", sid: "" };
   if (!confirm(`${s.name}의 비밀번호를 새로 발급할까요?\n지금 쓰는 비밀번호로는 더 이상 로그인할 수 없게 됩니다.`)) return;
   btn.disabled = true;
   try {
@@ -608,7 +652,7 @@ async function resetAccountPassword(studentId, btn) {
 }
 
 async function deleteAccount(studentId, btn) {
-  const s = findStudentInActiveGrade(studentId) || { name: "이 학생" };
+  const s = findStudent(studentId) || { name: "이 학생" };
   if (!confirm(`${s.name}의 학생 계정을 삭제할까요?\n학생은 더 이상 로그인할 수 없고, 명단에는 그대로 남습니다.`)) return;
   btn.disabled = true;
   try {
@@ -898,7 +942,13 @@ studentForm.addEventListener("submit", async (event) => {
     return;
   }
 
-  const classRestriction = getClassRestriction(state.activeGrade);
+  // 학년은 반·학번대로(고른 학년 탭과 다르면 그 학년으로 저장)
+  const grade = gradeOfStudent(cls, sid) || state.activeGrade;
+  if (!state.allowedGrades.includes(grade)) {
+    alert(`${grade}학년은 담당 학년이 아니라 저장할 수 없습니다. 반·학번을 확인해 주세요.`);
+    return;
+  }
+  const classRestriction = getClassRestriction(grade);
   if (classRestriction && !classRestriction.includes(cls)) {
     alert(`담당 반(${classRestriction.join(", ")})의 학생만 등록·수정할 수 있습니다.`);
     return;
@@ -931,7 +981,7 @@ studentForm.addEventListener("submit", async (event) => {
   };
   if (leave.from) data.leaveOfAbsence = leave;
 
-  const row = studentToRow(state.activeGrade, data);
+  const row = studentToRow(grade, data);
   if (!state.canEditLeave) {
     // 담임·학년부장은 명령퇴사 칸을 건드리지 않는다(지금 값을 그대로 둠)
     delete row.leave_from;
@@ -949,6 +999,8 @@ studentForm.addEventListener("submit", async (event) => {
     return;
   }
   if (!(await afterWrite(error))) return;
+  const toIssue = !editingId && loginId && issueOnSaveWanted(issueOnSaveCheck) ? withoutAccount([saved[0].id]) : [];
+  if (toIssue.length > 0) await issueAccounts(toIssue, submitFormBtn);
   closeForm();
 });
 
@@ -970,6 +1022,7 @@ function initForGrades(allowedGrades) {
   bulkAddBtn.hidden = state.leaveOnly;
   bulkIssueBtn.hidden = !state.isAdmin;
   classDeleteBtn.hidden = !state.isAdmin;
+  issueOnBulkLabel.hidden = !state.isAdmin;
 
   studentsLive = liveTable({
     table: "students",

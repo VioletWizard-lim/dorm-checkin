@@ -12,8 +12,12 @@ async function profile(env, loginId) {
 test.describe("계정 관리", () => {
   test("관리자만 들어올 수 있고 목록에 역할·담당 범위가 보인다", async ({ openAs, page }) => {
     await openAs("admin01", "/accounts.html");
+    // 역할별로 묶어서 보여 준다(관리자 → 학년부장 → 담임 → 일반 교사 → 자습 감독 → 기숙사부 → 삭제됨)
     await expect(page.locator("#accountList .student-name")).toHaveText([
-      "admin01", "dorm01", "gm01", "gone01", "homeroom01", "super01", "teacher01",
+      "admin01", "gm01", "homeroom01", "teacher01", "super01", "dorm01", "gone01",
+    ]);
+    await expect(page.locator("#accountList .account-group__title")).toHaveText([
+      "관리자 (1명)", "학년부장 (1명)", "담임 (1명)", "일반 교사 (담당 반 없음) (1명)", "자습 감독 (1명)", "기숙사부 (1명)", "삭제됨 (1명)",
     ]);
     await expect(row(page, "admin01")).toContainText("본인 계정");
     await expect(row(page, "admin01").locator("button")).toHaveCount(0);
@@ -21,6 +25,26 @@ test.describe("계정 관리", () => {
     await expect(row(page, "gm01")).toContainText("1학년 · 1학년실");
     await expect(row(page, "homeroom01")).toContainText("담당 반: 1학년 3반");
     await expect(page.locator("#bulkResetBtn")).toHaveText("비밀번호 일괄 재발급 (5명)");
+  });
+
+  test("분류 탭으로 역할별 계정만 볼 수 있고, 역할을 바꾸면 분류도 바뀐다", async ({ openAs, page }) => {
+    await openAs("admin01", "/accounts.html");
+    const chips = page.locator("#accountFilter [data-account-filter]");
+    await expect(chips).toHaveText([
+      "전체 7", "관리자 1", "학년부장 1", "담임 1", "일반 교사 (담당 반 없음) 1", "자습 감독 1", "기숙사부 1", "삭제됨 1",
+    ]);
+    await chips.filter({ hasText: "일반 교사" }).click();
+    await expect(page.locator("#accountList .student-name")).toHaveText(["teacher01"]);
+
+    // 일반 교사를 자습 감독으로 바꾸면 그 분류가 비어서 전체로 돌아간다
+    await row(page, "teacher01").getByRole("button", { name: "정보 수정" }).click();
+    await page.click("[data-edit-set-role='studyHallSupervisor']");
+    await page.click("[data-save-role]");
+    await expect(chips.filter({ hasText: "전체" })).toHaveClass(/is-active/);
+    await expect(chips.filter({ hasText: "자습 감독" })).toHaveText("자습 감독 2");
+    await expect(chips.filter({ hasText: "일반 교사" })).toHaveCount(0);
+    await chips.filter({ hasText: "자습 감독" }).click();
+    await expect(page.locator("#accountList .student-name")).toHaveText(["super01", "teacher01"]);
   });
 
   test("정보 수정: 이름·역할·담당 학년/실·담당 반", async ({ env, openAs, page }) => {
@@ -80,7 +104,7 @@ test.describe("계정 관리", () => {
     await openAs("admin01", "/accounts.html");
     await page.fill("#bulkAccountInput", "NewT1\t새교사\nnewt2\t둘째교사\tmypass99\nadmin01\t중복\nbad id\t오류");
     await expect(page.locator("#bulkAccountPreview .bulk-preview__row")).toHaveCount(3);
-    await expect(page.locator("#bulkAccountPreview .bulk-preview__row").first()).toContainText("newt1 · 새교사 · 비밀번호");
+    await expect(page.locator("#bulkAccountPreview .bulk-preview__row").first()).toContainText("newt1 · 새교사 · 교사 · 비밀번호");
     await expect(page.locator("#bulkAccountPreview .bulk-preview__errors")).toContainText("4번째 줄");
     const autoPassword = /비밀번호 (\S+) \(자동 생성\)/.exec(
       await page.locator("#bulkAccountPreview .bulk-preview__row").first().textContent()
@@ -98,6 +122,39 @@ test.describe("계정 관리", () => {
     await expect(row(page, "newt1")).toContainText("teacher");
     expect(await profile(env, "newt2")).toMatchObject({ kind: "staff", role: "teacher", name: "둘째교사" });
     expect(await tryLogin(openOtherAs, "NEWT1", autoPassword)).toBe("ok");
+  });
+
+  test("교사 계정 일괄 생성: 역할 이름(한글)을 넣으면 그 역할로, 관리자는 막는다", async ({ env, openAs, page }) => {
+    await openAs("admin01", "/accounts.html");
+    await page.fill(
+      "#bulkAccountInput",
+      ["sup1\t감독1\t자습감독", "dorm2\t기숙2\t기숙사관리자\tdormpass1", "gm2\t학년2\t학년 관리자", "t3\t교사3\t교사", "t4\t교사4\tpw123456", "boss2\t관리2\t관리자"].join("\n")
+    );
+    const preview = page.locator("#bulkAccountPreview .bulk-preview__row");
+    await expect(preview).toHaveCount(5);
+    await expect(preview.nth(0)).toContainText("sup1 · 감독1 · 자습감독 · 비밀번호");
+    await expect(preview.nth(1)).toContainText("dorm2 · 기숙2 · 기숙사관리자 · 비밀번호 dormpass1");
+    await expect(preview.nth(2)).toContainText("gm2 · 학년2 · 학년관리자");
+    await expect(preview.nth(4)).toContainText("t4 · 교사4 · 교사 · 비밀번호 pw123456"); // 역할 없이 비밀번호만(예전 형식)
+    await expect(page.locator("#bulkAccountPreview .bulk-preview__errors")).toContainText("6번째 줄: 관리자는 일괄 생성으로 만들 수 없습니다");
+
+    await page.click("#bulkCreateBtn");
+    await expect(page.locator("#resultList .student-card")).toHaveCount(5);
+    const roles = await env.sql("select login_id, role from public.profiles where login_id = any($1) order by login_id", [["dorm2", "gm2", "sup1", "t3", "t4", "boss2"]]);
+    expect(roles).toEqual([
+      { login_id: "dorm2", role: "dormStaff" },
+      { login_id: "gm2", role: "gradeManager" },
+      { login_id: "sup1", role: "studyHallSupervisor" },
+      { login_id: "t3", role: "teacher" },
+      { login_id: "t4", role: "teacher" },
+    ]);
+    // 서버도 관리자 생성은 거부한다
+    const message = await page.evaluate(async () => {
+      const { callFunction } = await import("/js/supabase-client.js");
+      const data = await callFunction("staff-accounts", { action: "create", accounts: [{ loginId: "boss3", name: "x", role: "admin" }] });
+      return data.results[0].error;
+    });
+    expect(message).toBe("관리자는 일괄 생성으로 만들 수 없습니다.");
   });
 
   test("비밀번호 재발급: 새 비밀번호만 통한다(개별·일괄)", async ({ openAs, openOtherAs, page }) => {

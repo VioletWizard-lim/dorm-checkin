@@ -63,6 +63,43 @@ test.describe("좌석 배치판 — 보기 모드", () => {
 });
 
 test.describe("좌석 배치판 — 편집 모드", () => {
+  test("학번을 입력하고 Enter로 배정하면 다음 빈자리로 넘어간다", async ({ env, openAs, page }) => {
+    const dialogs = answerDialogs(page, [true, true, true]);
+    await openAs("admin01", "/seat.html");
+    await page.click("#editModeToggle");
+    await expect(cell(page, 0)).toContainText("홍길동");
+
+    // 1학년실(2×2): r0c0 홍길동, r0c1 김민준, r1c0·r1c1 빈자리
+    await cell(page, 2).click();
+    const sid = page.locator("[data-assign-sid]");
+    await expect(sid).toBeFocused();
+    await sid.fill("10302");
+    await sid.press("Enter");
+    await expect(cell(page, 2)).toContainText("최하늘");
+    // 다음 빈자리(r1c1)가 열리고 바로 입력할 수 있다
+    await expect(page.locator("[data-assign-sid='r1c1']")).toBeFocused();
+
+    // 다른 학년·없는 학번은 알림만
+    await sid.fill("20101");
+    await sid.press("Enter");
+    await expect.poll(() => dialogs.length).toBe(1);
+    expect(dialogs[0].message).toContain("2학년이라 이 실");
+    await sid.fill("99999");
+    await sid.press("Enter");
+    await expect.poll(() => dialogs.length).toBe(2);
+    expect(dialogs[1].message).toContain("명단에 없습니다");
+
+    // 이미 앉아 있는 학생은 확인 후 옮긴다. 빈자리가 더 없으면 입력칸이 닫힘
+    await sid.fill("10305");
+    await sid.press("Enter");
+    await expect(cell(page, 3)).toContainText("홍길동");
+    expect(dialogs[2].message).toContain("1학년실에 앉아 있습니다");
+    await expect(cell(page, 0)).not.toContainText("홍길동");
+    expect((await room(env, ROOM.first)).seat_map).toEqual({ r0c1: STUDENT.minjun, r1c0: STUDENT.haneul, r1c1: STUDENT.hong });
+    // 홍길동이 빠진 r0c0은 맨 앞이라 "다음 빈자리"가 아님 → 닫힘
+    await expect(page.locator("[data-assign-sid]")).toHaveCount(0);
+  });
+
   test("관리자: 실 추가·이름·대상 학년·크기·배정·이동·해제·삭제", async ({ env, openAs, page }) => {
     answerDialogs(page, [true]);
     await openAs("admin01", "/seat.html");

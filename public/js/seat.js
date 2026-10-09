@@ -220,12 +220,16 @@ function renderGrid(room) {
             return `<option value="${escapeHtml(s.id)}">${escapeHtml(s.grade)}학년 ${escapeHtml(s.name || "이름 없음")} (${escapeHtml(s.sid || "-")})${escapeHtml(suffix)}</option>`;
           })
           .join("");
+        // 학번을 입력하고 Enter → 배정 후 다음 빈자리로(사용자 요청: 학번으로 빠르게 연속 배정). 목록에서 골라도 됨
         cells.push(`
           <div class="seat-cell seat-cell--editing">
-            <select class="seat-cell__select" data-assign-select="${cellKey}">
-              <option value="">학생 선택</option>
-              ${optionsHtml}
-            </select>
+            <div class="seat-cell__pick">
+              <input type="text" class="seat-cell__sid" data-assign-sid="${cellKey}" inputmode="numeric" autocomplete="off" placeholder="학번 입력 후 Enter">
+              <select class="seat-cell__select" data-assign-select="${cellKey}">
+                <option value="">또는 목록에서 선택</option>
+                ${optionsHtml}
+              </select>
+            </div>
             <button type="button" class="seat-cell__cancel" data-cancel-cell="${cellKey}">×</button>
           </div>
         `);
@@ -306,7 +310,15 @@ function renderGrid(room) {
     }
   }
 
+  // 실시간 갱신으로 다시 그려도 입력 중인 학번과 커서는 그대로 둔다
+  const sidInput = seatGridEl.querySelector("[data-assign-sid]");
+  const pendingSid = sidInput && sidInput.dataset.assignSid === state.editingCellKey ? sidInput.value : "";
   seatGridEl.innerHTML = cells.join("");
+  const newSidInput = seatGridEl.querySelector("[data-assign-sid]");
+  if (newSidInput) {
+    newSidInput.value = pendingSid;
+    newSidInput.focus();
+  }
 }
 
 function render() {
@@ -375,7 +387,8 @@ async function toggleRoomGrade(grade) {
 }
 
 // 그 학생이 다른 자리(다른 실 포함)에 앉아 있던 기록은 서버(assign_seat)가 함께 지운다.
-async function assignStudent(targetCellKey, studentId) {
+// continueToNext면 배정한 뒤 다음 빈자리(오른쪽 → 다음 줄)를 바로 열어 학번을 이어서 입력할 수 있게 한다.
+async function assignStudent(targetCellKey, studentId, { continueToNext = false } = {}) {
   const roomId = state.activeRoomId;
   state.editingCellKey = null;
   const { error } = await supabase.rpc("assign_seat", {
@@ -383,7 +396,51 @@ async function assignStudent(targetCellKey, studentId) {
     p_cell_key: targetCellKey,
     p_student_id: studentId,
   });
-  await afterWrite(error, roomsLive);
+  const ok = await afterWrite(error, roomsLive);
+  if (ok && continueToNext && state.activeRoomId === roomId && state.editMode) {
+    state.editingCellKey = nextEmptyCellKey(state.rooms[roomId], targetCellKey);
+    render();
+  }
+}
+
+function nextEmptyCellKey(room, afterCellKey) {
+  if (!room) return null;
+  const rows = Number(room.rows) || 1;
+  const cols = Number(room.cols) || 1;
+  const seatMap = room.seatMap || {};
+  const [, r0, c0] = /^r(\d+)c(\d+)$/.exec(afterCellKey) || [, "0", "-1"];
+  for (let i = Number(r0) * cols + Number(c0) + 1; i < rows * cols; i++) {
+    const key = `r${Math.floor(i / cols)}c${i % cols}`;
+    if (!seatMap[key]) return key;
+  }
+  return null;
+}
+
+// 학번으로 배정: 이 실의 대상 학년 학생 중 학번이 같은 학생
+function assignBySid(cellKey, rawSid) {
+  const sid = rawSid.replace(/\s+/g, "");
+  if (!sid) return;
+  const room = state.rooms[state.activeRoomId];
+  const grades = (room && room.grades) || [];
+  const matches = Object.values(getStudentsById()).filter((s) => s.sid === sid && grades.includes(s.grade));
+  if (matches.length === 0) {
+    const elsewhere = Object.values(getStudentsById()).find((s) => s.sid === sid);
+    alert(
+      elsewhere
+        ? `학번 ${sid} ${elsewhere.name || ""} 학생은 ${elsewhere.grade}학년이라 이 실(대상 학년 ${grades.join("·") || "없음"})에 배정할 수 없습니다.`
+        : `학번 ${sid} 학생이 명단에 없습니다.`
+    );
+    return;
+  }
+  if (matches.length > 1) {
+    alert(`학번 ${sid} 학생이 여러 명입니다. 목록에서 골라 주세요.`);
+    return;
+  }
+  const student = matches[0];
+  const seatedElsewhere = getSeatedRoomNameByStudentId()[student.id];
+  if (seatedElsewhere && !confirm(`${student.name}(${sid})은(는) 지금 ${seatedElsewhere}에 앉아 있습니다. 이 자리로 옮길까요?`)) return;
+  assignStudent(cellKey, student.id, { continueToNext: true });
+  render();
 }
 
 async function unassignSeat(cellKey) {
@@ -545,6 +602,18 @@ seatGridEl.addEventListener("click", (event) => {
       return;
     }
     state.editingCellKey = emptyCell.dataset.emptyCell;
+    render();
+  }
+});
+
+seatGridEl.addEventListener("keydown", (event) => {
+  const input = event.target.closest("[data-assign-sid]");
+  if (!input) return;
+  if (event.key === "Enter") {
+    event.preventDefault();
+    assignBySid(input.dataset.assignSid, input.value);
+  } else if (event.key === "Escape") {
+    state.editingCellKey = null;
     render();
   }
 });

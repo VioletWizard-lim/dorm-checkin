@@ -41,13 +41,16 @@
     <span>"비밀번호 재발급"을 누르면 새 비밀번호가 아래 결과 목록에 표시됩니다. 지금 쓰는 비밀번호로는 더 이상 로그인할 수 없게 됩니다.</span>
     <button type="button" class="btn-secondary btn-small" id="bulkResetBtn" disabled>비밀번호 일괄 재발급 (0명)</button>
   </div>
+  <!-- 역할별 분류 탭(사용자 요청). "전체"에서는 역할별로 묶어서 보여 준다 -->
+  <div class="filter-chips account-filter" id="accountFilter"></div>
   <div class="student-list" id="accountList"><div class="student-list__empty">불러오는 중...</div></div>
 
   <div class="section-heading">교사 계정 일괄 생성</div>
   <div class="section-subtext">
-    한 줄에 한 명씩 "아이디[탭]이름" 또는 "아이디[탭]이름[탭]비밀번호" 형식으로 붙여넣으세요.
+    한 줄에 한 명씩 "아이디[탭]이름[탭]역할[탭]비밀번호" 형식으로 붙여넣으세요. 역할과 비밀번호는 생략할 수 있습니다.
+    역할은 <b>교사</b>·<b>학년관리자</b>·<b>자습감독</b>·<b>기숙사관리자</b> 중 하나이고, 생략하면 교사로 만들어집니다. 관리자는 여기서 만들 수 없고, 만든 뒤 위 목록의 "정보 수정"에서 바꿉니다.
+    학년관리자의 담당 학년·실과 담임의 담당 반도 만든 뒤 "정보 수정"에서 지정합니다.
     비밀번호를 생략하면 자동으로 생성됩니다(직접 입력 시 6자 이상). 아이디는 영문+숫자 32자 이하만 가능하고 소문자로 저장됩니다(로그인할 때 대소문자는 구분하지 않음).
-    생성된 계정은 모두 teacher 권한으로 만들어지며, 역할 변경은 위 목록에서 할 수 있습니다.
   </div>
 
   <div class="roster-form-wrap">
@@ -55,7 +58,8 @@
       <div class="field">
         <label for="bulkAccountInput">여러 명 붙여넣기</label>
         <textarea id="bulkAccountInput" rows="6" placeholder="teacher01	김선생
-teacher02	이선생	mypassword123"></textarea>
+super01	이감독	자습감독
+dorm01	박기숙	기숙사관리자	mypassword123"></textarea>
       </div>
       <div class="bulk-preview" id="bulkAccountPreview"></div>
       <div class="roster-form__actions">

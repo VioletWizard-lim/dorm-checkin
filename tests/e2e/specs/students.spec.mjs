@@ -82,6 +82,42 @@ test.describe("학생 명단 관리", () => {
     expect(await studentByName(env, "윤도현")).toMatchObject({ grade: 2, cls: "2학년 2반", email: null });
   });
 
+  test("학년은 학번대로: 1학년 탭에서 2·3학년 학번을 넣어도 그 학년으로 들어간다", async ({ env, openAs, page }) => {
+    await openAs("admin01", "/students.html");
+    await expect(page.locator("#gradeTabs .filter-chip.is-active")).toHaveText("1학년");
+    await page.click("#bulkAddBtn");
+    await page.fill("#bulkInput", "일학년\t10150\n이학년\t20150\n삼학년\t30150");
+    await expect(page.locator("#bulkPreview .bulk-preview__row")).toHaveText([
+      "[새로 추가] 일학년 · 10150 · 1학년 1반",
+      "[새로 추가] 이학년 · 20150 · 2학년 1반",
+      "[새로 추가] 삼학년 · 30150 · 3학년 1반",
+    ]);
+    await page.click("#bulkSaveBtn");
+    await expect(page.locator("#bulkFormWrap")).toBeHidden();
+    expect(await studentByName(env, "일학년")).toMatchObject({ grade: 1, cls: "1학년 1반" });
+    expect(await studentByName(env, "이학년")).toMatchObject({ grade: 2, cls: "2학년 1반" });
+    expect(await studentByName(env, "삼학년")).toMatchObject({ grade: 3, cls: "3학년 1반" });
+    await expect(rosterCard(page, "이학년")).toHaveCount(0); // 1학년 탭에는 안 보이고
+    await page.click("#gradeTabs >> text=2학년");
+    await expect(rosterCard(page, "이학년")).toBeVisible(); // 2학년 탭에 있다
+
+    // 한 명 추가도 학번대로(2학년 탭에서 3학년 학번)
+    await page.click("#addStudentBtn");
+    await page.fill("#inputName", "삼학년둘");
+    await page.fill("#inputSid", "30151");
+    await page.click("#submitFormBtn");
+    await expect(page.locator("#formWrap")).toBeHidden();
+    expect(await studentByName(env, "삼학년둘")).toMatchObject({ grade: 3, cls: "3학년 1반" });
+  });
+
+  test("학년부장은 담당 학년이 아닌 학번을 붙여넣을 수 없다", async ({ openAs, page }) => {
+    await openAs("gm01", "/students.html");
+    await page.click("#bulkAddBtn");
+    await page.fill("#bulkInput", "이학년\t20150");
+    await expect(page.locator("#bulkPreview .bulk-preview__errors")).toContainText("2학년이라 추가할 수 없습니다");
+    await expect(page.locator("#bulkSaveBtn")).toBeDisabled();
+  });
+
   test("담임: 담당 반만 보이고, 다른 반으로는 저장할 수 없다", async ({ env, openAs, page }) => {
     const alerts = collectAlerts(page);
     await openAs("homeroom01", "/students.html");

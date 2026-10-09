@@ -136,6 +136,29 @@ Deno.test("create reports bad ids, duplicates, short passwords and taken ids per
   assertEquals(calls.created.length, 1);
 });
 
+Deno.test("create can give each account a role, but never admin", async () => {
+  const { deps, calls } = fakeDeps();
+  const result = await handleStaffAccounts({
+    action: "create",
+    accounts: [
+      { loginId: "dorm1", name: "기숙사", role: "dormStaff" },
+      { loginId: "super1", name: "감독", role: "studyHallSupervisor" },
+      { loginId: "gm1", name: "학년", role: "gradeManager" },
+      { loginId: "boss", name: "관리", role: "admin" },
+      { loginId: "odd", name: "이상", role: "student" },
+    ],
+  }, deps) as { results: { ok: boolean; error?: string }[] };
+  assertEquals(calls.insertedProfiles.map((p) => [p.login_id, p.role]), [
+    ["dorm1", "dormStaff"],
+    ["super1", "studyHallSupervisor"],
+    ["gm1", "gradeManager"],
+  ]);
+  assertEquals(result.results.map((r) => r.ok), [true, true, true, false, false]);
+  assertEquals(result.results[3].error, "관리자는 일괄 생성으로 만들 수 없습니다.");
+  assertEquals(result.results[4].error, "알 수 없는 역할입니다.");
+  assertEquals(calls.created.length, 3); // 거부한 역할은 로그인 계정도 만들지 않는다
+});
+
 Deno.test("create rolls the auth user back when the profile cannot be saved", async () => {
   const { deps, calls } = fakeDeps({ failProfileInsert: true });
   const result = await handleStaffAccounts({ action: "create", accounts: [{ loginId: "kim01" }] }, deps) as {

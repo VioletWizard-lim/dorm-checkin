@@ -661,6 +661,11 @@ input {
   gap: 10px;
 }
 
+/* 학생 명단 저장 버튼 옆 "저장하면서 학생 계정도 발급"(관리자만) — 왼쪽에 붙인다 */
+.issue-on-save {
+  margin-right: auto;
+}
+
 .day-toggle-row {
   display: flex;
   gap: 8px;
@@ -1189,6 +1194,25 @@ input {
   gap: 6px;
 }
 
+/* 좌석 배정: 학번 입력칸 + 목록 */
+.seat-cell__pick {
+  flex-grow: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.seat-cell__sid {
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--color-input-border);
+  font-size: 13px;
+  color: var(--color-text);
+  font-family: inherit;
+}
+
 .seat-cell__select {
   flex-grow: 1;
   min-width: 0;
@@ -1254,6 +1278,22 @@ input {
   padding: 0 40px 12px;
   font-size: 13px;
   color: var(--color-text-muted);
+}
+
+/* 계정 관리: 역할별 분류 탭과 묶음 제목 */
+.account-filter {
+  padding: 0 40px 8px;
+}
+
+.account-group__title {
+  margin-top: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+}
+
+.account-group__title:first-child {
+  margin-top: 0;
 }
 
 .section-subtext--with-action {
