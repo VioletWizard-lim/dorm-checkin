@@ -4,7 +4,7 @@ export type Profile = {
   id: string;
   login_id: string;
   kind: "staff" | "student";
-  role: "teacher" | "gradeManager" | "admin" | "studyHallSupervisor" | "dormStaff" | "student" | null;
+  role: "teacher" | "gradeManager" | "admin" | "studyHallSupervisor" | "dormStaff" | "afterschoolTeacher" | "student" | null;
   name: string | null;
   disabled: boolean;
   managed_grades: number[];

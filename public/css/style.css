@@ -773,6 +773,12 @@ input {
   border-radius: 8px;
 }
 
+.bulk-preview__summary {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
 .bulk-preview__errors {
   font-size: 13px;
   color: var(--color-out);
@@ -1405,6 +1411,11 @@ body.is-dragging-seat * {
   color: #FFFFFF;
 }
 
+.role-badge--afterschoolTeacher {
+  background: var(--color-afterschool);
+  color: #FFFFFF;
+}
+
 .role-badge--disabled {
   background: #F3F4F7;
   color: var(--color-text-faint);
@@ -1866,4 +1877,103 @@ body.is-dragging-seat * {
   padding: 32px 14px;
   text-align: center;
   color: var(--color-text-muted);
+}
+
+/* ───────────── 방과후 일정(afterschool.html) ───────────── */
+.afterschool-cal__nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.afterschool-cal__title {
+  font-size: 18px;
+  font-weight: 800;
+  min-width: 120px;
+  text-align: center;
+}
+
+.afterschool-cal__count {
+  margin-left: auto;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-afterschool);
+}
+
+.afterschool-cal {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.afterschool-cal__head {
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  padding: 4px 0;
+}
+
+.afterschool-cal__head.is-weekend,
+.afterschool-cal__day.is-weekend .afterschool-cal__num {
+  color: var(--color-out);
+}
+
+.afterschool-cal__day {
+  min-height: 64px;
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+  background: var(--color-card-bg);
+  color: var(--color-text);
+  font-family: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.afterschool-cal__day:hover {
+  border-color: var(--color-afterschool);
+}
+
+.afterschool-cal__day.is-on {
+  background: var(--color-afterschool-bg);
+  border-color: var(--color-afterschool);
+}
+
+.afterschool-cal__day.is-today {
+  outline: 2px solid var(--color-active);
+  outline-offset: 1px;
+}
+
+.afterschool-cal__day:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.afterschool-cal__num {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.afterschool-cal__tag {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-afterschool);
+}
+
+.afterschool-range {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--color-border);
+  padding-top: 16px;
+}
+
+.afterschool-range__actions {
+  margin-left: auto;
 }

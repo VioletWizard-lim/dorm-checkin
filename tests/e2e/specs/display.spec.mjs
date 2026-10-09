@@ -14,10 +14,22 @@ test.describe("기숙사 현황판", () => {
     await expect(panel(page, "leavePanelList").locator(".display-card__name")).toHaveText(["박지훈"]);
     await expect(panel(page, "leavePanelList")).toContainText(`~${kstDatePlus(5)}`);
     if (kstWeekdayIndex() === null) {
-      await expect(panel(page, "afterschoolPanelList")).toContainText("오늘은 방과후가 없습니다.");
+      await expect(panel(page, "afterschoolPanelList")).toContainText("오늘은 방과후가 없는 날입니다.");
     } else {
       await expect(panel(page, "afterschoolPanelList").locator(".display-card__name")).toHaveText(["홍길동"]);
     }
+  });
+
+  test("방과후 없는 날로 바꾸면 방과후 요일인 학생도 오늘 방과후에 안 나온다(좌석 색도)", async ({ env, openAs, page }) => {
+    test.skip(kstWeekdayIndex() === null, "주말에는 원래 방과후가 없다");
+    await openAs("teacher01", "/display.html");
+    await expect(panel(page, "afterschoolPanelList").locator(".display-card__name")).toHaveText(["홍길동"]);
+    await env.sql("delete from public.afterschool_dates where date = public.today_kst()");
+    await expect(panel(page, "afterschoolPanelList")).toContainText("오늘은 방과후가 없는 날입니다."); // 실시간으로
+    await expect(panel(page, "afterschoolPanelCount")).toHaveText("0명");
+    await page.goto("/seat.html");
+    await expect(page.locator("#seatGrid > .seat-cell").first()).toContainText("홍길동");
+    await expect(page.locator("#seatGrid > .seat-cell").first()).not.toHaveClass(/seat-cell--afterschool/);
   });
 
   test("학년·실 필터를 함께 적용한다", async ({ openAs, page }) => {

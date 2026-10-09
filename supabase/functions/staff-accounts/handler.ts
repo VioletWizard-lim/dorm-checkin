@@ -1,5 +1,5 @@
 // 교사(교직원) 계정 관리 — 관리자만 호출 가능.
-//   create          : 계정 일괄 생성. 역할은 teacher(기본)·gradeManager·studyHallSupervisor·dormStaff 중에서
+//   create          : 계정 일괄 생성. 역할은 teacher(기본)·gradeManager·studyHallSupervisor·dormStaff·afterschoolTeacher 중에서
 //                     (admin은 일괄 생성으로 만들 수 없음 — 계정 관리 화면에서 한 명씩 바꿈). 담당 범위는 만든 뒤 화면에서
 //   reset-password  : 새 비밀번호 발급(관리자가 정한 password가 있으면 그 값, 없으면 자동 생성. 응답으로 한 번만 돌려줌)
 //   disable         : 로그인 차단(ban) + 역할·담당 범위 비우기
@@ -14,7 +14,7 @@ const MIN_PASSWORD_LENGTH = 6;
 const MAX_PASSWORD_LENGTH = 72; // bcrypt가 72바이트까지만 씀
 const BAN_FOREVER = "876000h";
 // 일괄 생성으로 줄 수 있는 역할(사용자 요청). 관리자는 실수로 여러 명이 생기지 않게 뺀다
-const CREATABLE_ROLES = new Set(["teacher", "gradeManager", "studyHallSupervisor", "dormStaff"]);
+const CREATABLE_ROLES = new Set(["teacher", "gradeManager", "studyHallSupervisor", "dormStaff", "afterschoolTeacher"]);
 
 export type StaffAccountsDeps = {
   caller: Profile;

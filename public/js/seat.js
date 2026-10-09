@@ -45,12 +45,14 @@ const seatBulkCancelBtn = document.getElementById("seatBulkCancelBtn");
 const logoutBtn = document.getElementById("logoutBtn");
 const manageLink = document.getElementById("manageLink");
 const accountsLink = document.getElementById("accountsLink");
+const afterschoolLink = document.getElementById("afterschoolLink");
 const historyLink = document.getElementById("historyLink");
 const navLoadingHint = document.getElementById("navLoadingHint");
 const currentUserNameEl = document.getElementById("currentUserName");
 const currentUserRoleBadgeEl = document.getElementById("currentUserRoleBadge");
 
 const state = {
+  isAfterschoolDay: false, // 오늘이 방과후 있는 날인지(afterschool_dates)
   studentsByGrade: { "1": {}, "2": {}, "3": {} },
   outings: {},
   rooms: {},
@@ -94,7 +96,8 @@ function getStudentStatus(studentId, studentsById) {
   if (outing && (outing.status === "away" || outing.status === "unauthorized")) return "away";
   // 외출 예정(승인됐지만 외출 시각 전)은 아직 자리에 있으므로 외출 색으로 칠하지 않는다.
   if (outing && outing.status === "out" && !isScheduledOuting(outing, TODAY_KEY, TODAY_KEY)) return "out";
-  const todayIdx = todayWeekdayIndex();
+  // 방과후는 방과후 일정에서 고른 "방과후 있는 날"에만, 학생의 방과후 요일대로
+  const todayIdx = state.isAfterschoolDay ? todayWeekdayIndex() : null;
   if (student && todayIdx !== null && Array.isArray(student.afterschoolDays) && student.afterschoolDays[todayIdx]) {
     return "afterschool";
   }
@@ -299,7 +302,7 @@ function renderGrid(room) {
           actionButtonsHtml = `<button type="button" class="seat-cell__action-btn" data-seat-restore="${escapeHtml(studentId)}">재실로</button>`;
         }
         cells.push(`
-          <div class="seat-cell seat-cell--${status} seat-cell--action">
+          <div class="seat-cell seat-cell--${status} seat-cell--action" data-action-cell="${cellKey}">
             <div class="seat-cell__name">${escapeHtml(name)}</div>
             <div class="seat-cell__actions">
               ${actionButtonsHtml}
@@ -326,6 +329,7 @@ function renderGrid(room) {
   const sidInput = seatGridEl.querySelector("[data-assign-sid]");
   const pendingSid = sidInput && sidInput.dataset.assignSid === state.editingCellKey ? sidInput.value : "";
   seatGridEl.innerHTML = cells.join("");
+  restoreDragClasses();
   const newSidInput = seatGridEl.querySelector("[data-assign-sid]");
   if (newSidInput) {
     newSidInput.value = pendingSid;
@@ -469,7 +473,7 @@ async function moveSeat(fromCellKey, toCellKey) {
 // 마우스·터치(전자칠판) 모두 Pointer Events로 처리한다. 조금(6px) 움직여야 끌기로 보고,
 // 그보다 적게 움직이면 보통 클릭(× 해제 등)으로 둔다.
 const DRAG_THRESHOLD = 6;
-let drag = null; // { fromCellKey, startX, startY, ghost, targetEl, pointerId }
+let drag = null; // { fromCellKey, startX, startY, ghost, targetKey, pointerId }
 let suppressNextClick = false;
 
 function dropTargetAt(x, y) {
@@ -479,16 +483,28 @@ function dropTargetAt(x, y) {
 }
 
 function setDropTarget(el) {
-  if (drag.targetEl === el) return;
-  if (drag.targetEl) drag.targetEl.classList.remove("seat-cell--drop-target");
-  drag.targetEl = el && el.dataset.cellKey !== drag.fromCellKey ? el : null;
-  if (drag.targetEl) drag.targetEl.classList.add("seat-cell--drop-target");
+  const key = el && el.dataset.cellKey !== drag.fromCellKey ? el.dataset.cellKey : null;
+  if (drag.targetKey === key) return;
+  drag.targetKey = key;
+  restoreDragClasses();
+}
+
+// 끄는 도중 실시간 갱신으로 좌석판이 다시 그려져도 끄는 좌석·놓을 자리 표시를 유지한다(셀 키로 다시 찾음)
+function restoreDragClasses() {
+  for (const el of seatGridEl.querySelectorAll(".seat-cell--drop-target")) {
+    if (!drag || el.dataset.cellKey !== drag.targetKey) el.classList.remove("seat-cell--drop-target");
+  }
+  if (!drag || !drag.ghost) return;
+  const source = seatGridEl.querySelector(`[data-drag-cell="${drag.fromCellKey}"]`);
+  if (source) source.classList.add("seat-cell--dragging");
+  const target = drag.targetKey && seatGridEl.querySelector(`[data-cell-key="${drag.targetKey}"]`);
+  if (target) target.classList.add("seat-cell--drop-target");
 }
 
 function endDrag() {
   if (!drag) return;
   if (drag.ghost) drag.ghost.remove();
-  if (drag.targetEl) drag.targetEl.classList.remove("seat-cell--drop-target");
+  for (const el of seatGridEl.querySelectorAll(".seat-cell--drop-target")) el.classList.remove("seat-cell--drop-target");
   const source = seatGridEl.querySelector(`[data-drag-cell="${drag.fromCellKey}"]`);
   if (source) source.classList.remove("seat-cell--dragging");
   document.body.classList.remove("is-dragging-seat");
@@ -500,7 +516,7 @@ seatGridEl.addEventListener("pointerdown", (event) => {
   if (event.target.closest("button, input, select")) return;
   const cell = event.target.closest("[data-drag-cell]");
   if (!cell || !canEditRoom(state.activeRoomId)) return;
-  drag = { fromCellKey: cell.dataset.dragCell, startX: event.clientX, startY: event.clientY, ghost: null, targetEl: null, pointerId: event.pointerId };
+  drag = { fromCellKey: cell.dataset.dragCell, startX: event.clientX, startY: event.clientY, ghost: null, targetKey: null, pointerId: event.pointerId };
 });
 
 document.addEventListener("pointermove", (event) => {
@@ -544,6 +560,14 @@ document.addEventListener("pointerup", (event) => {
 });
 
 document.addEventListener("pointercancel", endDrag);
+
+// Esc로도 열린 좌석 버튼을 닫는다
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && state.actionCellKey) {
+    state.actionCellKey = null;
+    render();
+  }
+});
 
 async function unassignSeat(cellKey) {
   const { error } = await supabase.rpc("unassign_seat", { p_room_id: state.activeRoomId, p_cell_key: cellKey });
@@ -815,6 +839,13 @@ seatGridEl.addEventListener("click", (event) => {
     return;
   }
 
+  // 버튼이 열린 좌석을 다시 누르면(버튼 말고 좌석 자리) 닫고 원래대로(사용자 요청)
+  if (event.target.closest("[data-action-cell]")) {
+    state.actionCellKey = null;
+    render();
+    return;
+  }
+
   const attendanceCell = event.target.closest("[data-attendance-cell]");
   if (attendanceCell) {
     state.actionCellKey = attendanceCell.dataset.attendanceCell;
@@ -880,8 +911,21 @@ async function init() {
   manageLink.hidden =
     state.role !== "admin" && state.role !== "gradeManager" && state.role !== "dormStaff" && !hasManagedClasses;
   accountsLink.hidden = state.role !== "admin";
+  afterschoolLink.hidden = state.role !== "admin";
   historyLink.hidden = state.role !== "admin" && state.role !== "gradeManager" && !hasManagedClasses;
   render();
+
+  liveTable({
+    table: "afterschool_dates",
+    select: "date",
+    order: ["date"],
+    eq: { date: TODAY_KEY },
+    onRows: (rows) => {
+      state.isAfterschoolDay = rows.length > 0;
+      render();
+    },
+    onError: reportLoadError,
+  });
 
   liveTable({
     table: "students",

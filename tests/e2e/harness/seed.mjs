@@ -55,6 +55,9 @@ insert into public.rooms (id, name, grades, rows, cols, seat_map, created_at) va
   ('${ROOM.second}', '2·3학년실', '{2,3}', 2, 3,
      '{"r0c0": "${STUDENT.seoyeon}", "r1c2": "${STUDENT.jihun}"}', '2026-01-01T00:00:01Z');
 
+-- 오늘은 방과후가 있는 날(현황판 "오늘 방과후"·좌석 색은 방과후 있는 날에만 나온다)
+insert into public.afterschool_dates (date) values (public.today_kst());
+
 insert into public.outings (date, student_id, status, since, reason, expected_return) values
   (public.today_kst(), '${STUDENT.minjun}', 'away', now() - interval '30 minutes', null, null),
   (public.today_kst() - 1, '${STUDENT.hong}', 'out', now() - interval '1 day', '병원', '17:00');

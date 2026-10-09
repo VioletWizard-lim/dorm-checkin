@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="./img/icon.svg" type="image/svg+xml">
+<link rel="icon" href="./img/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="./img/apple-touch-icon.png">
+<link rel="manifest" href="./manifest.webmanifest">
+<meta name="theme-color" content="#1C2230">
+<title>기숙사 면학 시스템 - 방과후 일정</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+
+<div class="check-page">
+
+  <header class="check-header">
+    <div class="check-header__titles">
+      <div class="check-header__title">방과후 일정</div>
+      <div class="check-header__subtitle">방과후학교가 있는 날과 학생별 방과후 요일을 관리합니다 (관리자·방과후 선생님)</div>
+    </div>
+    <div class="check-header__meta">
+      <!-- 관리자에게만 보임(방과후 선생님은 이 화면만 씀) -->
+      <a href="./check.html" class="back-link" data-admin-link hidden>← 체크 화면으로</a>
+      <a href="./display.html" class="back-link" data-admin-link hidden>현황판 보기</a>
+      <a href="./seat.html" class="back-link" data-admin-link hidden>좌석 배치판 보기</a>
+      <a href="./students.html" class="back-link" data-admin-link hidden>학생 명단 관리</a>
+      <a href="./history.html" class="back-link" data-admin-link hidden>외출 기록</a>
+      <a href="./accounts.html" class="back-link" data-admin-link hidden>계정 관리</a>
+      <div class="current-user" id="currentUserBox">
+        <span class="current-user__name" id="currentUserName"></span>
+        <span class="role-badge" id="currentUserRoleBadge"></span>
+      </div>
+      <button type="button" class="back-link" id="logoutBtn">로그아웃</button>
+    </div>
+  </header>
+
+  <div class="section-heading">방과후 있는 날</div>
+  <div class="section-subtext">
+    날짜를 누르면 방과후 있는 날로 선택되고, 다시 누르면 해제됩니다. 현황판의 "오늘 방과후"와 좌석 색은 선택된 날에만, 학생의 방과후 요일대로 나옵니다.
+  </div>
+
+  <div class="roster-form-wrap">
+    <div class="roster-form">
+      <div class="afterschool-cal__nav">
+        <button type="button" class="btn-secondary btn-small" id="prevMonthBtn" aria-label="이전 달">◀</button>
+        <div class="afterschool-cal__title" id="monthTitle"></div>
+        <button type="button" class="btn-secondary btn-small" id="nextMonthBtn" aria-label="다음 달">▶</button>
+        <button type="button" class="btn-secondary btn-small" id="thisMonthBtn">이번 달</button>
+        <span class="afterschool-cal__count" id="monthCount"></span>
+      </div>
+      <div class="afterschool-cal" id="calendar"><div class="student-list__empty">불러오는 중...</div></div>
+
+      <div class="afterschool-range">
+        <div class="field">
+          <label for="rangeFrom">기간 일괄 — 시작일</label>
+          <input id="rangeFrom" type="date">
+        </div>
+        <div class="field">
+          <label for="rangeTo">종료일</label>
+          <input id="rangeTo" type="date">
+        </div>
+        <div class="field">
+          <label>요일</label>
+          <div class="day-toggle-row" id="rangeDays"></div>
+        </div>
+        <div class="roster-form__actions afterschool-range__actions">
+          <button type="button" class="btn-secondary" id="rangeClearBtn">기간 해제</button>
+          <button type="button" class="btn-add" id="rangeSetBtn">기간 선택</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-heading">요일별 방과후 학생 등록</div>
+  <div class="section-subtext">
+    요일을 고르고 그 요일에 방과후를 하는 학생들의 학번을 붙여넣으면, 그 학생들의 방과후 요일에 그 요일이 켜집니다(다른 요일은 그대로).
+    엑셀의 학번 열을 그대로 복사해도 되고, "10305 홍길동"처럼 이름이 같이 있어도 됩니다.
+  </div>
+  <div class="roster-form-wrap">
+    <div class="roster-form">
+      <div class="field">
+        <label>요일</label>
+        <div class="day-toggle-row" id="weekdayDays"></div>
+      </div>
+      <div class="field">
+        <label for="weekdayInput">학번 붙여넣기</label>
+        <textarea id="weekdayInput" rows="6" placeholder="10305
+10302
+20101"></textarea>
+      </div>
+      <label class="remember-row">
+        <input type="checkbox" id="weekdayReplace">
+        목록에 없는 학생은 이 요일을 끄기 (그 요일 방과후 명단을 이 목록으로 통째로 바꿈)
+      </label>
+      <div class="bulk-preview" id="weekdayPreview"></div>
+      <div class="roster-form__actions">
+        <button type="button" class="btn-add" id="weekdaySaveBtn" disabled>저장 (0명)</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-heading">학생별 방과후 요일 일괄 등록(학생마다 요일 지정)</div>
+  <div class="section-subtext">
+    한 줄에 한 명씩 "학번[탭]요일"로 붙여넣으세요. 요일은 "월수금", "월,수,금", "화 목"처럼 적고, 비우거나 "없음"이면 방과후 요일을 모두 끕니다.
+    엑셀에서 월~금 다섯 칸에 O/X(또는 1/0)로 적은 표도 됩니다(학번 · 월 · 화 · 수 · 목 · 금). 학번 앞에 이름 칸이 있어도 됩니다.
+  </div>
+  <div class="roster-form-wrap">
+    <div class="roster-form">
+      <div class="field">
+        <label for="daysInput">학번 · 요일 붙여넣기</label>
+        <textarea id="daysInput" rows="6" placeholder="10305	월수금
+10302	화,목
+20101	O	X	O	X	O
+30202	없음"></textarea>
+      </div>
+      <div class="bulk-preview" id="daysPreview"></div>
+      <div class="roster-form__actions">
+        <button type="button" class="btn-add" id="daysSaveBtn" disabled>일괄 저장 (0명)</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script type="module" src="./js/afterschool.js"></script>
+</body>
+</html>

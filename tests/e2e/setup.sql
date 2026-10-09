@@ -32,3 +32,5 @@ create trigger e2e_notify after insert or update or delete on public.outing_requ
   for each row execute function e2e.notify_change();
 create trigger e2e_notify after insert or update or delete on public.outings
   for each row execute function e2e.notify_change();
+create trigger e2e_notify after insert or update or delete on public.afterschool_dates
+  for each row execute function e2e.notify_change();

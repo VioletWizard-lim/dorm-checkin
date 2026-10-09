@@ -135,6 +135,7 @@ Deno.test("only active staff may call, and only for today's outings", async () =
   await assertHttpError(handleNotifyOuting({ date: TODAY, studentId: "st1" }, fakeDeps({ caller: profile({ kind: "student", role: "student" }) }).deps), 403);
   await assertHttpError(handleNotifyOuting({ date: TODAY, studentId: "st1" }, fakeDeps({ caller: profile({ role: null }) }).deps), 403);
   await assertHttpError(handleNotifyOuting({ date: TODAY, studentId: "st1" }, fakeDeps({ caller: profile({ role: "dormStaff" }) }).deps), 403);
+  await assertHttpError(handleNotifyOuting({ date: TODAY, studentId: "st1" }, fakeDeps({ caller: profile({ role: "afterschoolTeacher" }) }).deps), 403);
   await assertHttpError(handleNotifyOuting({ date: "2026-10-07", studentId: "st1" }, fakeDeps().deps), 400);
   await assertHttpError(handleNotifyOuting({ date: TODAY }, fakeDeps().deps), 400);
 });
