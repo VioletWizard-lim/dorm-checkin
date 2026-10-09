@@ -102,6 +102,8 @@ test.describe("계정 관리", () => {
 
   test("교사 계정 일괄 생성: 미리보기의 비밀번호로 바로 로그인된다", async ({ env, openAs, openOtherAs, page }) => {
     await openAs("admin01", "/accounts.html");
+    await page.getByRole("tab", { name: "교사 계정 등록" }).click();
+    await expect(page.locator("#accountList")).toBeHidden(); // 등록 탭에서는 계정 목록이 안 보인다
     await page.fill("#bulkAccountInput", "NewT1\t새교사\nnewt2\t둘째교사\tmypass99\nadmin01\t중복\nbad id\t오류");
     await expect(page.locator("#bulkAccountPreview .bulk-preview__row")).toHaveCount(3);
     await expect(page.locator("#bulkAccountPreview .bulk-preview__row").first()).toContainText("newt1 · 새교사 · 교사 · 비밀번호");
@@ -119,6 +121,8 @@ test.describe("계정 관리", () => {
     await expect(results.nth(2)).toContainText("이미 사용 중인 아이디입니다.");
     await expect(page.locator("#resultCopy")).toHaveValue(`newt1\t새교사\t${autoPassword}\nnewt2\t둘째교사\tmypass99`);
 
+    await page.getByRole("tab", { name: "교사 계정 확인" }).click();
+    await expect(page.locator("#bulkAccountInput")).toBeHidden();
     await expect(row(page, "newt1")).toContainText("teacher");
     expect(await profile(env, "newt2")).toMatchObject({ kind: "staff", role: "teacher", name: "둘째교사" });
     expect(await tryLogin(openOtherAs, "NEWT1", autoPassword)).toBe("ok");
@@ -126,6 +130,7 @@ test.describe("계정 관리", () => {
 
   test("교사 계정 일괄 생성: 역할 이름(한글)을 넣으면 그 역할로, 관리자는 막는다", async ({ env, openAs, page }) => {
     await openAs("admin01", "/accounts.html");
+    await page.getByRole("tab", { name: "교사 계정 등록" }).click();
     await page.fill(
       "#bulkAccountInput",
       ["sup1\t감독1\t자습감독", "dorm2\t기숙2\t기숙사관리자\tdormpass1", "gm2\t학년2\t학년 관리자", "t3\t교사3\t교사", "t4\t교사4\tpw123456", "boss2\t관리2\t관리자", "after2\t방과후2\t방과후 선생님"].join("\n")

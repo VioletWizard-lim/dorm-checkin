@@ -7,6 +7,7 @@ import { supabase, requireStaff, signOutTo, describeError, reportLoadError } fro
 import { getDateKey, escapeHtml } from "./util.js";
 import { liveTable } from "./live-table.js";
 import { groupStudentsByGrade } from "./adapters.js";
+import { readSheetFile } from "./sheet-read.js";
 
 const DAY_LABELS = ["월", "화", "수", "목", "금"];
 const WEEK_HEADERS = ["일", "월", "화", "수", "목", "금", "토"];
@@ -31,6 +32,9 @@ const weekdayInput = document.getElementById("weekdayInput");
 const weekdayReplaceCheck = document.getElementById("weekdayReplace");
 const weekdayPreviewEl = document.getElementById("weekdayPreview");
 const weekdaySaveBtn = document.getElementById("weekdaySaveBtn");
+const weekdayFileInput = document.getElementById("weekdayFile");
+const weekdayFileNote = document.getElementById("weekdayFileNote");
+const weekdayRosterBtn = document.getElementById("weekdayRosterBtn");
 const daysInput = document.getElementById("daysInput");
 const daysPreviewEl = document.getElementById("daysPreview");
 const daysSaveBtn = document.getElementById("daysSaveBtn");
@@ -256,17 +260,90 @@ weekdayDaysEl.addEventListener("click", (event) => {
   renderWeekdayPreview();
 });
 
+// ── 방과후 출석부에서 학생 명단 찾기(사용자 요청) ──
+// 머리글 줄(학번 / 학년·반·번호 / 이름 칸)을 찾아 그 칸으로 읽는다. 머리글이 없으면 칸마다 다섯 자리 학번을 찾는다.
+function detectHeader(cells) {
+  const norm = cells.map((c) => (c || "").replace(/\s+/g, ""));
+  const find = (re) => norm.findIndex((c) => re.test(c));
+  const h = {
+    sid: find(/^학번$/),
+    grade: find(/^학년$/),
+    cls: find(/^반$/),
+    num: -1,
+    name: find(/^(이름|성명|학생명|학생이름)$/),
+  };
+  // "번호"가 둘이면(앞은 연번) 반 칸 뒤의 것이 학생 번호
+  const nums = norm.flatMap((c, i) => (/^(번호|번)$/.test(c) ? [i] : []));
+  h.num = nums.find((i) => i > h.cls) ?? nums[0] ?? -1;
+  return h.sid >= 0 || h.name >= 0 || (h.grade >= 0 && h.cls >= 0) ? h : null;
+}
+
+const digitsOf = (text) => ((text || "").match(/\d+/) || [""])[0];
+
+function extractRoster(rows) {
+  const found = new Map(); // id → student
+  const errors = [];
+  const studentsByName = new Map();
+  for (const s of state.studentsBySid.values()) {
+    const list = studentsByName.get(s.name) || [];
+    list.push(s);
+    studentsByName.set(s.name, list);
+  }
+  let header = null;
+  let anyRow = false;
+  rows.forEach((cells, i) => {
+    if (cells.every((c) => !c)) return;
+    const h = detectHeader(cells);
+    if (h) {
+      header = h;
+      return;
+    }
+    const label = `${i + 1}번째 줄`;
+    const name = header && header.name >= 0 ? (cells[header.name] || "").trim() : "";
+    let sids = [];
+    if (header && header.sid >= 0) {
+      const m = /\d{5}/.exec(cells[header.sid] || "");
+      if (m) sids = [m[0]];
+    } else if (header && header.grade >= 0 && header.cls >= 0 && header.num >= 0) {
+      const g = digitsOf(cells[header.grade]);
+      const c = digitsOf(cells[header.cls]);
+      const n = digitsOf(cells[header.num]);
+      if (g && c && n) sids = [`${g.slice(-1)}${c.padStart(2, "0")}${n.padStart(2, "0")}`];
+    } else {
+      sids = cells.flatMap((cell) => (cell || "").match(/(?<!\d)\d{5}(?!\d)/g) || []);
+    }
+    if (sids.length === 0 && name) {
+      const matches = studentsByName.get(name) || [];
+      anyRow = true;
+      if (matches.length === 1) found.set(matches[0].id, matches[0]);
+      else if (matches.length > 1) errors.push(`${label}: ${name} 학생이 여러 명입니다(동명이인). 학번 칸을 넣어 주세요.`);
+      else errors.push(`${label}: ${name} 학생이 명단에 없습니다.`);
+      return;
+    }
+    for (const sid of sids) {
+      anyRow = true;
+      const student = state.studentsBySid.get(sid);
+      if (!student) errors.push(`${label}: 학번 ${sid}${name ? `(${name})` : ""} 학생이 명단에 없습니다.`);
+      else {
+        found.set(student.id, student);
+        if (name && student.name && name !== student.name) {
+          errors.push(`${label}: 학번 ${sid}은(는) 명단에 ${student.name}(으)로 있습니다(출석부: ${name}). 맞는지 확인해 주세요.`);
+        }
+      }
+    }
+  });
+  if (!anyRow && rows.some((cells) => cells.some(Boolean))) errors.push("출석부에서 학생을 찾지 못했습니다(학번·학년/반/번호·이름 칸 확인).");
+  return { found, errors };
+}
+
+function textToRows(text) {
+  return text.split(/\r?\n/).map((line) => line.split("\t").map((c) => c.trim()));
+}
+
 function renderWeekdayPreview() {
   const picked = state.weekdayDays;
-  const sids = weekdayInput.value.match(/(?<!\d)\d{5}(?!\d)/g) || [];
-  const errors = [];
-  const listed = new Map(); // id → student
-  for (const sid of sids) {
-    const student = state.studentsBySid.get(sid);
-    if (!student) errors.push(`학번 ${sid} 학생이 명단에 없습니다.`);
-    else listed.set(student.id, student);
-  }
-  if (weekdayInput.value.trim() && sids.length === 0) errors.push("학번(다섯 자리 숫자)을 찾지 못했습니다.");
+  const { found: listed, errors } = extractRoster(textToRows(weekdayInput.value));
+  renderRosterButton();
   const hasDay = picked.some(Boolean);
   if (!hasDay && listed.size > 0) errors.push("요일을 하나 이상 골라 주세요.");
 
@@ -312,7 +389,68 @@ function renderWeekdayPreview() {
   weekdaySaveBtn.textContent = `저장 (${changes.length}명)`;
 }
 
-weekdayInput.addEventListener("input", renderWeekdayPreview);
+weekdayInput.addEventListener("input", () => {
+  weekdayFileNote.textContent = "";
+  renderWeekdayPreview();
+});
+
+// 출석부 파일(.xlsx·.csv)을 읽어 표를 입력칸에 넣는다 → 미리보기가 명단을 찾아 보여 준다
+weekdayFileInput.addEventListener("change", async () => {
+  const file = weekdayFileInput.files && weekdayFileInput.files[0];
+  weekdayFileInput.value = "";
+  if (!file) return;
+  try {
+    const rows = await readSheetFile(file);
+    weekdayInput.value = rows.map((r) => r.join("\t")).join("\n").replace(/\n+$/, "");
+    weekdayFileNote.textContent = `${file.name}에서 ${rows.filter((r) => r.some(Boolean)).length}줄을 읽었습니다.`;
+    renderWeekdayPreview();
+  } catch (error) {
+    alert(error && error.message ? error.message : "파일을 읽지 못했습니다.");
+  }
+});
+
+// ── 현재 명단 받기(CSV): 고른 요일(안 고르면 방과후 요일이 하나라도 있는 학생) ──
+function currentRoster() {
+  const picked = state.weekdayDays;
+  const anyPicked = picked.some(Boolean);
+  return Array.from(state.studentsBySid.values())
+    .filter((s) => {
+      const days = s.afterschoolDays || [];
+      return anyPicked ? picked.some((p, i) => p && days[i]) : days.some(Boolean);
+    })
+    .sort((a, b) => (a.sid || "").localeCompare(b.sid || ""));
+}
+
+function renderRosterButton() {
+  const dayText = DAY_LABELS.filter((_, i) => state.weekdayDays[i]).join("·");
+  weekdayRosterBtn.textContent = `${dayText ? `${dayText}요일` : "전체"} 현재 명단 받기 (CSV, ${currentRoster().length}명)`;
+}
+
+function csvCell(value) {
+  const text = String(value ?? "");
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+weekdayRosterBtn.addEventListener("click", () => {
+  const roster = currentRoster();
+  if (roster.length === 0) {
+    alert("받을 명단이 없습니다.");
+    return;
+  }
+  const lines = [["학번", "이름", "반", ...DAY_LABELS].map(csvCell).join(",")];
+  for (const s of roster) {
+    const days = s.afterschoolDays || [];
+    lines.push([s.sid, s.name, s.cls, ...DAY_LABELS.map((_, i) => (days[i] ? "O" : ""))].map(csvCell).join(","));
+  }
+  const blob = new Blob(["\uFEFF" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `afterschool-roster_${TODAY_KEY.replace(/-/g, "")}.csv`;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+});
 weekdayReplaceCheck.addEventListener("change", renderWeekdayPreview);
 
 weekdaySaveBtn.addEventListener("click", async () => {
@@ -330,6 +468,7 @@ weekdaySaveBtn.addEventListener("click", async () => {
     return;
   }
   weekdayInput.value = "";
+  weekdayFileNote.textContent = "";
   renderWeekdayPreview();
   alert(`${rows.length}명의 방과후 요일을 저장했습니다(${dayText}).`);
 });

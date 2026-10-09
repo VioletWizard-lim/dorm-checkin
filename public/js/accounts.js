@@ -21,6 +21,36 @@ const resultListEl = document.getElementById("resultList");
 const resultCopyEl = document.getElementById("resultCopy");
 const bulkResetBtn = document.getElementById("bulkResetBtn");
 const accountFilterEl = document.getElementById("accountFilter");
+const pageTabsEl = document.getElementById("pageTabs");
+const listSection = document.getElementById("listSection");
+const createSection = document.getElementById("createSection");
+
+// 화면 탭(사용자 요청): 교사 계정 확인 / 교사 계정 등록. 마지막 탭은 이 기기에 기억한다
+const PAGE_TAB_KEY = "dormcheckin.accountsTab";
+function showPageTab(tab) {
+  const create = tab === "create";
+  listSection.hidden = create;
+  createSection.hidden = !create;
+  for (const btn of pageTabsEl.querySelectorAll("[data-page-tab]")) {
+    const active = btn.dataset.pageTab === tab;
+    btn.classList.toggle("is-active", active);
+    btn.setAttribute("aria-selected", String(active));
+  }
+  try {
+    localStorage.setItem(PAGE_TAB_KEY, tab);
+  } catch {
+    // 저장소를 못 쓰면 기억만 안 함
+  }
+}
+pageTabsEl.addEventListener("click", (event) => {
+  const btn = event.target.closest("[data-page-tab]");
+  if (btn) showPageTab(btn.dataset.pageTab);
+});
+try {
+  if (localStorage.getItem(PAGE_TAB_KEY) === "create") showPageTab("create");
+} catch {
+  // 처음 탭(계정 확인)
+}
 
 // 계정 목록 분류(사용자 요청: 역할별로 나눠 보기). 담임과 담당 반 없는 일반 교사는 나눠서 보여 준다
 const ACCOUNT_GROUPS = [

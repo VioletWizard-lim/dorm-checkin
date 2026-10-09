@@ -208,6 +208,39 @@ select tests.expect_affected(format($$update public.rooms set name = 'x' where i
 select tests.expect_error(format($$select public.resize_room(%L, 1, 1)$$, :room1), 'grade manager cannot resize rooms', '%권한%');
 reset role;
 
+-- 1·2학년이 함께 쓰는 실: 1학년부장은 1학년 학생 자리만 바꾸고, 2학년 학생 자리는 그대로 둔다
+\set room12 '''20000000-0000-0000-0000-000000000012'''
+insert into public.rooms (id, name, grades, rows, cols, seat_map)
+  values (:room12, '1/2학년실', '{1,2}', 2, 2, jsonb_build_object('r0c1', :st2::text));
+update public.profiles set managed_rooms = managed_rooms || array[:room12]::uuid[] where id = :gm1;
+select tests.login(:gm1);
+set role authenticated;
+select tests.expect_error(format($$select public.assign_seat(%L, 'r1c1', %L)$$, :room12, :st2),
+  'grade manager cannot seat another grade in a shared room', '%담당 학년%');
+select tests.expect_error(format($$select public.assign_seat(%L, 'r0c1', %L)$$, :room12, :st1),
+  'grade manager cannot take another grade''s seat', '%다른 학년%');
+select tests.expect_error(format($$select public.unassign_seat(%L, 'r0c1')$$, :room12),
+  'grade manager cannot clear another grade''s seat', '%담당 학년%');
+select tests.expect_error(format($$select public.move_seat(%L, 'r0c1', 'r1c1')$$, :room12),
+  'grade manager cannot move another grade''s student', '%담당 학년%');
+select public.assign_seat(:room12, 'r0c0', :st1);
+select tests.expect_error(format($$select public.move_seat(%L, 'r0c0', 'r0c1')$$, :room12),
+  'grade manager cannot swap with another grade''s student', '%담당 학년%');
+select tests.expect_error(format($$select public.set_room_seats(%L, jsonb_build_object('r0c1', %L))$$, :room12, :st1),
+  'bulk seat map cannot overwrite another grade''s seat', '%다른 학년%');
+select tests.expect_error(format($$select public.set_room_seats(%L, jsonb_build_object('r1c0', %L))$$, :room12, :st2),
+  'bulk seat map cannot place another grade', '%담당 학년%');
+select public.set_room_seats(:room12, jsonb_build_object('r1c0', :st1::text));
+select tests.expect_true(format($$(select seat_map = jsonb_build_object('r1c0', %L, 'r0c1', %L) from public.rooms where id = %L)$$, :st1, :st2, :room12),
+  'bulk seat map keeps another grade''s seats');
+select public.unassign_seat(:room12, 'r1c1'); -- 빈자리는 그대로 통과
+reset role;
+select tests.logout();
+update public.profiles set managed_rooms = array_remove(managed_rooms, :room12::uuid) where id = :gm1;
+delete from public.rooms where id = :room12;
+-- 1학년실의 홍길동 자리를 되돌린다(1/2학년실로 옮기며 비워졌음)
+update public.rooms set seat_map = jsonb_build_object('r0c0', :st1::text) where id = :room1;
+
 -- ─────────────────────────── 관리자: 실·좌석 ───────────────────────────
 select tests.login(:admin);
 set role authenticated;

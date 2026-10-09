@@ -112,6 +112,19 @@ export function userFromProfile(row) {
   };
 }
 
+// 학년부장의 화면 범위(사용자 요청): 체크·현황판·좌석 배치판에서 담당 학년 학생과 담당 실(+ 담당 학년이 앉는 실)만 보인다.
+// 다른 역할은 전체. 화면에서 보이는 것만 줄이는 것이고, 읽기 권한(RLS)은 그대로다
+export function isGradeInView(profile, grade) {
+  if (!profile || profile.role !== "gradeManager") return true;
+  return Boolean((profile.managedGrades || {})[String(grade)]);
+}
+
+export function isRoomInView(profile, roomId, room) {
+  if (!profile || profile.role !== "gradeManager") return true;
+  if ((profile.managedRooms || {})[roomId]) return true;
+  return ((room && room.grades) || []).some((g) => isGradeInView(profile, g));
+}
+
 // 담임 반 { "1": ["1학년 3반"] } → profiles.managed_classes [{ grade: 1, cls: "1학년 3반" }] (grade는 숫자)
 export function managedClassesToRows(classesByGrade) {
   const rows = [];

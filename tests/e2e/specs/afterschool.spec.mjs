@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { test, expect } from "./fixtures.mjs";
 import { STUDENT } from "../harness/seed.mjs";
 import { answerDialogs, todayKst } from "./helpers.mjs";
@@ -84,6 +85,62 @@ test.describe("방과후 일정(관리자)", () => {
     expect(await days(env, STUDENT.minjun)).toEqual([false, true, false, true, false]);
     expect(await days(env, STUDENT.haneul)).toEqual([false, false, false, true, false]);
     expect(await days(env, STUDENT.hong)).toEqual([true, false, true, true, true]);
+  });
+
+  test("방과후 출석부 파일(xlsx)을 불러오면 명단을 찾아 그 요일을 켜고, 현재 명단을 CSV로 받는다", async ({ env, openAs, page }) => {
+    answerDialogs(page, [true]);
+    await openAs("admin01", "/afterschool.html");
+    await page.click("#weekdayDays >> text=수");
+    // 시트 1: 제목 줄 + "번호(연번)·학년·반·번호·이름" 머리글, 시트 2: "학번·이름" 머리글
+    await page.setInputFiles("#weekdayFile", new URL("../fixtures/afterschool-attendance.xlsx", import.meta.url).pathname);
+    await expect(page.locator("#weekdayFileNote")).toHaveText("afterschool-attendance.xlsx에서 8줄을 읽었습니다.");
+    const preview = page.locator("#weekdayPreview");
+    await expect(preview.locator(".bulk-preview__summary")).toHaveText("켜기 3명 · 이미 켜짐 1명");
+    await expect(preview).toContainText("이서연 · 20101 · 2학년 1반 — 없음 → 수");
+    await expect(preview).toContainText("최하늘 · 10302");
+    await expect(preview.locator(".bulk-preview__errors")).toContainText("학번 30909(없는학생) 학생이 명단에 없습니다");
+    await page.click("#weekdaySaveBtn");
+    await expect(page.locator("#weekdayInput")).toHaveValue("");
+    expect(await days(env, STUDENT.minjun)).toEqual([false, false, true, false, false]);
+    expect(await days(env, STUDENT.seoyeon)).toEqual([false, false, true, false, false]);
+    expect(await days(env, STUDENT.haneul)).toEqual([false, false, true, false, false]);
+
+    await expect(page.locator("#weekdayRosterBtn")).toHaveText("수요일 현재 명단 받기 (CSV, 4명)");
+    const [download] = await Promise.all([page.waitForEvent("download"), page.click("#weekdayRosterBtn")]);
+    const csv = readFileSync(await download.path(), "utf8").replace(/^\uFEFF/, "").split("\r\n");
+    expect(csv[0]).toBe("학번,이름,반,월,화,수,목,금");
+    expect(csv.slice(1)).toEqual([
+      "10101,김민준,1학년 1반,,,O,,",
+      "10302,최하늘,1학년 3반,,,O,,",
+      "10305,홍길동,1학년 3반,O,O,O,O,O",
+      "20101,이서연,2학년 1반,,,O,,",
+    ]);
+  });
+
+  test("PDF 출석부(엑셀·한글에서 PDF로 저장한 것)도 글자 위치로 표를 맞춰 명단을 찾는다", async ({ env, openAs, page }) => {
+    await openAs("admin01", "/afterschool.html");
+    await page.click("#weekdayDays >> text=목");
+    // 제목 줄 + "번호(연번)·학년·반·번호·성명·비고·날짜" 머리글, 비고·날짜 칸이 비어 있는 줄도 있음
+    await page.setInputFiles("#weekdayFile", new URL("../fixtures/afterschool-attendance.pdf", import.meta.url).pathname);
+    await expect(page.locator("#weekdayFileNote")).toHaveText(/^afterschool-attendance\.pdf에서 \d+줄을 읽었습니다\.$/);
+    const preview = page.locator("#weekdayPreview");
+    await expect(preview.locator(".bulk-preview__summary")).toHaveText("켜기 3명 · 이미 켜짐 1명");
+    await expect(preview).toContainText("김민준 · 10101 · 1학년 1반 — 없음 → 목");
+    await expect(preview).toContainText("이서연 · 20101");
+    await expect(preview).toContainText("최하늘 · 10302");
+    await expect(preview.locator(".bulk-preview__errors")).toHaveText("7번째 줄: 학번 30909(없는학생) 학생이 명단에 없습니다.");
+    await page.click("#weekdaySaveBtn");
+    await expect(page.locator("#weekdayInput")).toHaveValue("");
+    expect(await days(env, STUDENT.minjun)).toEqual([false, false, false, true, false]);
+  });
+
+  test("이름만 있는 출석부(CSV)도 이름으로 찾는다", async ({ openAs, page }) => {
+    await openAs("admin01", "/afterschool.html");
+    await page.click("#weekdayDays >> text=금");
+    await page.setInputFiles("#weekdayFile", { name: "roster.csv", mimeType: "text/csv", buffer: Buffer.from("성명,비고\n최하늘,\n김민준,\n홍길순,") });
+    const preview = page.locator("#weekdayPreview");
+    await expect(preview.locator(".bulk-preview__summary")).toHaveText("켜기 2명");
+    await expect(preview.locator(".bulk-preview__errors")).toContainText("홍길순 학생이 명단에 없습니다");
   });
 
   test("학생별 방과후 요일을 붙여넣어 한 번에 저장한다", async ({ env, openAs, page }) => {
