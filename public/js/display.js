@@ -1,5 +1,5 @@
 import { requireStaff, signOutTo, reportLoadError } from "./supabase-client.js";
-import { getDateKey, isOnLeave, escapeHtml, formatToday, formatTime, todayWeekdayIndex } from "./util.js";
+import { getDateKey, isOnLeave, escapeHtml, formatToday, formatTime, todayWeekdayIndex, outingBanOn, outingBanText } from "./util.js";
 import { liveTable } from "./live-table.js";
 import {
   GRADES,
@@ -91,6 +91,12 @@ function renderRoomChips() {
   chipsEl.innerHTML = chips.join("");
 }
 
+// 외출 금지 학생 표시(사용자 요청)
+function banChipFor(student) {
+  const ban = outingBanOn(student, TODAY_KEY);
+  return ban ? ` <span class="ban-chip">${escapeHtml(outingBanText(ban))}</span>` : "";
+}
+
 function renderOutingPanel(students, statuses, listEl, countEl, extraLabel, emptyText) {
   const statusList = Array.isArray(statuses) ? statuses : [statuses];
   // 외출 예정(승인됐지만 외출 시각 전)은 외출중 패널 맨 아래에 따로 표시하고 인원에서는 뺀다.
@@ -121,7 +127,7 @@ function renderOutingPanel(students, statuses, listEl, countEl, extraLabel, empt
         <div class="display-card${scheduled ? " display-card--scheduled" : ""}">
           <div class="display-card__avatar">${escapeHtml((s.name || "?").charAt(0))}</div>
           <div class="display-card__info">
-            <div class="display-card__name">${escapeHtml(s.name || "이름 없음")}</div>
+            <div class="display-card__name">${escapeHtml(s.name || "이름 없음")}${banChipFor(s)}</div>
             <div class="display-card__meta">학번 ${escapeHtml(s.sid || "-")} · ${escapeHtml(s.cls || "-")}</div>
           </div>
           <div class="display-card__extra">${escapeHtml((outing && outing.startTime) || formatTime(outing && outing.since))} ${scheduled ? "외출 예정" : extraLabel}</div>
@@ -154,7 +160,7 @@ function renderAfterschoolPanel(students) {
         <div class="display-card">
           <div class="display-card__avatar">${escapeHtml((s.name || "?").charAt(0))}</div>
           <div class="display-card__info">
-            <div class="display-card__name">${escapeHtml(s.name || "이름 없음")}</div>
+            <div class="display-card__name">${escapeHtml(s.name || "이름 없음")}${banChipFor(s)}</div>
             <div class="display-card__meta">학번 ${escapeHtml(s.sid || "-")} · ${escapeHtml(s.cls || "-")}</div>
           </div>
           <div class="display-card__extra">방과후</div>
@@ -181,7 +187,7 @@ function renderLeavePanel(leaveStudents) {
         <div class="display-card">
           <div class="display-card__avatar">${escapeHtml((s.name || "?").charAt(0))}</div>
           <div class="display-card__info">
-            <div class="display-card__name">${escapeHtml(s.name || "이름 없음")}</div>
+            <div class="display-card__name">${escapeHtml(s.name || "이름 없음")}${banChipFor(s)}</div>
             <div class="display-card__meta">학번 ${escapeHtml(s.sid || "-")} · ${escapeHtml(s.cls || "-")}</div>
           </div>
           <div class="display-card__extra">~${escapeHtml(leave.to || "")}</div>

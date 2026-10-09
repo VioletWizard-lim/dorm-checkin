@@ -619,6 +619,53 @@ delete from public.profiles where id = :aft;
 delete from auth.users where id = :aft;
 delete from public.afterschool_dates;
 
+-- ─────────────────────────── 외출 금지(학년부장·관리자) ───────────────────────────
+delete from public.outings where student_id = :st1 and date = public.today_kst();
+delete from public.outing_requests where student_id = :st1 and status = 'pending';
+select tests.login(:t13);
+set role authenticated;
+select tests.expect_error(format($$update public.students set ban_from = public.today_kst(), ban_to = public.today_kst() + 3 where id = %L$$, :st1),
+  'homeroom teacher cannot set an outing ban', '%학년부장·관리자만%');
+reset role;
+select tests.login(:dorm);
+set role authenticated;
+select tests.expect_error(format($$update public.students set ban_from = public.today_kst(), ban_to = public.today_kst() + 3 where id = %L$$, :st1),
+  'dorm staff cannot set an outing ban', '%학년부장·관리자만%');
+reset role;
+select tests.login(:gm1);
+set role authenticated;
+select tests.expect_affected(format($$update public.students set ban_from = public.today_kst(), ban_to = public.today_kst() + 3 where id = %L$$, :st2), 0,
+  'grade manager cannot ban another grade');
+select tests.expect_error(format($$update public.students set ban_from = public.today_kst() where id = %L$$, :st1),
+  'ban needs both dates', '%students_ban_pair%');
+select tests.expect_affected(format($$update public.students set ban_from = public.today_kst(), ban_to = public.today_kst() + 3, ban_reason = '벌점' where id = %L$$, :st1), 1,
+  'grade manager bans own grade');
+reset role;
+select tests.login(:s1);
+set role authenticated;
+select tests.expect_error($$select public.create_outing_request('병원', '23:58', '23:59')$$, 'banned student cannot request', '%외출 금지 기간%');
+reset role;
+select tests.login(:t13);
+set role authenticated;
+select tests.expect_error(format($$insert into public.outings (date, student_id, status, expected_return) values (public.today_kst(), %L, 'out', '23:59')$$, :st1),
+  'homeroom teacher cannot check out a banned student', '%학년부장·관리자만 외출 처리%');
+select tests.expect_affected(format($$insert into public.outings (date, student_id, status) values (public.today_kst(), %L, 'away')$$, :st1), 1,
+  'a banned student can still be marked away');
+select tests.expect_affected(format($$update public.outings set status = 'in' where student_id = %L and date = public.today_kst()$$, :st1), 1,
+  'and back in');
+reset role;
+select tests.login(:gm1);
+set role authenticated;
+select tests.expect_affected(format($$update public.outings set status = 'out', expected_return = '23:59' where student_id = %L and date = public.today_kst()$$, :st1), 1,
+  'grade manager can still check out a banned student');
+select tests.expect_affected(format($$update public.outings set status = 'in' where student_id = %L and date = public.today_kst()$$, :st1), 1,
+  'grade manager returns the student');
+select tests.expect_affected(format($$update public.students set ban_from = null, ban_to = null, ban_reason = null where id = %L$$, :st1), 1,
+  'grade manager lifts the ban');
+reset role;
+select tests.logout();
+delete from public.outings where student_id = :st1 and date = public.today_kst();
+
 -- ─────────────────────────── service_role ───────────────────────────
 -- 이전 스크립트·Edge Function이 쓰는 역할: RLS를 우회하고 모든 테이블을 읽고 쓸 수 있어야 한다.
 set role service_role;
