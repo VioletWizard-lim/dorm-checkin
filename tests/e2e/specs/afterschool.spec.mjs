@@ -87,6 +87,23 @@ test.describe("방과후 일정(관리자)", () => {
     expect(await days(env, STUDENT.hong)).toEqual([true, false, true, true, true]);
   });
 
+  test("빼기: 잘못 넣은 출석부를 다시 불러와 그 요일에서 뺀다(다른 요일은 그대로)", async ({ env, openAs, page }) => {
+    const dialogs = answerDialogs(page, [true, true]);
+    await openAs("admin01", "/afterschool.html");
+    await page.click("#weekdayDays >> text=수");
+    await page.fill("#weekdayInput", "10305\n10101");
+    await page.check("#weekdayRemove");
+    const preview = page.locator("#weekdayPreview");
+    await expect(preview.locator(".bulk-preview__summary")).toHaveText("이 요일에서 빼기 1명 · 원래 없음 1명");
+    await expect(preview).toContainText("홍길동 · 10305 · 1학년 3반 — 월·화·수·목·금 → 월·화·목·금");
+    await expect(page.locator("#weekdaySaveBtn")).toHaveText("저장 (1명)");
+    await page.click("#weekdaySaveBtn");
+    await expect(page.locator("#weekdayInput")).toHaveValue("");
+    expect(dialogs.some((d) => d.type === "confirm" && d.message.includes("불러온 학생 1명을 수요일 방과후에서 뺍니다"))).toBe(true);
+    expect(await days(env, STUDENT.hong)).toEqual([true, true, false, true, true]);
+    expect(await days(env, STUDENT.minjun)).toEqual([false, false, false, false, false]);
+  });
+
   test("방과후 출석부 파일(xlsx)을 불러오면 명단을 찾아 그 요일을 켜고, 현재 명단을 CSV로 받는다", async ({ env, openAs, page }) => {
     answerDialogs(page, [true]);
     await openAs("admin01", "/afterschool.html");
