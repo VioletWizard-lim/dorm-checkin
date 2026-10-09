@@ -104,7 +104,7 @@ test.describe("계정 관리", () => {
     await openAs("admin01", "/accounts.html");
     await page.fill("#bulkAccountInput", "NewT1\t새교사\nnewt2\t둘째교사\tmypass99\nadmin01\t중복\nbad id\t오류");
     await expect(page.locator("#bulkAccountPreview .bulk-preview__row")).toHaveCount(3);
-    await expect(page.locator("#bulkAccountPreview .bulk-preview__row").first()).toContainText("newt1 · 새교사 · 비밀번호");
+    await expect(page.locator("#bulkAccountPreview .bulk-preview__row").first()).toContainText("newt1 · 새교사 · 교사 · 비밀번호");
     await expect(page.locator("#bulkAccountPreview .bulk-preview__errors")).toContainText("4번째 줄");
     const autoPassword = /비밀번호 (\S+) \(자동 생성\)/.exec(
       await page.locator("#bulkAccountPreview .bulk-preview__row").first().textContent()
@@ -122,6 +122,39 @@ test.describe("계정 관리", () => {
     await expect(row(page, "newt1")).toContainText("teacher");
     expect(await profile(env, "newt2")).toMatchObject({ kind: "staff", role: "teacher", name: "둘째교사" });
     expect(await tryLogin(openOtherAs, "NEWT1", autoPassword)).toBe("ok");
+  });
+
+  test("교사 계정 일괄 생성: 역할 이름(한글)을 넣으면 그 역할로, 관리자는 막는다", async ({ env, openAs, page }) => {
+    await openAs("admin01", "/accounts.html");
+    await page.fill(
+      "#bulkAccountInput",
+      ["sup1\t감독1\t자습감독", "dorm2\t기숙2\t기숙사관리자\tdormpass1", "gm2\t학년2\t학년 관리자", "t3\t교사3\t교사", "t4\t교사4\tpw123456", "boss2\t관리2\t관리자"].join("\n")
+    );
+    const preview = page.locator("#bulkAccountPreview .bulk-preview__row");
+    await expect(preview).toHaveCount(5);
+    await expect(preview.nth(0)).toContainText("sup1 · 감독1 · 자습감독 · 비밀번호");
+    await expect(preview.nth(1)).toContainText("dorm2 · 기숙2 · 기숙사관리자 · 비밀번호 dormpass1");
+    await expect(preview.nth(2)).toContainText("gm2 · 학년2 · 학년관리자");
+    await expect(preview.nth(4)).toContainText("t4 · 교사4 · 교사 · 비밀번호 pw123456"); // 역할 없이 비밀번호만(예전 형식)
+    await expect(page.locator("#bulkAccountPreview .bulk-preview__errors")).toContainText("6번째 줄: 관리자는 일괄 생성으로 만들 수 없습니다");
+
+    await page.click("#bulkCreateBtn");
+    await expect(page.locator("#resultList .student-card")).toHaveCount(5);
+    const roles = await env.sql("select login_id, role from public.profiles where login_id = any($1) order by login_id", [["dorm2", "gm2", "sup1", "t3", "t4", "boss2"]]);
+    expect(roles).toEqual([
+      { login_id: "dorm2", role: "dormStaff" },
+      { login_id: "gm2", role: "gradeManager" },
+      { login_id: "sup1", role: "studyHallSupervisor" },
+      { login_id: "t3", role: "teacher" },
+      { login_id: "t4", role: "teacher" },
+    ]);
+    // 서버도 관리자 생성은 거부한다
+    const message = await page.evaluate(async () => {
+      const { callFunction } = await import("/js/supabase-client.js");
+      const data = await callFunction("staff-accounts", { action: "create", accounts: [{ loginId: "boss3", name: "x", role: "admin" }] });
+      return data.results[0].error;
+    });
+    expect(message).toBe("관리자는 일괄 생성으로 만들 수 없습니다.");
   });
 
   test("비밀번호 재발급: 새 비밀번호만 통한다(개별·일괄)", async ({ openAs, openOtherAs, page }) => {
