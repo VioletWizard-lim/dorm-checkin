@@ -76,18 +76,13 @@
 
   <div class="section-heading">요일별 방과후 학생 등록</div>
   <div class="section-subtext">
-    요일을 고르고(출석부에 요일이나 날짜가 있으면 자동으로 골라집니다) 그 요일 <b>방과후 출석부</b>(엑셀 .xlsx·CSV·PDF 파일)를 불러오거나 표를 복사해 붙여넣으면, 출석부에서 학생 명단을 찾아 그 학생들의 방과후 요일에 그 요일을 켭니다(다른 요일은 그대로).
+    <b>방과후 출석부</b>(엑셀 .xlsx·CSV·PDF 파일)를 불러오거나 표를 복사해 붙여넣고 → 요일을 고르고(출석부에 요일이나 날짜가 있으면 자동으로 골라집니다) → 저장 방법을 고르면, 출석부에서 찾은 학생들의 방과후 요일에 그 요일을 켭니다(다른 요일은 그대로).
     출석부에 "학번" 칸이 있으면 학번으로, "학년·반·번호" 칸이 있으면 그 세 칸으로, 둘 다 없으면 "이름" 칸으로 찾습니다. 학번만 줄마다 적어도 됩니다.
   </div>
   <div class="roster-form-wrap">
     <div class="roster-form">
       <div class="field">
-        <label>요일</label>
-        <div class="day-toggle-row" id="weekdayDays"></div>
-        <div class="weekday-detect" id="weekdayDetectNote" hidden></div>
-      </div>
-      <div class="field">
-        <label for="weekdayInput">출석부 불러오기 또는 붙여넣기</label>
+        <label for="weekdayInput">1. 출석부 불러오기 또는 붙여넣기</label>
         <div class="afterschool-file-row">
           <label class="btn-secondary btn-small afterschool-file-btn">
             출석부 파일 불러오기 (.xlsx·.csv·.pdf)
@@ -111,7 +106,12 @@
         </div>
       </details>
       <div class="field">
-        <label>저장 방법</label>
+        <label>2. 요일</label>
+        <div class="day-toggle-row" id="weekdayDays"></div>
+        <div class="weekday-detect" id="weekdayDetectNote" hidden></div>
+      </div>
+      <div class="field">
+        <label>3. 저장 방법</label>
         <div class="save-mode">
           <label class="save-mode__option">
             <input type="radio" name="weekdayMode" value="add" checked>
