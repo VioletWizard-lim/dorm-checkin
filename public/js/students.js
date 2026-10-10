@@ -8,7 +8,9 @@ import {
   normalizeLoginId,
   normalizePhone,
   studentToRow,
+  STUDENT_COLUMNS,
 } from "./adapters.js";
+import { addContacts, addLeaveReasons, allOf } from "./private-fields.js";
 
 // 학생 계정 발급 요청 한 번에 보낼 최대 인원(student-accounts 함수 제한)
 const MAX_ACCOUNTS_PER_REQUEST = 200;
@@ -501,8 +503,9 @@ bulkSaveBtn.addEventListener("click", async () => {
   // 새 학생은 한 번에 저장한다 — 하나라도 실패하면 새 학생은 전부 저장되지 않으므로 고친 뒤 다시 누르면 된다.
   const savedWithId = []; // 저장한 학생 중 ID가 있는 학생(저장하면서 계정 발급용)
   if (newRows.length > 0) {
-    const { data: inserted, error } = await supabase.from("students").insert(newRows).select("id, login_id");
-    if (!error) savedWithId.push(...inserted.filter((r) => r.login_id).map((r) => r.id));
+    // 아이디 칸은 다시 읽을 수 없으므로(열 권한) 보낸 순서대로 맞춘다
+    const { data: inserted, error } = await supabase.from("students").insert(newRows).select("id");
+    if (!error) savedWithId.push(...inserted.filter((r, i) => newRows[i] && newRows[i].login_id).map((r) => r.id));
     if (error) {
       alert(`새 학생을 저장하지 못했습니다(정보 갱신도 하지 않았습니다): ${describeStudentSaveError(error)}`);
       renderBulkPreview();
@@ -1078,6 +1081,12 @@ studentForm.addEventListener("submit", async (event) => {
   closeForm();
 });
 
+// 아이디·연락처·이메일(담당 범위)과 명령퇴사 사유는 서버가 허용된 사람에게만 준다(사용자 요청, private-fields.js).
+// 명단 행에 붙여 두면 수정 폼·여러 명 추가가 지금처럼 쓴다. 기숙사부는 연락처를 쓰지 않으므로 읽지 않음
+function studentExtras(rows) {
+  return state.leaveOnly ? addLeaveReasons(rows) : allOf(addContacts, addLeaveReasons)(rows);
+}
+
 function initForGrades(allowedGrades) {
   state.allowedGrades = allowedGrades;
   state.activeGrade = allowedGrades[0] || null;
@@ -1100,7 +1109,9 @@ function initForGrades(allowedGrades) {
 
   studentsLive = liveTable({
     table: "students",
+    select: STUDENT_COLUMNS,
     order: ["id"],
+    augment: studentExtras,
     onRows: (rows) => {
       state.studentsByGrade = groupStudentsByGrade(rows);
       renderRoster();

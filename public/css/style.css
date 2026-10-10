@@ -1586,6 +1586,27 @@ body.is-dragging-seat * {
   gap: 12px;
 }
 
+/* 처음 받은 비밀번호를 쓰는 학생에게(비밀번호 바꾸기 안내) */
+.password-notice {
+  background: #FFF6E0;
+  border: 1px solid #E8C468;
+  border-radius: var(--radius-card);
+  padding: 14px 16px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #6B4E00;
+}
+
+.password-notice a {
+  color: inherit;
+  font-weight: 700;
+}
+
+.field-hint--ok {
+  color: #2F7A3E;
+  font-weight: 600;
+}
+
 .student-section__title {
   font-size: 15px;
   font-weight: 800;

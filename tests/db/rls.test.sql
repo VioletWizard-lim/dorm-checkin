@@ -106,15 +106,15 @@ insert into public.profiles (id, login_id, kind, role, name, disabled, managed_g
 -- ─────────────────────────── anon ───────────────────────────
 select tests.logout();
 set role anon;
-select tests.expect_error('select * from public.students', 'anon cannot read students', '%permission denied%');
-select tests.expect_error('select * from public.outings', 'anon cannot read outings', '%permission denied%');
+select tests.expect_error('select id from public.students', 'anon cannot read students', '%permission denied%');
+select tests.expect_error('select student_id from public.outings', 'anon cannot read outings', '%permission denied%');
 select tests.expect_error($$select public.create_outing_request('x')$$, 'anon cannot call RPC', '%permission denied%');
 reset role;
 
 -- ─────────────────── 역할 없는 계정 · 비활성 계정 ───────────────────
 select tests.login(:norole);
 set role authenticated;
-select tests.expect_count('select * from public.students', 0, 'role-less account sees no students');
+select tests.expect_count('select id from public.students', 0, 'role-less account sees no students');
 select tests.expect_count('select * from public.rooms', 0, 'role-less account sees no rooms');
 select tests.expect_count('select * from public.profiles', 1, 'role-less account sees only own profile');
 select tests.expect_error(format($$insert into public.outings (date, student_id, status) values (current_date, %L, 'out')$$, :st1),
@@ -123,13 +123,14 @@ reset role;
 
 select tests.login(:dis);
 set role authenticated;
-select tests.expect_count('select * from public.students', 0, 'disabled account sees no students');
+select tests.expect_count('select id from public.students', 0, 'disabled account sees no students');
 reset role;
 
 -- ─────────────────────────── 관리자 ───────────────────────────
 select tests.login(:admin);
 set role authenticated;
-select tests.expect_count('select * from public.students', 3, 'admin sees all students');
+select tests.expect_count('select id from public.students', 3, 'admin sees all students');
+select tests.expect_count('select * from public.student_contacts()', 3, 'admin reads every student contact');
 select tests.expect_count('select * from public.profiles', 10, 'admin sees all profiles');
 select tests.expect_affected(format($$update public.students set name = '김민준' where id = %L$$, :st2), 1, 'admin edits any student');
 select tests.expect_affected(format($$update public.profiles set role = 'gradeManager', managed_grades = '{2}' where id = %L$$, :tplain), 1,
@@ -149,7 +150,15 @@ reset role;
 -- ─────────────────────────── 담임(1학년 3반) ───────────────────────────
 select tests.login(:t13);
 set role authenticated;
-select tests.expect_count('select * from public.students', 3, 'staff reads every student');
+select tests.expect_count('select id from public.students', 3, 'staff reads every student');
+-- 아이디·연락처·이메일은 담당 범위만(사용자 요청 — F12로 전교생 연락처가 보이던 문제)
+select tests.expect_error('select phone from public.students', 'staff cannot read phone column directly', '%permission denied%');
+select tests.expect_error('select login_id from public.students', 'staff cannot read login id column directly', '%permission denied%');
+select tests.expect_error('select * from public.students', 'select * is refused (contact columns)', '%permission denied%');
+select tests.expect_count('select * from public.student_contacts()', 1, 'homeroom reads only own class contacts');
+select tests.expect_true(format($$(select login_id from public.student_contacts() where id = %L) = 'hong'$$, :st1), 'homeroom contact row has the login id');
+select tests.expect_count($$select * from public.profiles where kind = 'student'$$, 1, 'homeroom sees only own class student accounts');
+select tests.expect_count($$select * from public.profiles where kind = 'staff'$$, 8, 'homeroom still sees every staff profile');
 select tests.expect_affected(format($$update public.students set sid = '10305' where id = %L$$, :st1), 1, 'homeroom edits own class');
 select tests.expect_affected(format($$update public.students set sid = '10101' where id = %L$$, :st3), 0, 'homeroom cannot edit other class');
 select tests.expect_error(format($$update public.students set cls = '1학년 1반' where id = %L$$, :st1),
@@ -167,6 +176,8 @@ select tests.login(:gm1);
 set role authenticated;
 select tests.expect_affected(format($$update public.students set sid = sid where id = %L$$, :st3), 1, 'grade manager edits own grade');
 select tests.expect_affected(format($$update public.students set sid = sid where id = %L$$, :st2), 0, 'grade manager cannot edit other grade');
+select tests.expect_count('select * from public.student_contacts()', 2, 'grade manager reads own grade contacts');
+select tests.expect_count($$select * from public.profiles where kind = 'student'$$, 1, 'grade manager sees own grade student accounts');
 select public.assign_seat(:room1, 'r0c0', :st1);
 select tests.expect_true(format($$(select seat_map ->> 'r0c0' from public.rooms where id = %L) = %L$$, :room1, :st1),
   'grade manager assigns a seat in managed room');
@@ -260,7 +271,9 @@ reset role;
 -- ─────────────────── 기숙사부: 보기 + 명령퇴사 기간만 ───────────────────
 select tests.login(:dorm);
 set role authenticated;
-select tests.expect_count('select * from public.students', 3, 'dorm staff reads all students');
+select tests.expect_count('select id from public.students', 3, 'dorm staff reads all students');
+select tests.expect_count('select * from public.student_contacts()', 0, 'dorm staff reads no contacts');
+select tests.expect_count($$select * from public.profiles where kind = 'student'$$, 0, 'dorm staff sees no student accounts');
 select tests.expect_count('select * from public.rooms', 2, 'dorm staff reads rooms');
 select tests.expect_affected(format($$update public.students set leave_from = current_date, leave_to = current_date + 3, leave_reason = '명령퇴사' where id = %L$$, :st2),
   1, 'dorm staff sets a leave period on any student');
@@ -288,8 +301,9 @@ reset role;
 -- ─────────────────────────── 학생 ───────────────────────────
 select tests.login(:s1);
 set role authenticated;
-select tests.expect_count('select * from public.students', 1, 'student sees only own student row');
+select tests.expect_count('select id from public.students', 1, 'student sees only own student row');
 select tests.expect_count('select * from public.profiles', 1, 'student sees only own profile');
+select tests.expect_count('select * from public.student_contacts()', 0, 'student reads no contacts');
 select tests.expect_count('select * from public.rooms', 0, 'student cannot read rooms');
 select tests.expect_affected(format($$update public.students set name = 'x' where id = %L$$, :st1), 0, 'student cannot edit own row');
 select tests.expect_error(format($$insert into public.outings (date, student_id, status) values (current_date, %L, 'in')$$, :st1),
@@ -301,7 +315,7 @@ select tests.expect_error($$select public.create_outing_request('병원', '17:00
 select tests.expect_error($$select public.create_outing_request('병원')$$, 'a request needs an expected return time', '%예상 복귀 시각%');
 select tests.expect_error($$select public.create_outing_request('병원', '15:00', '15:30')$$, 'expected return must be after the start time', '%외출 시각보다 늦어야%');
 select public.create_outing_request('병원 진료', '17:00', '15:30');
-select tests.expect_count('select * from public.outing_requests', 1, 'student sees own request');
+select tests.expect_count('select id from public.outing_requests', 1, 'student sees own request');
 select tests.expect_error($$select public.create_outing_request('또 나가요')$$, 'second pending request is rejected', '%기다리는%');
 select tests.expect_error(format($$select public.assign_seat(%L, 'r0c0', %L)$$, :room1, :st1), 'student cannot assign seats', '%권한%');
 reset role;
@@ -311,7 +325,7 @@ select id as req1 from public.outing_requests where student_id = :st1 \gset
 
 select tests.login(:s2);
 set role authenticated;
-select tests.expect_count('select * from public.outing_requests', 0, 'student cannot see other requests');
+select tests.expect_count('select id from public.outing_requests', 0, 'student cannot see other requests');
 select tests.expect_error(format($$select public.cancel_outing_request(%L)$$, :'req1'), 'student cannot cancel other request', '%취소할 수 있는%');
 reset role;
 
@@ -348,18 +362,24 @@ select tests.expect_true(format($$(select status = 'approved' and decided_by = %
 select tests.login(:s1);
 set role authenticated;
 select tests.expect_error($$select public.create_outing_request('또 나가요')$$, 'student already out cannot request', '%외출 중%');
-select tests.expect_count('select * from public.outings', 1, 'student sees own outing');
+select tests.expect_count('select student_id from public.outings', 1, 'student sees own outing');
 reset role;
 
 -- 복귀 체크하면 외출 시각·사유·예상 복귀가 함께 비워진다
 select tests.login(:t13);
 set role authenticated;
 select tests.expect_affected(format($$update public.outings set status = 'in' where student_id = %L and date = public.today_kst()$$, :st1), 1, 'teacher marks return');
-select tests.expect_true(format($$(select start_time is null and reason is null and expected_return is null and request_id is null
-  from public.outings where student_id = %L and date = public.today_kst())$$, :st1), 'return clears start time and request fields');
+-- 사유 칸은 읽을 수 없어도(열 권한) 쓸 수는 있다(화면은 update → 없으면 insert. upsert는 사유를 읽어야 해서 안 씀)
+select tests.expect_error('select reason from public.outings', 'reason column is not directly readable', '%permission denied%');
+select tests.expect_error('select reason from public.outing_requests', 'request reason column is not directly readable', '%permission denied%');
+select tests.expect_true(format($$(select start_time is null and expected_return is null and request_id is null
+  from public.outings where student_id = %L and date = public.today_kst())
+  and not exists (select 1 from public.outing_reasons(public.today_kst()) where student_id = %L)$$, :st1, :st1), 'return clears start time and request fields');
 select tests.expect_error(format($$update public.outings set status = 'out' where student_id = %L and date = public.today_kst()$$, :st1),
   'checking out needs an expected return time', '%예상 복귀 시각%');
-select tests.expect_affected(format($$update public.outings set status = 'out', expected_return = '9:30' where student_id = %L and date = public.today_kst()$$, :st1), 1, 'teacher marks out again');
+select tests.expect_affected(format($$update public.outings set status = 'out', expected_return = '9:30', reason = '병원' where student_id = %L and date = public.today_kst()$$, :st1), 1, 'teacher marks out again (writes a reason without reading it)');
+select tests.expect_true(format($$(select reason = '병원' from public.outing_reasons(public.today_kst()) where student_id = %L)$$, :st1),
+  'homeroom reads the reason through the RPC');
 select tests.expect_true(format($$(select expected_return = '09:30' from public.outings where student_id = %L and date = public.today_kst())$$, :st1),
   'expected return is normalized to HH:MM');
 -- 다른 학년 학생(2학년 1반)은 담임이 외출 처리할 수 없다(담당 범위만)
@@ -596,7 +616,7 @@ insert into auth.users (id, email) values (:aft, 'aft01@test.local');
 insert into public.profiles (id, login_id, kind, role, name) values (:aft, 'aft01', 'staff', 'afterschoolTeacher', '방과후');
 select tests.login(:aft);
 set role authenticated;
-select tests.expect_count('select * from public.students', 2, 'afterschool teacher reads students');
+select tests.expect_count('select id from public.students', 2, 'afterschool teacher reads students');
 select tests.expect_affected($$insert into public.afterschool_dates (date) values ('2026-10-14')$$, 1, 'afterschool teacher adds afterschool dates');
 select tests.expect_affected($$delete from public.afterschool_dates where date = '2026-10-14'$$, 1, 'afterschool teacher removes afterschool dates');
 select tests.expect_affected(format($$update public.students set afterschool_days = '{t,f,t,f,f}' where id = %L$$, :st2), 1, 'afterschool teacher sets afterschool days of any student');
@@ -666,11 +686,49 @@ reset role;
 select tests.logout();
 delete from public.outings where student_id = :st1 and date = public.today_kst();
 
+-- ─────────── 사유는 필요한 역할만(사용자 요청) ───────────
+-- 외출·신청 사유: 관리자·학년부장·담임·자습 감독(학생은 자기 것). 명령퇴사 사유: 관리자·학년부장·담임·기숙사부(학생은 자기 것)
+insert into public.outings (date, student_id, status, reason, expected_return) values
+  ('2026-01-07', :st1, 'out', '병원 진료', '20:00'),
+  ('2026-01-07', :st2, 'out', '학원', '21:00');
+update public.students set leave_reason = '생활 규정 위반' where id in (:st1, :st2);
+create function tests.reason_counts() returns text language sql as $$
+  select (select count(*) from public.outing_reasons('2026-01-07')) || '/' || (select count(*) from public.leave_reasons())
+$$;
+grant execute on function tests.reason_counts() to authenticated;
+select tests.login(:admin);   set role authenticated;
+select tests.expect_true($$tests.reason_counts() = '2/2'$$, 'admin reads outing and leave reasons');
+reset role;
+select tests.login(:gm1);     set role authenticated;
+select tests.expect_true($$tests.reason_counts() = '2/2'$$, 'grade manager reads outing and leave reasons');
+reset role;
+select tests.login(:t13);     set role authenticated;
+select tests.expect_true($$tests.reason_counts() = '2/2'$$, 'homeroom reads outing and leave reasons');
+reset role;
+select tests.login(:sup);     set role authenticated;
+select tests.expect_true($$tests.reason_counts() = '2/0'$$, 'study hall supervisor reads outing reasons only');
+reset role;
+select tests.login(:dorm);    set role authenticated;
+select tests.expect_true($$tests.reason_counts() = '0/2'$$, 'dorm staff reads leave reasons only');
+select tests.expect_error('select leave_reason from public.students', 'leave reason column is not directly readable', '%permission denied%');
+reset role;
+select tests.login(:tplain);  set role authenticated;
+select tests.expect_true($$tests.reason_counts() = '0/0'$$, 'teacher without a class reads no reasons');
+reset role;
+select tests.login(:s1);      set role authenticated;
+select tests.expect_true($$tests.reason_counts() = '1/1'$$, 'student reads only own reasons');
+select tests.expect_true(format($$(select reason = '병원 진료' from public.outing_reasons('2026-01-07') where student_id = %L)$$, :st1),
+  'student sees own outing reason');
+reset role;
+select tests.logout();
+delete from public.outings where date = '2026-01-07' and student_id in (:st1, :st2);
+update public.students set leave_reason = null where id in (:st1, :st2);
+
 -- ─────────────────────────── service_role ───────────────────────────
 -- 이전 스크립트·Edge Function이 쓰는 역할: RLS를 우회하고 모든 테이블을 읽고 쓸 수 있어야 한다.
 set role service_role;
-select tests.expect_count('select * from public.students', 2, 'service role reads every student');
-select tests.expect_count('select * from public.outing_requests', 3, 'service role reads every request');
+select tests.expect_count('select id from public.students', 2, 'service role reads every student');
+select tests.expect_count('select id from public.outing_requests', 3, 'service role reads every request');
 select tests.expect_affected('update public.profiles set name = name', 10, 'service role updates every profile');
 reset role;
 

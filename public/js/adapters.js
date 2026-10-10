@@ -4,6 +4,14 @@
 
 export const GRADES = ["1", "2", "3"];
 
+// 읽을 수 있는 칸(서버 열 권한 — 마이그레이션 20261010010000_student_contacts_scope·20261010020000_reason_scope).
+// 빠진 칸(학생 아이디·연락처·이메일, 명령퇴사 사유, 외출·신청 사유)은 허용된 사람만 private-fields.js의 RPC로 붙인다
+export const STUDENT_COLUMNS = "id,grade,name,sid,cls,afterschool_days,leave_from,leave_to,ban_from,ban_to,ban_reason";
+export const OUTING_COLUMNS =
+  "date,student_id,status,since,start_time,expected_return,checked_by,checked_by_name,request_id,notice";
+export const REQUEST_COLUMNS =
+  "id,date,student_id,requested_by,start_time,expected_return,status,decided_by,decided_by_name,decided_at,reject_reason,created_at";
+
 const EMPTY_DAYS = [false, false, false, false, false];
 
 export function studentFromRow(row) {

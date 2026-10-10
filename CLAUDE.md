@@ -48,6 +48,7 @@
     - `supabase-client.js`: 클라이언트, `requireStaff()`(세션·프로필 확인, 비활성화 계정 로그아웃, 학생 계정은 student.html로, 2시간 자동 로그아웃 시작 — `idle-logout.js`), `requireStudent()`(교직원 계정은 check.html로), `signOutTo()`(이 기기만 로그아웃), `describeError()`, `callFunction()`, `showPageError()`
     - `live-table.js`: 테이블 하나를 "전체 조회 + Realtime 변경 알림이 오면 다시 조회"로 화면에 맞춰 둔다. 1000행씩 나눠 읽고, 구독이 다시 연결될 때·화면이 다시 보일 때 다시 조회하며, Realtime이 안 되면 15초마다 조회한다. `refresh()`는 다시 읽기가 끝나면 풀리는 Promise
     - `util.js`: 화면 공통 도우미(`escapeHtml`·`getDateKey`·`formatTime`·`formatToday`·`isOnLeave`·`todayWeekdayIndex`·`insertTabOnKeydown`). 화면마다 같은 함수를 복사하지 말고 여기서 가져온다. 데이터 로드 오류 안내는 `supabase-client.js`의 `reportLoadError`
+    - `private-fields.js`: 열 권한으로 막아 둔 칸(학생 연락처·사유)을 허용된 사람만 RPC로 읽어 행에 붙이는 `liveTable` `augment` 도우미(`addContacts`·`addOutingReasons`·`addRequestReasons`·`addLeaveReasons`·`allOf`). `live-table.js`의 `augment(rows)`는 조회 뒤 행을 넘기기 전에 불리고, 실패하면 조회 실패처럼 다시 시도
     - `adapters.js`: DB 행(snake_case) ↔ 화면 코드가 쓰는 예전 Firebase 모양(`studentsByGrade`, `seatMap`, `managedClasses` 등) 변환. 화면 렌더링 코드는 예전 모양을 그대로 쓴다
 - 배포
   - main에 `supabase/**`가 들어오면 `supabase-deploy.yml`이 테스트 후 `db push`와 `functions deploy --use-api`를 실행한다
@@ -121,8 +122,9 @@
 ### 3. 기숙사 현황판 (`display.html`)
 - 읽기 전용 모니터링 화면 (사감/당직 교사 PC에 띄워둠)
 - 학년 탭(전체/1/2/3학년)과 실 탭(전체/실 목록, 실 목록은 `rooms`에서 동적으로 읽어옴)으로 각각 필터링 — 두 필터는 동시에(AND로) 적용됨. 학년부장은 담당 학년·담당 실만(check.html 참고)
-- 패널 4개(가로 배치, 화면이 좁으면 줄바꿈): **자리 없음** > **외출중**(빨강 계열) > **명령퇴사** > **오늘 방과후**(파랑 계열, 오늘이 방과후 있는 날(`afterschool_dates`)일 때만 학생의 방과후 요일대로 — 아니면 "오늘은 방과후가 없는 날입니다.") — 명령퇴사 중인 학생은 그 기간 동안 이 패널에만 나타나고 자리 없음·외출중·방과후 패널에서는 제외됨(check.html/students.html 참고)
-- 각 항목: 아바타, 이름(외출 금지 학생은 "외출 금지 ~날짜" 표시), "학번 · 반", 외출/자리 없음 시각 또는 방과후 활동명 또는 명령퇴사 종료일
+- 패널 3개(가로 배치, 화면이 좁으면 줄바꿈): **자리 없음** > **외출중**(빨강 계열) > **오늘 방과후**(파랑 계열, 오늘이 방과후 있는 날(`afterschool_dates`)일 때만 학생의 방과후 요일대로 — 아니면 "오늘은 방과후가 없는 날입니다.")
+- **명령퇴사·외출 금지는 현황판에 보이지 않음**(사용자 요청, 개인정보 — 전자칠판처럼 학생도 보는 화면이라서. 예전에는 명령퇴사 패널과 "외출 금지 ~날짜" 표시가 있었음). 명령퇴사 중인 학생은 그 기간 동안 어느 패널에도 나오지 않음(자리 없음·외출·방과후 판정에서 제외). 체크 화면·좌석 배치판에는 그대로 보임
+- 각 항목: 아바타, 이름, "학번 · 반", 외출/자리 없음 시각 또는 방과후 활동명
 - 항상 **오늘**(화면을 연 날짜) 기준만 표시함 — 지난 날짜 조회는 check.html에서만 가능. 자정을 넘겨 켜 두었다면 새로고침해야 새 날짜로 바뀜
 - Supabase Realtime 구독으로 실시간 갱신(Realtime이 막힌 네트워크에서는 15초마다 갱신)
 
@@ -178,6 +180,7 @@
   - **[비밀번호 목록 파일로 받기 (CSV)]**(사용자 요청): 이 화면에서 발급·재발급한 비밀번호를 문자로 보낸 것까지 모두 CSV(`student-passwords_날짜_시각.csv`, 엑셀용 BOM, 칸: 이름·학번·아이디·비밀번호·구분·전달·시각)로 내려받는다. 비밀번호는 서버에 저장하지 않으므로 관리자가 이 파일로 따로 보관. 그래서 `student-accounts`는 문자로 보냈어도 비밀번호를 응답에 담는다(관리자만 부를 수 있음). 화면 카드에는 문자로 보낸 비밀번호를 그대로 숨김
   - 발급·재발급·삭제는 Edge Function `student-accounts`가 하고, 서버가 담당 범위를 다시 확인함
 - 명단 카드에는 이름과 "학번 · 반 번호"(예: 학번 10305 · 1학년 3반 5번), 방과후 요일, 계정 상태만 보인다 — ID·연락처·이메일은 "수정"을 눌러야 보임(사용자 요청)
+- **보관 기간 = 졸업할 때까지**(사용자 요청, 개인정보): 학생을 지우면 외출 기록(`outings`·`outing_log`)·외출 신청·계정·좌석이 모두 함께 지워진다(외래키 cascade). 졸업식이 끝나면 관리자가 3학년 탭에서 반 단위 삭제로 정리(안내 문구가 반 단위 삭제 칸에 있음)
 - **반 단위 삭제**(관리자만, 사용자 요청 — 테스트로 넣은 반 정리 등): [반 단위 삭제] → 지금 학년 탭의 반을 골라(반마다 인원 표시) [삭제 (N명)] → "삭제"라고 입력해야 진행. `student-accounts`의 `delete-students`(200명씩)가 학생 계정·명단 행을 지우고, 좌석 배정·외출 기록도 함께 지워짐
 - 명단 카드의 "수정"/"삭제"로 기존 학생 정보 수정·삭제. 학생을 삭제하면 좌석표의 그 자리와 외출 기록도 함께 지워진다(서버 트리거·외래키)
 - 학생별 **명령퇴사 기간**(선택) 설정(관리자·기숙사부만): "+ 학생 추가"/"수정" 폼에 시작일·종료일·사유 입력란이 있음. 시작일·종료일은 하나만 입력하면 alert로 막고(둘 다 입력하거나 둘 다 비워야 함), 종료일이 시작일보다 빠르면 저장을 막음(DB 제약도 같음). 저장하면 `leave_from`·`leave_to`·`leave_reason`에 반영되고, 그 기간 동안 check.html·display.html·seat.html에서 "명령퇴사"로 표시되며 "자리 없음" 판정에서 제외됨(둘 다 비우고 저장하면 해제)
@@ -193,6 +196,7 @@
   - 승인 대기 중인 신청이 있거나, 이미 외출 중이거나, 명령퇴사 기간이거나, **외출 금지 기간**이면("외출 금지 기간입니다(~날짜 · 사유). 외출이 꼭 필요하면 학년부장 선생님께 말씀드리세요.", 상태 칸에도 "외출 금지 ~날짜") 신청 칸이 잠기고 이유를 보여줌(서버도 같은 조건을 거부 — 외출 금지는 트리거 `private.outing_requests_ban_check`)
 - **외출증**(승인된 외출이 있을 때 = 외출중·외출 예정): 종이 외출증 모양을 canvas로 그려 보여 줌(`public/js/outing-pass.js` — 내용은 `outingPassData`로 모으고 `drawOutingPass`로 그림, check.html의 [외출증 보기]·seat.html의 [외출증]도 같은 함수) — 이름, 학년·반·번호, 외출 일시, 사유, 확인 교사(학번은 반·번호와 겹쳐서 뺌), 가운데에 "강화고 기숙사 / 외출승인 / 날짜" 빨간 도장(반투명, 그 위에 글자; 문구는 `STAMP_*`), 맨 아래 가운데에 학교 로고(`public/img/school-logo.png`, 마크+학교 이름, 원본 163×55를 1.6배로). 제목 옆에 초 단위로 움직이는 시계(캡처한 화면이 아님을 보여 줌). 확인하는 교사에게 이 화면을 보여 줌
 - **오늘 신청 내역**: 승인 대기(→ [신청 취소], RPC `cancel_outing_request`) / 승인됨(교사·시각) / 반려됨(사유) / 취소함
+- **비밀번호 바꾸기**(사용자 요청 — 발급한 6자리 숫자 비밀번호는 약해서): 맨 아래 칸에서 지금 비밀번호·새 비밀번호(8자 이상, 영문+숫자)·확인. 지금 비밀번호로 다시 로그인해 확인한 뒤 `supabase.auth.updateUser`로 바꾸고 `user_metadata.password_changed = true`. 이 값이 true가 아니면(처음 받은 비밀번호 — 이 기능 전에 발급한 학생 포함) 맨 위에 "처음 받은 비밀번호를 쓰고 있어요" 안내(`#passwordNotice`). 관리자가 [비번 재발급]하면 `student-accounts`가 false로 되돌려 안내가 다시 뜸
 - 승인·반려·외출 상태가 실시간으로 바뀜. 학생은 자기 행만 읽을 수 있음(RLS)
 
 ### 7. 외출 기록 (`history.html`)
@@ -310,7 +314,9 @@ afterschool_dates -- 방과후 있는 날(afterschool.html): date(PK), created_b
 
 ## 보안 규칙 (RLS·RPC, `supabase/migrations/`)
 - 교직원 판정(`is_staff`) = 역할이 있고, 학생이 아니고, 비활성화되지 않은 계정. 역할 없는 계정은 아무것도 못 읽음
-- `students`: 교직원 읽기. 쓰기는 `can_manage_student(grade, cls)` — admin 전체, gradeManager 담당 학년, teacher 담당 반(**반 단위까지 서버에서 강제**). dormStaff는 수정만 되고 트리거 `private.students_leave_only`가 명령퇴사 칸(`leave_*`) 말고 다른 칸이 바뀌면 거부
+- **학생 아이디·연락처·이메일**(`login_id`·`phone`·`parent_phone`·`email`, 사용자 요청 — 예전에는 교직원이면 F12로 전교생 연락처가 보였음): 이 네 칸은 `students` 열 권한에서 빠져 있어 직접 못 읽고(`select *`도 거부 — 화면은 `adapters.js`의 `STUDENT_COLUMNS`로 칸을 적어서 읽음), RPC `student_contacts()`가 `can_manage_student` 범위(관리자·담당 학년 학년부장·담당 반 담임) 학생 것만 준다(학생 명단 화면이 `liveTable`의 `augment`로 붙임). 학생 계정 `profiles` 행도 같은 범위 + 본인만 읽음. 자습 감독·기숙사부·방과후 선생님·담당 반 없는 교사는 이름·학번·반만. 문자·계정 발급(Edge Function, service_role)은 그대로. 마이그레이션 `20261010010000_student_contacts_scope`
+- **사유 글**(마이그레이션 `20261010020000_reason_scope`, 사용자 요청): 외출 사유(`outings.reason`)·외출 신청 사유(`outing_requests.reason`)는 관리자·학년부장·담임(담당 반이 있는 teacher)·자습 감독, 명령퇴사 사유(`students.leave_reason`)는 관리자·학년부장·담임·기숙사부만(학생은 자기 것). 이 칸들은 열 권한에서 빠져 있고 RPC `outing_reasons(date)`·`outing_request_reasons(date)`·`leave_reasons()`로 읽는다(`public/js/private-fields.js`가 `liveTable`의 `augment`로 붙임, 칸 목록은 `adapters.js`의 `OUTING_COLUMNS`·`REQUEST_COLUMNS`). 허용되지 않은 사람에게는 사유가 비어 보임(외출증은 "사유 미기재"). 쓰기는 그대로 — 단 upsert(on conflict)는 사유 칸을 읽을 권한이 필요해서 check.html의 외출 저장은 update → 없으면 insert(`writeOuting`). 외출 기록(`outing_log`)은 원래 담당 범위만 읽음
+- `students`: 교직원 읽기(위 칸들 제외). 쓰기는 `can_manage_student(grade, cls)` — admin 전체, gradeManager 담당 학년, teacher 담당 반(**반 단위까지 서버에서 강제**). dormStaff는 수정만 되고 트리거 `private.students_leave_only`가 명령퇴사 칸(`leave_*`) 말고 다른 칸이 바뀌면 거부
 - `rooms`: 교직원 읽기. 추가·삭제·이름·대상 학년·크기는 admin(`is_admin_like` — 이름은 남았지만 이제 admin만). 좌석 배정·해제는 RPC(`assign_seat`·`unassign_seat`, `can_edit_room` = admin 또는 담당 실의 gradeManager)
 - `outings`: 교직원 읽기, 쓰기는 `can_write_outings`(dormStaff 제외) **이고 오늘(`today_kst()`) 기록만**(지난 날짜는 보기만). 상태를 바꿀 때는 트리거 `private.outings_check_scope`가 범위를 확인(외출·외출 취소는 `can_manage_student`, 복귀는 그 + 자습 감독(외출 예정 취소 제외), 재실↔자리 없음은 누구나). 삭제 없음 — 재실로 되돌리는 방식. 학생은 자기 기록만 읽기
 - `afterschool_dates`: 교직원 읽기, 추가·삭제는 admin·afterschoolTeacher
@@ -318,7 +324,7 @@ afterschool_dates -- 방과후 있는 날(afterschool.html): date(PK), created_b
 - 외출 금지(`students.ban_*`, 마이그레이션 `20261010000000_outing_ban`): 바꾸기는 `private.is_grade_head_of`(관리자·그 학년 학년부장)만(트리거 `students_ban_editors`). 금지 기간에는 학생 신청 거부(`outing_requests_ban_check`), 'out'으로 바꾸는 외출 처리는 그 학년 학년부장·관리자만(`outings_check_ban`, 서버 함수·자동 복귀는 그대로)
 - `outing_log`: 읽기만, `can_manage_student`(학생의 학년·반) 범위. 쓰기는 트리거만
 - `students`의 명령퇴사 칸(`leave_*`)은 admin·dormStaff만 바꿀 수 있음(트리거 `private.students_leave_editors`, service_role 제외)
-- `profiles`: 교직원은 전체, 그 외는 자기 것만 읽기. 역할·이름·담당 범위 수정은 admin만, 본인 행 제외. 생성·삭제·비활성화는 Edge Function(service_role)만
+- `profiles`: 교직원은 교직원 계정 전체 + 담당 범위 학생 계정, 그 외는 자기 것만 읽기. 역할·이름·담당 범위 수정은 admin만, 본인 행 제외. 생성·삭제·비활성화는 Edge Function(service_role)만
 - `outing_requests`: 교직원 + 신청한 본인 읽기, 쓰기는 RPC로만
 - 계정 비활성화는 로그인 자체를 차단(ban)한다
 - 권한 판정 함수(`is_staff`·`can_manage_student` 등)와 RPC 본체(security definer)는 API로 열리지 않는 `private` 스키마에 둔다. 화면이 부르는 RPC는 `public`에 같은 이름·인자의 security invoker 껍데기만 있다(Supabase 보안 점검 경고 방지, DB 테스트가 같은 기준으로 확인). 새 RPC도 이 방식으로 추가할 것

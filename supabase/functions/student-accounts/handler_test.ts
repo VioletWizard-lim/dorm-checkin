@@ -209,7 +209,7 @@ Deno.test("reset-password (admin only) gives a new pin for an existing account",
     password: "123451",
     sms: "off",
   });
-  assertEquals(calls.updatedUsers, [{ id: "auth-s-done", attrs: { password: "123451" } }]);
+  assertEquals(calls.updatedUsers, [{ id: "auth-s-done", attrs: { password: "123451", user_metadata: { password_changed: false } } }]);
 
   await assertHttpError(handleStudentAccounts({ action: "reset-password", studentId: "s-hong" }, deps), 404);
   await assertHttpError(handleStudentAccounts({ action: "reset-password", studentId: "" }, deps), 400);

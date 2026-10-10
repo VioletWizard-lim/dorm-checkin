@@ -228,7 +228,8 @@ async function resetPassword(
   const { student, account } = await loadTarget(rawStudentId, deps);
   if (!account) throw new HttpError(404, "계정이 아직 발급되지 않았습니다.");
   const password = deps.generatePin();
-  const { error } = await deps.auth.updateUserById(account.id, { password });
+  // 학생 화면의 "비밀번호 바꾸기" 안내가 다시 뜨게 한다(학생이 바꾸면 true)
+  const { error } = await deps.auth.updateUserById(account.id, { password, user_metadata: { password_changed: false } });
   if (error) throw new Error(`password reset failed: ${error.message}`);
   const delivery = await sendPasswords([{ student, loginId: account.login_id, password }], deps);
   return withDelivery({ loginId: account.login_id, password }, delivery.get(student.id));

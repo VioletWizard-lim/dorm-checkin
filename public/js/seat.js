@@ -9,7 +9,10 @@ import {
   isScheduledOuting,
   createStartTimeTicker,
   isRoomInView,
+  STUDENT_COLUMNS,
+  OUTING_COLUMNS,
 } from "./adapters.js";
+import { addOutingReasons } from "./private-fields.js";
 import { outingPassData } from "./outing-pass.js";
 import { createPassDialog } from "./pass-dialog.js";
 
@@ -985,6 +988,7 @@ async function init() {
 
   liveTable({
     table: "students",
+    select: STUDENT_COLUMNS,
     order: ["id"],
     onRows: (rows) => {
       state.studentsByGrade = groupStudentsByGrade(rows);
@@ -995,8 +999,10 @@ async function init() {
 
   outingsLive = liveTable({
     table: "outings",
+    select: OUTING_COLUMNS,
     order: ["student_id"],
     eq: { date: TODAY_KEY },
+    augment: addOutingReasons(TODAY_KEY), // 외출증의 사유
     onRows: (rows) => {
       state.outings = outingsByStudent(rows);
       render();

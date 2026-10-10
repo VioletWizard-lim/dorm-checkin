@@ -44,7 +44,7 @@ export class AuthStore {
     return [...this.users.values()].find((u) => u.email === target) ?? null;
   }
 
-  async createUser({ id = randomUUID(), email, password, app_metadata = {} }) {
+  async createUser({ id = randomUUID(), email, password, app_metadata = {}, user_metadata = {} }) {
     const normalized = String(email ?? "").toLowerCase();
     if (!normalized.includes("@")) throw new AuthError(400, "validation_failed", "Unable to validate email address");
     if (this.findByEmail(normalized)) {
@@ -55,7 +55,7 @@ export class AuthStore {
     }
     await this.pool.query("insert into auth.users (id, email) values ($1, $2)", [id, normalized]);
     const now = new Date().toISOString();
-    const user = { id, email: normalized, password, app_metadata, bannedUntil: null, created_at: now, updated_at: now };
+    const user = { id, email: normalized, password, app_metadata, user_metadata, bannedUntil: null, created_at: now, updated_at: now };
     this.users.set(id, user);
     return user;
   }
@@ -67,6 +67,9 @@ export class AuthStore {
       if (attrs.password.length < 6) throw new AuthError(422, "weak_password", "Password should be at least 6 characters.");
       user.password = attrs.password;
     }
+    // 관리자 API는 user_metadata, 본인 수정(PUT /user)은 data — GoTrue처럼 기존 값에 합친다
+    const metadata = attrs.user_metadata ?? attrs.data;
+    if (metadata && typeof metadata === "object") user.user_metadata = { ...user.user_metadata, ...metadata };
     if (typeof attrs.ban_duration === "string") {
       user.bannedUntil = attrs.ban_duration === "none" ? null : new Date(Date.now() + 100 * 365 * 24 * 3600 * 1000);
       // 차단하면 그 사용자의 리프레시 토큰을 모두 끊는다.
@@ -105,7 +108,7 @@ export class AuthStore {
       email_confirmed_at: user.created_at,
       phone: "",
       app_metadata: { provider: "email", providers: ["email"], ...user.app_metadata },
-      user_metadata: {},
+      user_metadata: user.user_metadata ?? {},
       identities: [],
       created_at: user.created_at,
       updated_at: user.updated_at,
@@ -201,6 +204,19 @@ export function createGateway({ auth, postgrestUrl, functionUrls }) {
         return json(200, auth.userJson(user), apiHeaders);
       }
 
+      // 본인 정보 수정(supabase.auth.updateUser) — 비밀번호·user_metadata(data)
+      if (method === "PUT" && path === "/auth/v1/user") {
+        const claims = verifyJwt(bearerOf(headers), JWT_SECRET);
+        const user = claims?.sub ? auth.users.get(claims.sub) : null;
+        if (!claims) throw new AuthError(401, "bad_jwt", "invalid JWT");
+        if (!user) throw new AuthError(403, "user_not_found", "User from sub claim in JWT does not exist");
+        const input = parseBody(body);
+        if (typeof input.password === "string" && input.password === user.password) {
+          throw new AuthError(422, "same_password", "New password should be different from the old password.");
+        }
+        return json(200, auth.userJson(await auth.updateUser(user.id, { password: input.password, data: input.data })), apiHeaders);
+      }
+
       if (method === "POST" && path === "/auth/v1/logout") {
         return { status: 204, headers: { ...CORS_HEADERS, ...apiHeaders }, body: Buffer.alloc(0) };
       }
@@ -215,6 +231,7 @@ export function createGateway({ auth, postgrestUrl, functionUrls }) {
             email: input.email,
             password: input.password,
             app_metadata: input.app_metadata ?? {},
+            user_metadata: input.user_metadata ?? {},
           });
           return json(200, auth.userJson(user), apiHeaders);
         }
