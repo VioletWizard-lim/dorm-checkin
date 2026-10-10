@@ -337,7 +337,7 @@ function renderGrid(room) {
         <div class="seat-cell seat-cell--${status}${canAct ? " seat-cell--clickable" : ""}${cellEditable ? " seat-cell--draggable" : ""}${editable && !cellEditable ? " seat-cell--locked" : ""}" ${canAct ? `data-attendance-cell="${cellKey}"` : ""}${dragAttrs}${lockedTitle}>
           <div class="seat-cell__name">${escapeHtml(name)}</div>
           ${meta ? `<div class="seat-cell__meta">${escapeHtml(meta)}</div>` : ""}
-          ${!onLeave && outingBanOn(student, TODAY_KEY) ? `<div class="seat-cell__ban">${escapeHtml(outingBanText(outingBanOn(student, TODAY_KEY)))}</div>` : ""}
+          ${outingBanOn(student, TODAY_KEY) ? `<div class="seat-cell__ban">${escapeHtml(outingBanText(outingBanOn(student, TODAY_KEY)))}</div>` : ""}
           ${cellEditable ? `<button type="button" class="seat-cell__unassign" data-unassign-cell="${cellKey}">×</button>` : ""}
         </div>
       `);
