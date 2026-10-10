@@ -6,7 +6,7 @@
 import { supabase, requireStaff, signOutTo, describeError, reportLoadError } from "./supabase-client.js";
 import { getDateKey, escapeHtml } from "./util.js";
 import { liveTable } from "./live-table.js";
-import { groupStudentsByGrade } from "./adapters.js";
+import { groupStudentsByGrade, STUDENT_COLUMNS } from "./adapters.js";
 import { readSheetFile } from "./sheet-read.js";
 
 const DAY_LABELS = ["월", "화", "수", "목", "금"];
@@ -888,6 +888,7 @@ async function init() {
 
   studentsLive = liveTable({
     table: "students",
+    select: STUDENT_COLUMNS,
     order: ["id"],
     onRows: (rows) => {
       const byGrade = groupStudentsByGrade(rows);

@@ -9,6 +9,7 @@ import {
   isScheduledOuting,
   createStartTimeTicker,
   isRoomInView,
+  STUDENT_COLUMNS,
 } from "./adapters.js";
 import { outingPassData } from "./outing-pass.js";
 import { createPassDialog } from "./pass-dialog.js";
@@ -985,6 +986,7 @@ async function init() {
 
   liveTable({
     table: "students",
+    select: STUDENT_COLUMNS,
     order: ["id"],
     onRows: (rows) => {
       state.studentsByGrade = groupStudentsByGrade(rows);

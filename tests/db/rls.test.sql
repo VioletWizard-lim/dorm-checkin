@@ -106,7 +106,7 @@ insert into public.profiles (id, login_id, kind, role, name, disabled, managed_g
 -- ─────────────────────────── anon ───────────────────────────
 select tests.logout();
 set role anon;
-select tests.expect_error('select * from public.students', 'anon cannot read students', '%permission denied%');
+select tests.expect_error('select id from public.students', 'anon cannot read students', '%permission denied%');
 select tests.expect_error('select * from public.outings', 'anon cannot read outings', '%permission denied%');
 select tests.expect_error($$select public.create_outing_request('x')$$, 'anon cannot call RPC', '%permission denied%');
 reset role;
@@ -114,7 +114,7 @@ reset role;
 -- ─────────────────── 역할 없는 계정 · 비활성 계정 ───────────────────
 select tests.login(:norole);
 set role authenticated;
-select tests.expect_count('select * from public.students', 0, 'role-less account sees no students');
+select tests.expect_count('select id from public.students', 0, 'role-less account sees no students');
 select tests.expect_count('select * from public.rooms', 0, 'role-less account sees no rooms');
 select tests.expect_count('select * from public.profiles', 1, 'role-less account sees only own profile');
 select tests.expect_error(format($$insert into public.outings (date, student_id, status) values (current_date, %L, 'out')$$, :st1),
@@ -123,13 +123,14 @@ reset role;
 
 select tests.login(:dis);
 set role authenticated;
-select tests.expect_count('select * from public.students', 0, 'disabled account sees no students');
+select tests.expect_count('select id from public.students', 0, 'disabled account sees no students');
 reset role;
 
 -- ─────────────────────────── 관리자 ───────────────────────────
 select tests.login(:admin);
 set role authenticated;
-select tests.expect_count('select * from public.students', 3, 'admin sees all students');
+select tests.expect_count('select id from public.students', 3, 'admin sees all students');
+select tests.expect_count('select * from public.student_contacts()', 3, 'admin reads every student contact');
 select tests.expect_count('select * from public.profiles', 10, 'admin sees all profiles');
 select tests.expect_affected(format($$update public.students set name = '김민준' where id = %L$$, :st2), 1, 'admin edits any student');
 select tests.expect_affected(format($$update public.profiles set role = 'gradeManager', managed_grades = '{2}' where id = %L$$, :tplain), 1,
@@ -149,7 +150,15 @@ reset role;
 -- ─────────────────────────── 담임(1학년 3반) ───────────────────────────
 select tests.login(:t13);
 set role authenticated;
-select tests.expect_count('select * from public.students', 3, 'staff reads every student');
+select tests.expect_count('select id from public.students', 3, 'staff reads every student');
+-- 아이디·연락처·이메일은 담당 범위만(사용자 요청 — F12로 전교생 연락처가 보이던 문제)
+select tests.expect_error('select phone from public.students', 'staff cannot read phone column directly', '%permission denied%');
+select tests.expect_error('select login_id from public.students', 'staff cannot read login id column directly', '%permission denied%');
+select tests.expect_error('select * from public.students', 'select * is refused (contact columns)', '%permission denied%');
+select tests.expect_count('select * from public.student_contacts()', 1, 'homeroom reads only own class contacts');
+select tests.expect_true(format($$(select login_id from public.student_contacts() where id = %L) = 'hong'$$, :st1), 'homeroom contact row has the login id');
+select tests.expect_count($$select * from public.profiles where kind = 'student'$$, 1, 'homeroom sees only own class student accounts');
+select tests.expect_count($$select * from public.profiles where kind = 'staff'$$, 8, 'homeroom still sees every staff profile');
 select tests.expect_affected(format($$update public.students set sid = '10305' where id = %L$$, :st1), 1, 'homeroom edits own class');
 select tests.expect_affected(format($$update public.students set sid = '10101' where id = %L$$, :st3), 0, 'homeroom cannot edit other class');
 select tests.expect_error(format($$update public.students set cls = '1학년 1반' where id = %L$$, :st1),
@@ -167,6 +176,8 @@ select tests.login(:gm1);
 set role authenticated;
 select tests.expect_affected(format($$update public.students set sid = sid where id = %L$$, :st3), 1, 'grade manager edits own grade');
 select tests.expect_affected(format($$update public.students set sid = sid where id = %L$$, :st2), 0, 'grade manager cannot edit other grade');
+select tests.expect_count('select * from public.student_contacts()', 2, 'grade manager reads own grade contacts');
+select tests.expect_count($$select * from public.profiles where kind = 'student'$$, 1, 'grade manager sees own grade student accounts');
 select public.assign_seat(:room1, 'r0c0', :st1);
 select tests.expect_true(format($$(select seat_map ->> 'r0c0' from public.rooms where id = %L) = %L$$, :room1, :st1),
   'grade manager assigns a seat in managed room');
@@ -260,7 +271,9 @@ reset role;
 -- ─────────────────── 기숙사부: 보기 + 명령퇴사 기간만 ───────────────────
 select tests.login(:dorm);
 set role authenticated;
-select tests.expect_count('select * from public.students', 3, 'dorm staff reads all students');
+select tests.expect_count('select id from public.students', 3, 'dorm staff reads all students');
+select tests.expect_count('select * from public.student_contacts()', 0, 'dorm staff reads no contacts');
+select tests.expect_count($$select * from public.profiles where kind = 'student'$$, 0, 'dorm staff sees no student accounts');
 select tests.expect_count('select * from public.rooms', 2, 'dorm staff reads rooms');
 select tests.expect_affected(format($$update public.students set leave_from = current_date, leave_to = current_date + 3, leave_reason = '명령퇴사' where id = %L$$, :st2),
   1, 'dorm staff sets a leave period on any student');
@@ -288,8 +301,9 @@ reset role;
 -- ─────────────────────────── 학생 ───────────────────────────
 select tests.login(:s1);
 set role authenticated;
-select tests.expect_count('select * from public.students', 1, 'student sees only own student row');
+select tests.expect_count('select id from public.students', 1, 'student sees only own student row');
 select tests.expect_count('select * from public.profiles', 1, 'student sees only own profile');
+select tests.expect_count('select * from public.student_contacts()', 0, 'student reads no contacts');
 select tests.expect_count('select * from public.rooms', 0, 'student cannot read rooms');
 select tests.expect_affected(format($$update public.students set name = 'x' where id = %L$$, :st1), 0, 'student cannot edit own row');
 select tests.expect_error(format($$insert into public.outings (date, student_id, status) values (current_date, %L, 'in')$$, :st1),
@@ -596,7 +610,7 @@ insert into auth.users (id, email) values (:aft, 'aft01@test.local');
 insert into public.profiles (id, login_id, kind, role, name) values (:aft, 'aft01', 'staff', 'afterschoolTeacher', '방과후');
 select tests.login(:aft);
 set role authenticated;
-select tests.expect_count('select * from public.students', 2, 'afterschool teacher reads students');
+select tests.expect_count('select id from public.students', 2, 'afterschool teacher reads students');
 select tests.expect_affected($$insert into public.afterschool_dates (date) values ('2026-10-14')$$, 1, 'afterschool teacher adds afterschool dates');
 select tests.expect_affected($$delete from public.afterschool_dates where date = '2026-10-14'$$, 1, 'afterschool teacher removes afterschool dates');
 select tests.expect_affected(format($$update public.students set afterschool_days = '{t,f,t,f,f}' where id = %L$$, :st2), 1, 'afterschool teacher sets afterschool days of any student');
@@ -669,7 +683,7 @@ delete from public.outings where student_id = :st1 and date = public.today_kst()
 -- ─────────────────────────── service_role ───────────────────────────
 -- 이전 스크립트·Edge Function이 쓰는 역할: RLS를 우회하고 모든 테이블을 읽고 쓸 수 있어야 한다.
 set role service_role;
-select tests.expect_count('select * from public.students', 2, 'service role reads every student');
+select tests.expect_count('select id from public.students', 2, 'service role reads every student');
 select tests.expect_count('select * from public.outing_requests', 3, 'service role reads every request');
 select tests.expect_affected('update public.profiles set name = name', 10, 'service role updates every profile');
 reset role;

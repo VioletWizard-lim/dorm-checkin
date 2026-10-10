@@ -1,7 +1,7 @@
 // 모든 화면이 공유하는 Supabase 클라이언트와 로그인·권한 확인 도우미.
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm";
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STAFF_EMAIL_DOMAIN, STUDENT_EMAIL_DOMAIN } from "./supabase-config.js";
-import { studentFromRow, userFromProfile } from "./adapters.js";
+import { studentFromRow, userFromProfile, STUDENT_COLUMNS } from "./adapters.js";
 import { startIdleLogout } from "./idle-logout.js";
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
@@ -101,7 +101,7 @@ export async function requireStudent() {
     window.location.replace("./check.html");
     return null;
   }
-  const { data: studentRow, error } = await supabase.from("students").select("*").eq("id", row.student_id).maybeSingle();
+  const { data: studentRow, error } = await supabase.from("students").select(STUDENT_COLUMNS).eq("id", row.student_id).maybeSingle();
   if (error) {
     showPageError(`학생 정보를 불러오지 못했습니다(${describeError(error)}). 새로고침해 주세요.`);
     return null;

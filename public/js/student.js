@@ -3,7 +3,7 @@
 import { supabase, requireStudent, signOutTo, describeError, reportLoadError } from "./supabase-client.js";
 import { getDateKey, escapeHtml, formatTime, outingBanOn, outingBanText } from "./util.js";
 import { liveTable } from "./live-table.js";
-import { studentFromRow, isScheduledOuting, createStartTimeTicker } from "./adapters.js";
+import { studentFromRow, isScheduledOuting, createStartTimeTicker, STUDENT_COLUMNS } from "./adapters.js";
 import { drawOutingPass, outingPassData } from "./outing-pass.js";
 
 const TODAY_KEY = getDateKey();
@@ -342,6 +342,7 @@ async function init() {
   // 명령퇴사 기간 등 내 정보가 바뀌어도 반영
   liveTable({
     table: "students",
+    select: STUDENT_COLUMNS,
     eq: { id: studentId },
     order: ["id"],
     onRows: (rows) => {

@@ -310,7 +310,8 @@ afterschool_dates -- 방과후 있는 날(afterschool.html): date(PK), created_b
 
 ## 보안 규칙 (RLS·RPC, `supabase/migrations/`)
 - 교직원 판정(`is_staff`) = 역할이 있고, 학생이 아니고, 비활성화되지 않은 계정. 역할 없는 계정은 아무것도 못 읽음
-- `students`: 교직원 읽기. 쓰기는 `can_manage_student(grade, cls)` — admin 전체, gradeManager 담당 학년, teacher 담당 반(**반 단위까지 서버에서 강제**). dormStaff는 수정만 되고 트리거 `private.students_leave_only`가 명령퇴사 칸(`leave_*`) 말고 다른 칸이 바뀌면 거부
+- **학생 아이디·연락처·이메일**(`login_id`·`phone`·`parent_phone`·`email`, 사용자 요청 — 예전에는 교직원이면 F12로 전교생 연락처가 보였음): 이 네 칸은 `students` 열 권한에서 빠져 있어 직접 못 읽고(`select *`도 거부 — 화면은 `adapters.js`의 `STUDENT_COLUMNS`로 칸을 적어서 읽음), RPC `student_contacts()`가 `can_manage_student` 범위(관리자·담당 학년 학년부장·담당 반 담임) 학생 것만 준다(학생 명단 화면이 `liveTable`의 `augment`로 붙임). 학생 계정 `profiles` 행도 같은 범위 + 본인만 읽음. 자습 감독·기숙사부·방과후 선생님·담당 반 없는 교사는 이름·학번·반만. 문자·계정 발급(Edge Function, service_role)은 그대로. 마이그레이션 `20261010010000_student_contacts_scope`
+- `students`: 교직원 읽기(위 네 칸 제외). 쓰기는 `can_manage_student(grade, cls)` — admin 전체, gradeManager 담당 학년, teacher 담당 반(**반 단위까지 서버에서 강제**). dormStaff는 수정만 되고 트리거 `private.students_leave_only`가 명령퇴사 칸(`leave_*`) 말고 다른 칸이 바뀌면 거부
 - `rooms`: 교직원 읽기. 추가·삭제·이름·대상 학년·크기는 admin(`is_admin_like` — 이름은 남았지만 이제 admin만). 좌석 배정·해제는 RPC(`assign_seat`·`unassign_seat`, `can_edit_room` = admin 또는 담당 실의 gradeManager)
 - `outings`: 교직원 읽기, 쓰기는 `can_write_outings`(dormStaff 제외) **이고 오늘(`today_kst()`) 기록만**(지난 날짜는 보기만). 상태를 바꿀 때는 트리거 `private.outings_check_scope`가 범위를 확인(외출·외출 취소는 `can_manage_student`, 복귀는 그 + 자습 감독(외출 예정 취소 제외), 재실↔자리 없음은 누구나). 삭제 없음 — 재실로 되돌리는 방식. 학생은 자기 기록만 읽기
 - `afterschool_dates`: 교직원 읽기, 추가·삭제는 admin·afterschoolTeacher
@@ -318,7 +319,7 @@ afterschool_dates -- 방과후 있는 날(afterschool.html): date(PK), created_b
 - 외출 금지(`students.ban_*`, 마이그레이션 `20261010000000_outing_ban`): 바꾸기는 `private.is_grade_head_of`(관리자·그 학년 학년부장)만(트리거 `students_ban_editors`). 금지 기간에는 학생 신청 거부(`outing_requests_ban_check`), 'out'으로 바꾸는 외출 처리는 그 학년 학년부장·관리자만(`outings_check_ban`, 서버 함수·자동 복귀는 그대로)
 - `outing_log`: 읽기만, `can_manage_student`(학생의 학년·반) 범위. 쓰기는 트리거만
 - `students`의 명령퇴사 칸(`leave_*`)은 admin·dormStaff만 바꿀 수 있음(트리거 `private.students_leave_editors`, service_role 제외)
-- `profiles`: 교직원은 전체, 그 외는 자기 것만 읽기. 역할·이름·담당 범위 수정은 admin만, 본인 행 제외. 생성·삭제·비활성화는 Edge Function(service_role)만
+- `profiles`: 교직원은 교직원 계정 전체 + 담당 범위 학생 계정, 그 외는 자기 것만 읽기. 역할·이름·담당 범위 수정은 admin만, 본인 행 제외. 생성·삭제·비활성화는 Edge Function(service_role)만
 - `outing_requests`: 교직원 + 신청한 본인 읽기, 쓰기는 RPC로만
 - 계정 비활성화는 로그인 자체를 차단(ban)한다
 - 권한 판정 함수(`is_staff`·`can_manage_student` 등)와 RPC 본체(security definer)는 API로 열리지 않는 `private` 스키마에 둔다. 화면이 부르는 RPC는 `public`에 같은 이름·인자의 security invoker 껍데기만 있다(Supabase 보안 점검 경고 방지, DB 테스트가 같은 기준으로 확인). 새 RPC도 이 방식으로 추가할 것

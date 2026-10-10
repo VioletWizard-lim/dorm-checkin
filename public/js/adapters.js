@@ -4,6 +4,11 @@
 
 export const GRADES = ["1", "2", "3"];
 
+// students에서 읽을 수 있는 칸(아이디·연락처·이메일 빼고 — 서버 열 권한, 마이그레이션 20261010010000_student_contacts_scope).
+// 아이디·연락처·이메일은 담당 범위 학생 것만 RPC student_contacts()로 읽는다(학생 명단 화면)
+export const STUDENT_COLUMNS =
+  "id,grade,name,sid,cls,afterschool_days,leave_from,leave_to,leave_reason,ban_from,ban_to,ban_reason";
+
 const EMPTY_DAYS = [false, false, false, false, false];
 
 export function studentFromRow(row) {

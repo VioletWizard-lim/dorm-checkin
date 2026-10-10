@@ -10,6 +10,7 @@ import {
   createStartTimeTicker,
   isGradeInView,
   isRoomInView,
+  STUDENT_COLUMNS,
 } from "./adapters.js";
 
 const TODAY_KEY = getDateKey();
@@ -274,6 +275,7 @@ async function init() {
 
   liveTable({
     table: "students",
+    select: STUDENT_COLUMNS,
     order: ["id"],
     onRows: (rows) => {
       state.studentsByGrade = groupStudentsByGrade(rows);

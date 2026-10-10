@@ -17,7 +17,8 @@ let channelSeq = 0;
 // order: 정렬할 열 목록(오름차순). 나눠 읽을 때 순서가 흔들리지 않도록 마지막 열은 유일한 값(기본키)이어야 한다.
 // onRows(rows): 조회가 끝날 때마다 전체 행 배열로 호출
 // onError(error): 조회 실패 시(자동으로 다시 시도함)
-export function liveTable({ table, select = "*", eq = null, order, onRows, onError }) {
+// augment(rows): (선택) 행을 넘기기 전에 더 읽어 붙인다(학생 명단의 연락처 등). 실패하면 error를 돌려줌 → 조회 실패와 같이 처리
+export function liveTable({ table, select = "*", eq = null, order, augment = null, onRows, onError }) {
   let stopped = false;
   let loading = false;
   let loadAgain = false;
@@ -37,7 +38,8 @@ export function liveTable({ table, select = "*", eq = null, order, onRows, onErr
     clearTimeout(retryTimer);
     const done = waiters;
     waiters = [];
-    const { data, error } = await fetchAll();
+    let { data, error } = await fetchAll();
+    if (!error && augment && !stopped) error = await augment(data);
     loading = false;
     if (!stopped) {
       if (error) {
