@@ -1,5 +1,5 @@
 import { test, expect } from "./fixtures.mjs";
-import { PASSWORD } from "../harness/seed.mjs";
+import { PASSWORD, STUDENT } from "../harness/seed.mjs";
 import { WRONG_LOGIN } from "./helpers.mjs";
 
 test.describe("로그인", () => {
@@ -22,7 +22,7 @@ test.describe("로그인", () => {
     await page.fill("#userId", "admin@01");
     await page.fill("#password", "x");
     await page.click("#submitBtn");
-    await expect(page.locator("#errorBox")).toHaveText("아이디는 영문과 숫자만 사용할 수 있습니다.");
+    await expect(page.locator("#errorBox")).toHaveText("교사 아이디는 영문과 숫자만 사용할 수 있습니다.");
 
     await page.fill("#userId", "admin01");
     await page.fill("#password", "wrong-password");
@@ -62,5 +62,16 @@ test.describe("로그인", () => {
     await openAs("teacher01", "/check.html");
     await expect(page).toHaveURL(/\/login\.html\?disabled=1$/);
     await expect(page.locator("#errorBox")).toHaveText("삭제(비활성화)된 계정입니다. 관리자에게 문의해 주세요.");
+  });
+
+  test("학생 아이디(26-10101처럼 - 가 있는 리로스쿨 ID)를 교사 탭에서 넣어도 학생으로 로그인된다", async ({ env, page }) => {
+    await env.createStudentAccount(STUDENT.hong, "26-10101");
+    await page.goto("/login.html");
+    await expect(page.locator("[data-login-mode='staff']")).toHaveClass(/is-active/);
+    await page.fill("#userId", "26-10101");
+    await page.fill("#password", PASSWORD);
+    await page.click("#submitBtn");
+    await expect(page).toHaveURL(/\/student\.html$/);
+    await expect(page.locator("#studentName")).toHaveText("홍길동");
   });
 });

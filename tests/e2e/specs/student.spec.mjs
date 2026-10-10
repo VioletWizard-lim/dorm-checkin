@@ -307,32 +307,96 @@ test.describe("외출 예정(승인됐지만 외출 시각 전)", () => {
     await expect(studentPage.locator("#statusBox")).toContainText("00:40부터 외출 중");
   });
 
-  test("비밀번호 바꾸기: 처음 받은 비밀번호면 안내가 뜨고, 바꾸면 새 비밀번호로만 로그인된다", async ({ env, openAs, page }) => {
+  test("탭: 신청 / 신청 현황 / 개인정보 수정 — 오늘 상태는 늘 보이고, 신청하면 신청 현황으로 넘어간다", async ({ env, openAs, page }) => {
+    await env.createStudentAccount(STUDENT.hong, "hong123");
+    await openAs("hong123", "/student.html");
+    await expect(page.locator(".student-tabs .login-tab")).toHaveText(["신청", "신청 현황", "개인정보 수정"]);
+    await expect(page.locator("[data-student-tab='apply']")).toHaveClass(/is-active/);
+    await expect(page.locator("#requestForm")).toBeVisible();
+    await expect(page.locator("#requestList")).toBeHidden();
+    await expect(page.locator("#verifySection")).toBeHidden();
+    await expect(page.locator("#statusBox")).toBeVisible();
+
+    await page.click("[data-student-tab='status']");
+    await expect(page.locator("#requestList")).toBeVisible();
+    await expect(page.locator("#requestForm")).toBeHidden();
+    await expect(page.locator("#statusBox")).toBeVisible();
+    await page.click("[data-student-tab='info']");
+    await expect(page.locator("#verifySection")).toBeVisible();
+    await page.reload(); // 주소(#info)로 탭을 기억
+    await expect(page.locator("#verifySection")).toBeVisible();
+
+    await page.click("[data-student-tab='apply']");
+    await page.fill("#reasonInput", "병원 진료");
+    await page.selectOption("#startHour", "23");
+    await page.selectOption("#startMinute", "00");
+    await page.selectOption("#returnHour", "23");
+    await page.selectOption("#returnMinute", "30");
+    await page.click("#requestBtn");
+    await expect(page.locator("[data-student-tab='status']")).toHaveClass(/is-active/);
+    await expect(page.locator("#requestList")).toContainText("병원 진료");
+  });
+
+  test("개인정보 수정: 비밀번호로 본인 확인 → 내 연락처·이메일 수정(학부모 연락처는 못 바꿈)", async ({ env, openAs, page }) => {
+    await env.createStudentAccount(STUDENT.hong, "hong123");
+    await openAs("hong123", "/student.html");
+    await page.click("[data-student-tab='info']");
+    await expect(page).toHaveURL(/\/student\.html#info$/);
+    await expect(page.locator("#infoSection")).toBeHidden();
+
+    await page.fill("#verifyPassword", "wrong-pass1");
+    await page.click("#verifyBtn");
+    await expect(page.locator("#verifyHint")).toHaveText("비밀번호가 맞지 않습니다.");
+    await page.fill("#verifyPassword", "pass1234");
+    await page.click("#verifyBtn");
+    await expect(page.locator("#infoSection")).toBeVisible();
+    await expect(page.locator("#verifySection")).toBeHidden();
+    await expect(page.locator("#infoName")).toHaveText("홍길동");
+    await expect(page.locator("#infoLoginId")).toHaveText("hong123");
+    await expect(page.locator("#infoParentPhone")).toHaveText("010-3333-4444");
+    await expect(page.locator("#phoneInput")).toHaveValue("010-1111-2222");
+    await expect(page.locator("#emailInput")).toHaveValue("hong@example.com");
+
+    await page.fill("#phoneInput", "02-123-4567");
+    await page.click("#contactBtn");
+    await expect(page.locator("#contactHint")).toContainText("010으로 시작하는 휴대폰 번호");
+    await page.fill("#phoneInput", "01055556666");
+    await page.fill("#emailInput", "new@example.com");
+    await page.click("#contactBtn");
+    await expect(page.locator("#contactHint")).toHaveText("저장했어요.");
+    await expect(page.locator("#phoneInput")).toHaveValue("010-5555-6666");
+    const [row] = await env.sql("select phone, parent_phone, email from public.students where id = $1", [STUDENT.hong]);
+    expect(row).toEqual({ phone: "01055556666", parent_phone: "01033334444", email: "new@example.com" });
+  });
+
+  test("개인정보 수정: 비밀번호 바꾸기 — 처음 받은 비밀번호면 안내가 뜨고, 바꾸면 새 비밀번호로만 로그인된다", async ({ env, openAs, page }) => {
     await env.createStudentAccount(STUDENT.hong, "hong123");
     await openAs("hong123", "/student.html");
     await expect(page.locator("#passwordNotice")).toBeVisible();
+    await page.click("#passwordNotice a");
+    await page.fill("#verifyPassword", "pass1234");
+    await page.click("#verifyBtn");
+    await expect(page.locator("#passwordSection")).toBeVisible();
+    await expect(page.locator("#passwordNotice")).toBeVisible();
 
-    const change = async (current, next, confirm = next) => {
-      await page.fill("#currentPassword", current);
+    const change = async (next, confirm = next) => {
       await page.fill("#newPassword", next);
       await page.fill("#newPasswordConfirm", confirm);
       await page.click("#passwordBtn");
     };
-    await change("pass1234", "abc123");
+    await change("abc123");
     await expect(page.locator("#passwordHint")).toHaveText("새 비밀번호는 8자 이상이어야 해요.");
-    await change("pass1234", "12345678");
+    await change("12345678");
     await expect(page.locator("#passwordHint")).toHaveText("새 비밀번호에 영문과 숫자를 함께 넣어 주세요.");
-    await change("pass1234", "dorm2026!", "dorm2026?");
+    await change("dorm2026!", "dorm2026?");
     await expect(page.locator("#passwordHint")).toHaveText("새 비밀번호 확인이 다릅니다.");
-    await change("wrong-pass1", "dorm2026!");
-    await expect(page.locator("#passwordHint")).toHaveText("지금 비밀번호가 맞지 않습니다.");
 
-    await change("pass1234", "dorm2026!");
+    await change("dorm2026!");
     await expect(page.locator("#passwordHint")).toHaveText("비밀번호를 바꿨어요. 다음 로그인부터 새 비밀번호를 쓰세요.");
     await expect(page.locator("#passwordNotice")).toBeHidden();
-    await expect(page.locator("#currentPassword")).toHaveValue("");
+    await expect(page.locator("#newPassword")).toHaveValue("");
 
-    // 예전 비밀번호는 안 되고 새 비밀번호로 로그인된다. 다시 들어와도 안내는 안 뜬다
+    // 예전 비밀번호는 안 되고 새 비밀번호로 로그인된다. 학생 화면의 안내도 사라진다
     await page.click("#logoutBtn");
     await expect(page).toHaveURL(/login\.html/);
     await page.click("[data-login-mode='student']");
