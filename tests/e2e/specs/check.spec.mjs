@@ -150,6 +150,17 @@ test.describe("외출 체크 화면", () => {
     await page.click("#filterChips >> text=2·3학년실");
     await expect(page.locator(".student-card .student-name")).toHaveText(["이서연", "박지훈"]);
     await page.click("#filterChips >> text=전체");
+
+    // 학년 탭(사용자 요청): 실 탭과 함께 적용된다
+    await expect(page.locator("#gradeChips .filter-chip")).toHaveText(["전체", "1학년", "2학년", "3학년"]);
+    await page.click("#gradeChips >> text=2학년");
+    await expect(page.locator(".student-card .student-name")).toHaveText(["이서연"]);
+    await page.click("#gradeChips >> text=1학년");
+    await expect(page.locator(".student-card .student-name")).toHaveText(["김민준", "최하늘", "홍길동"]);
+    await page.click("#filterChips >> text=2·3학년실");
+    await expect(page.locator(".student-card .student-name")).toHaveCount(0);
+    await page.click("#filterChips >> text=전체");
+    await page.click("#gradeChips >> text=전체");
     await page.fill("#search", "하늘");
     await expect(page.locator(".student-card .student-name")).toHaveText(["최하늘"]);
   });

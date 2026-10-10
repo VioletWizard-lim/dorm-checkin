@@ -61,7 +61,16 @@
       <input type="date" id="dateSelect" class="date-input">
     </div>
     <div class="check-toolbar__divider"></div>
-    <div class="filter-chips" id="filterChips"></div>
+    <!-- 학년 탭(사용자 요청, 현황판과 같음)과 실 탭은 함께(AND로) 적용 -->
+    <div class="filter-group">
+      <span class="filter-group__label">학년</span>
+      <div class="filter-chips" id="gradeChips"></div>
+    </div>
+    <div class="check-toolbar__divider"></div>
+    <div class="filter-group">
+      <span class="filter-group__label">실</span>
+      <div class="filter-chips" id="filterChips"></div>
+    </div>
   </div>
 
   <div class="alert alert-notice past-date-notice" id="pastDateNotice" hidden>

@@ -11,6 +11,7 @@ test.describe("학년부장 범위", () => {
     await openAs("gm01", "/check.html");
     await expect(page.locator(".student-card .student-name")).toHaveText(["김민준", "최하늘", "홍길동"]);
     await expect(page.locator("#filterChips .filter-chip")).toHaveText(["전체", "1학년실"]);
+    await expect(page.locator("#gradeChips .filter-chip")).toHaveText(["전체", "1학년"]);
 
     await page.goto("/display.html");
     await expect(page.locator("#gradeChips .filter-chip")).toHaveText(["전체", "1학년"]);
