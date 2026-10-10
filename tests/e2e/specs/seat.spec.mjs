@@ -3,6 +3,13 @@ import { ROOM, STUDENT } from "../harness/seed.mjs";
 import { answerDialogs, collectAlerts, todayKst } from "./helpers.mjs";
 
 const cells = (page) => page.locator("#seatGrid > .seat-cell");
+const XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+async function readDownload(download) {
+  const chunks = [];
+  for await (const chunk of await download.createReadStream()) chunks.push(chunk);
+  return Buffer.concat(chunks);
+}
 const cell = (page, index) => cells(page).nth(index);
 
 async function room(env, id) {
@@ -153,6 +160,50 @@ test.describe("좌석 배치판 — 편집 모드", () => {
     await page.click("#seatBulkSaveBtn");
     await expect(page.locator("#seatBulkWrap")).toBeHidden();
     expect((await room(env, ROOM.first)).seat_map).toEqual({ r0c0: STUDENT.minjun, r0c1: STUDENT.haneul, r1c0: STUDENT.hong });
+  });
+
+  test("좌석 일괄 등록: 양식(엑셀) 내려받기 → 그대로 올리면 같은 좌석표, 빈 양식은 학번이 없다고 안내", async ({ openAs, page }) => {
+    const alerts = collectAlerts(page);
+    await openAs("admin01", "/seat.html");
+    await page.click("#editModeToggle");
+    await page.click("#seatBulkBtn");
+
+    // 지금 좌석표(1학년실 2×2: r0c0 홍길동, r0c1 김민준)를 엑셀로 받는다
+    const [current] = await Promise.all([page.waitForEvent("download"), page.click("#seatTemplateCurrentBtn")]);
+    expect(current.suggestedFilename()).toBe("좌석표_1학년실_2x2.xlsx");
+    const currentBytes = await readDownload(current);
+    expect(currentBytes.subarray(0, 2).toString()).toBe("PK"); // zip(xlsx)
+
+    // 받은 파일을 그대로 올리면 같은 모양으로 미리보기(바로 저장되지는 않음)
+    await page.setInputFiles("#seatBulkFile", { name: "좌석표.xlsx", mimeType: XLSX_TYPE, buffer: currentBytes });
+    await expect(page.locator("#seatBulkFileNote")).toContainText("불러왔습니다");
+    await expect(page.locator("#seatBulkPreview .seat-bulk-grid__cell")).toHaveText(["홍길동", "김민준", "빈자리", "빈자리"]);
+    await expect(page.locator("#seatBulkSaveBtn")).toHaveText("좌석표 저장 (2명)");
+
+    // 빈 양식: 칸만 있고 학번이 없다
+    const [blank] = await Promise.all([page.waitForEvent("download"), page.click("#seatTemplateBlankBtn")]);
+    expect(blank.suggestedFilename()).toBe("좌석 양식_1학년실_2x2.xlsx");
+    await page.setInputFiles("#seatBulkFile", { name: "양식.xlsx", mimeType: XLSX_TYPE, buffer: await readDownload(blank) });
+    await expect.poll(() => alerts.join("\n")).toContain("학번을 찾지 못했습니다");
+  });
+
+  test("좌석 일괄 등록: PDF 좌석표를 올리면 칸 위치대로 읽는다", async ({ env, openAs, openOtherAs, page }) => {
+    answerDialogs(page, [true]);
+    // 엑셀에서 PDF로 저장한 것 같은 좌석표(2행×2열, 오른쪽 위는 빈자리)
+    const maker = await openOtherAs(null, "/login.html");
+    await maker.setContent(`<table border="1" style="border-collapse:collapse;font-size:20px">
+      <tr><td style="width:160px;height:40px">10302 최하늘</td><td style="width:160px"></td></tr>
+      <tr><td style="height:40px">10305 홍길동</td><td>10101 김민준</td></tr></table>`);
+    const pdf = await maker.pdf({ format: "A4" });
+
+    await openAs("admin01", "/seat.html");
+    await page.click("#editModeToggle");
+    await page.click("#seatBulkBtn");
+    await page.setInputFiles("#seatBulkFile", { name: "좌석표.pdf", mimeType: "application/pdf", buffer: pdf });
+    await expect(page.locator("#seatBulkPreview .seat-bulk-grid__cell")).toHaveText(["최하늘", "빈자리", "홍길동", "김민준"]);
+    await page.click("#seatBulkSaveBtn");
+    await expect(page.locator("#seatBulkWrap")).toBeHidden();
+    expect((await room(env, ROOM.first)).seat_map).toEqual({ r0c0: STUDENT.haneul, r1c0: STUDENT.hong, r1c1: STUDENT.minjun });
   });
 
   test("학번을 입력하고 Enter로 배정하면 다음 빈자리로 넘어간다", async ({ env, openAs, page }) => {

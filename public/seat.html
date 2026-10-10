@@ -102,6 +102,13 @@
             <td>학번을 <b>한 줄에 하나씩</b> 붙여넣으면 앞자리부터 차례로 채웁니다(왼쪽 → 오른쪽, 다 차면 다음 줄)</td>
           </tr>
           <tr>
+            <th>방법 3<br>파일 올리기</th>
+            <td>[빈 양식 받기]로 <b>이 실 크기(행×열)에 맞춘 엑셀 양식</b>을 받아 칸에 학번을 적고 저장한 뒤 [파일 올리기]<br>
+              · [지금 좌석표 받기]로 지금 배치를 엑셀로 받아 고친 뒤 올려도 됩니다<br>
+              · 올릴 수 있는 파일: 엑셀(.xlsx)·CSV·PDF(엑셀·한글에서 PDF로 저장한 것 — 스캔한 그림 PDF는 안 됨)<br>
+              · 올리면 아래 칸에 표가 채워지고 미리보기가 나옵니다(바로 저장되지 않음)</td>
+          </tr>
+          <tr>
             <th>저장 전 확인</th>
             <td>붙여넣으면 아래에 <b>미리보기</b>(좌석 모양 표)가 나옵니다. 없는 학번·다른 학년·같은 학번 두 번·실보다 큰 표는 빨갛게 표시되고, <b>빨간 칸이 하나라도 있으면 저장되지 않습니다</b></td>
           </tr>
@@ -112,6 +119,16 @@
         · 이번에 붙여넣지 않은 학생은 이 실에서 자리가 빠집니다(되돌리기 없음 — 다시 등록해야 함)<br>
         · 다른 실에 앉아 있던 학생을 넣으면 그 실의 자리는 비워집니다<br>
         · 학년부장은 다른 학년 학생 자리를 바꿀 수 없어서, 그 자리는 그대로 남습니다
+      </div>
+      <!-- 양식 내려받기·파일 올리기(사용자 요청) -->
+      <div class="afterschool-file-row">
+        <button type="button" class="btn-secondary btn-small" id="seatTemplateBlankBtn">빈 양식 받기 (엑셀)</button>
+        <button type="button" class="btn-secondary btn-small" id="seatTemplateCurrentBtn">지금 좌석표 받기 (엑셀)</button>
+        <label class="btn-secondary btn-small afterschool-file-btn">
+          파일 올리기 (엑셀·CSV·PDF)
+          <input type="file" id="seatBulkFile" accept=".xlsx,.csv,.txt,.pdf" hidden>
+        </label>
+        <span class="afterschool-file-note" id="seatBulkFileNote"></span>
       </div>
       <div class="field">
         <label for="seatBulkInput">붙여넣을 칸</label>
