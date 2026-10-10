@@ -1,6 +1,6 @@
 import { test, expect } from "./fixtures.mjs";
 import { STUDENT } from "../harness/seed.mjs";
-import { answerDialogs, todayKst } from "./helpers.mjs";
+import { answerDialogs, kstDatePlus, todayKst } from "./helpers.mjs";
 
 async function requestsOf(env, studentId) {
   return env.sql(
@@ -23,7 +23,7 @@ test.describe("학생 화면", () => {
     await expect(page.locator("#studentName")).toHaveText("홍길동");
     await expect(page.locator("#studentMeta")).toHaveText("학번 10305 · 1학년 3반");
     await expect(page.locator("#statusBox .status-badge")).toHaveText("재실");
-    await expect(page.locator("#requestList")).toContainText("오늘 신청한 외출이 없습니다.");
+    await expect(page.locator("#requestList")).toContainText("이 기간에 신청한 외출이 없습니다.");
 
     // 시·분은 끝에서 멈추는 목록(0~23시, 00~59분). 외출 시각 기본값은 지금, 복귀는 비어 있음
     await expect(page.locator("#startHour option")).toHaveCount(24);
@@ -337,6 +337,34 @@ test.describe("외출 예정(승인됐지만 외출 시각 전)", () => {
     await expect(page.locator("#requestList")).toContainText("병원 진료");
   });
 
+  test("신청 현황: 기간을 골라 내 지난 신청을 본다(사유 포함, 지난 신청은 취소 버튼 없음)", async ({ env, openAs, page }) => {
+    const user = await env.createStudentAccount(STUDENT.hong, "hong123");
+    await env.sql(
+      `insert into public.outing_requests (date, student_id, requested_by, reason, start_time, expected_return, status, decided_by_name, decided_at)
+       values ($1, $2, $3, '치과 진료', '19:00', '21:00', 'approved', '김담임', now() - interval '3 days'),
+              ($4, $2, $3, '학원', '19:00', '21:00', 'rejected', '김담임', now() - interval '20 days')`,
+      [kstDatePlus(-3), STUDENT.hong, user.id, kstDatePlus(-20)]
+    );
+    await openAs("hong123", "/student.html#status");
+    await expect(page.locator("#historyTo")).toHaveValue(todayKst());
+    await expect(page.locator("#historyFrom")).toHaveValue(kstDatePlus(-6)); // 기본: 최근 7일
+    const list = page.locator("#requestList");
+    await expect(list).toContainText("치과 진료");
+    await expect(list).toContainText("승인됨");
+    await expect(list).not.toContainText("학원");
+    await expect(list.getByRole("button", { name: "신청 취소" })).toHaveCount(0);
+
+    await page.click("[data-history-days='30']");
+    await expect(list).toContainText("학원");
+    await expect(list).toContainText("반려됨");
+    await page.click("[data-history-days='1']");
+    await expect(list).toContainText("이 기간에 신청한 외출이 없습니다.");
+    await page.fill("#historyFrom", kstDatePlus(-25));
+    await page.fill("#historyTo", kstDatePlus(-15));
+    await expect(list).toContainText("학원");
+    await expect(list).not.toContainText("치과 진료");
+  });
+
   test("개인정보 수정: 비밀번호로 본인 확인 → 내 연락처·이메일 수정(학부모 연락처는 못 바꿈)", async ({ env, openAs, page }) => {
     await env.createStudentAccount(STUDENT.hong, "hong123");
     await openAs("hong123", "/student.html");
@@ -346,7 +374,7 @@ test.describe("외출 예정(승인됐지만 외출 시각 전)", () => {
 
     await page.fill("#verifyPassword", "wrong-pass1");
     await page.click("#verifyBtn");
-    await expect(page.locator("#verifyHint")).toHaveText("비밀번호가 맞지 않습니다.");
+    await expect(page.locator("#verifyHint")).toContainText("비밀번호가 맞지 않습니다");
     await page.fill("#verifyPassword", "pass1234");
     await page.click("#verifyBtn");
     await expect(page.locator("#infoSection")).toBeVisible();

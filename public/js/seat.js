@@ -774,7 +774,7 @@ seatBulkSaveBtn.addEventListener("click", async () => {
   const filled = Object.keys(room.seatMap || {}).length - keptCount;
   const ok = confirm(
     `${room.name || "이 실"}의 좌석표를 새로 저장합니다(${seatBulkPlan.count}명).` +
-      (filled > 0 ? `\n지금 배정된 ${filled}자리는 새 좌석표로 바뀝니다.` : "") +
+      (filled > 0 ? `\n지금 배정된 ${filled}자리는 지워지고 새 좌석표로 덮어씁니다(되돌리기 없음).` : "") +
       (keptCount > 0 ? `\n다른 학년 학생 ${keptCount}자리는 그대로 둡니다.` : "") +
       "\n다른 실에 앉아 있던 학생은 그 자리가 비워집니다."
   );

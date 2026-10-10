@@ -535,6 +535,23 @@ select public.cancel_outing_request(:'req3');
 reset role;
 select tests.logout();
 select tests.expect_true(format($$(select status = 'cancelled' from public.outing_requests where id = %L)$$, :'req3'), 'student cancels own request');
+-- 신청 현황 기간 조회(사용자 요청): 본인 신청만, 사유 포함, 지운 것 없이 취소·반려도 그대로
+select tests.login(:s2);
+set role authenticated;
+select tests.expect_true($$(select count(*) >= 2 from public.my_outing_requests(public.today_kst() - 7, public.today_kst()))$$,
+  'student sees own request history in a period');
+select tests.expect_true($$(select bool_and(reason is not null) from public.my_outing_requests(public.today_kst() - 7, public.today_kst()))$$,
+  'history includes own reasons');
+select tests.expect_true($$exists (select 1 from public.my_outing_requests(public.today_kst(), public.today_kst()) where status = 'cancelled')$$,
+  'cancelled requests stay in history');
+select tests.expect_error($$select * from public.my_outing_requests(public.today_kst() - 400, public.today_kst())$$, 'history range is at most a year', '%1년%');
+reset role;
+select tests.login(:s1);
+set role authenticated;
+select tests.expect_true(format($$not exists (select 1 from public.my_outing_requests(public.today_kst() - 7, public.today_kst()) where id = %L)$$, :'req3'),
+  'student cannot see classmate history');
+reset role;
+select tests.logout();
 
 -- ─────────────────────────── 외출 기록 트리거 ───────────────────────────
 select tests.login(:sup);

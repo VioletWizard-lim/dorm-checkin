@@ -23,7 +23,7 @@ const MODES = {
     idLabel: "아이디",
     idPlaceholder: "아이디 입력",
     subtitle: "학생 계정으로 로그인해 주세요",
-    footer: "계정이 없거나 비밀번호를 잊었으면 담임 선생님께 말씀해 주세요.",
+    footer: "비밀번호를 잊었거나 계정이 없으면 관리자(임재성 선생님)에게 말씀해 주세요.",
     toEmail: studentEmail,
     target: "./student.html",
   },

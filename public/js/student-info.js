@@ -72,7 +72,7 @@ verifyForm.addEventListener("submit", async (event) => {
     const email = userData && userData.user && userData.user.email;
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
-      setHint(verifyHint, "비밀번호가 맞지 않습니다.");
+      setHint(verifyHint, "비밀번호가 맞지 않습니다. 잊었으면 관리자(임재성 선생님)에게 말씀해 주세요.");
       return;
     }
     await loadMyInfo();
