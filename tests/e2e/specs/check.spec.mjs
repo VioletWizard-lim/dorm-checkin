@@ -162,7 +162,8 @@ test.describe("외출 체크 화면", () => {
     await page.fill("#dateSelect", yesterdayKst());
     await expect(page.locator("#pastDateNotice")).toBeVisible();
     await expect(card(page, "홍길동").locator(".status-badge")).toHaveText("외출중");
-    await expect(card(page, "홍길동")).toContainText("병원 (~17:00)");
+    await expect(card(page, "홍길동")).toContainText("(~17:00)");
+    await expect(card(page, "홍길동")).not.toContainText("병원"); // 담당 반 없는 교사에게는 사유가 안 보임(사용자 요청)
     await expect(card(page, "김민준").locator(".status-badge")).toHaveText("재실");
     await expect(page.locator("#outCountText")).toHaveText("그 날 외출 기록 1명");
 

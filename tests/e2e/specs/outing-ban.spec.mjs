@@ -113,11 +113,12 @@ test.describe("외출 금지", () => {
     await expect(page.locator("#seatGrid .seat-cell", { hasText: "홍길동" }).locator(".seat-cell__ban")).toHaveText(untilText());
   });
 
-  test("현황판·좌석 배치판에도 표시된다", async ({ env, openAs, page }) => {
+  test("좌석 배치판에는 표시되고, 현황판에는 보이지 않는다(학생도 보는 화면)", async ({ env, openAs, page }) => {
     await banHong(env);
     await env.sql("insert into public.outings (date, student_id, status) values ($1, $2, 'away')", [todayKst(), STUDENT.hong]);
     await openAs("admin01", "/display.html");
-    await expect(page.locator("#awayPanelList .ban-chip")).toHaveText(untilText());
+    await expect(page.locator("#awayPanelList")).toContainText("홍길동");
+    await expect(page.locator(".ban-chip")).toHaveCount(0);
     await page.goto("/seat.html");
     await expect(page.locator("#seatGrid .seat-cell", { hasText: "홍길동" }).locator(".seat-cell__ban")).toHaveText(untilText());
   });

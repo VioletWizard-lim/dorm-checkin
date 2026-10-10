@@ -3,7 +3,8 @@
 import { supabase, requireStudent, signOutTo, describeError, reportLoadError } from "./supabase-client.js";
 import { getDateKey, escapeHtml, formatTime, outingBanOn, outingBanText } from "./util.js";
 import { liveTable } from "./live-table.js";
-import { studentFromRow, isScheduledOuting, createStartTimeTicker, STUDENT_COLUMNS } from "./adapters.js";
+import { studentFromRow, isScheduledOuting, createStartTimeTicker, STUDENT_COLUMNS, OUTING_COLUMNS, REQUEST_COLUMNS } from "./adapters.js";
+import { addOutingReasons, addRequestReasons, addLeaveReasons } from "./private-fields.js";
 import { drawOutingPass, outingPassData } from "./outing-pass.js";
 
 const TODAY_KEY = getDateKey();
@@ -308,9 +309,73 @@ requestListEl.addEventListener("click", async (event) => {
 
 logoutBtn.addEventListener("click", () => signOutTo());
 
+// ─────────── 비밀번호 바꾸기(사용자 요청 — 발급한 6자리 숫자 비밀번호는 약해서 학생이 직접 바꾼다) ───────────
+// 지금 비밀번호로 다시 로그인해서 확인한 뒤 바꾼다(최근 로그인이라 Supabase의 비밀번호 변경 조건도 만족).
+// 바꾸면 user_metadata.password_changed = true — 관리자가 비밀번호를 재발급하면 false로 돌아가 안내가 다시 뜬다.
+const passwordForm = document.getElementById("passwordForm");
+const currentPasswordInput = document.getElementById("currentPassword");
+const newPasswordInput = document.getElementById("newPassword");
+const newPasswordConfirmInput = document.getElementById("newPasswordConfirm");
+const passwordBtn = document.getElementById("passwordBtn");
+const passwordHint = document.getElementById("passwordHint");
+const passwordNotice = document.getElementById("passwordNotice");
+
+function checkNewPassword(current, next, confirm) {
+  if (!current) return "지금 비밀번호를 입력해 주세요.";
+  if (next.length < 8) return "새 비밀번호는 8자 이상이어야 해요.";
+  if (!/[A-Za-z]/.test(next) || !/[0-9]/.test(next)) return "새 비밀번호에 영문과 숫자를 함께 넣어 주세요.";
+  if (next !== confirm) return "새 비밀번호 확인이 다릅니다.";
+  if (next === current) return "지금 비밀번호와 다른 비밀번호로 바꿔 주세요.";
+  return null;
+}
+
+function showPasswordNotice(user) {
+  passwordNotice.hidden = Boolean(user && user.user_metadata && user.user_metadata.password_changed === true);
+}
+
+passwordForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const current = currentPasswordInput.value;
+  const next = newPasswordInput.value;
+  const problem = checkNewPassword(current, next, newPasswordConfirmInput.value);
+  passwordHint.classList.remove("field-hint--ok");
+  if (problem) {
+    passwordHint.textContent = problem;
+    return;
+  }
+  passwordBtn.disabled = true;
+  passwordHint.textContent = "바꾸는 중...";
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    const email = userData && userData.user && userData.user.email;
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password: current });
+    if (signInError) {
+      passwordHint.textContent = "지금 비밀번호가 맞지 않습니다.";
+      return;
+    }
+    const { data, error } = await supabase.auth.updateUser({ password: next, data: { password_changed: true } });
+    if (error) {
+      passwordHint.textContent =
+        error.code === "same_password"
+          ? "지금 비밀번호와 다른 비밀번호로 바꿔 주세요."
+          : error.code === "weak_password"
+            ? "너무 쉬운 비밀번호예요. 다른 비밀번호로 바꿔 주세요."
+            : `바꾸지 못했습니다: ${describeError(error)}`;
+      return;
+    }
+    passwordForm.reset();
+    passwordHint.textContent = "비밀번호를 바꿨어요. 다음 로그인부터 새 비밀번호를 쓰세요.";
+    passwordHint.classList.add("field-hint--ok");
+    showPasswordNotice(data.user);
+  } finally {
+    passwordBtn.disabled = false;
+  }
+});
+
 async function init() {
   const session = await requireStudent();
   if (!session) return;
+  supabase.auth.getUser().then(({ data }) => showPasswordNotice(data && data.user));
   state.student = session.student;
   nameEl.textContent = state.student.name || session.loginId;
   metaEl.textContent = `학번 ${state.student.sid || "-"} · ${state.student.cls || "-"}`;
@@ -320,7 +385,9 @@ async function init() {
   const studentId = state.student.id;
   requestsLive = liveTable({
     table: "outing_requests",
+    select: REQUEST_COLUMNS,
     eq: { student_id: studentId, date: TODAY_KEY },
+    augment: addRequestReasons(TODAY_KEY),
     order: ["created_at", "id"],
     onRows: (rows) => {
       state.requests = rows;
@@ -331,7 +398,9 @@ async function init() {
   });
   outingsLive = liveTable({
     table: "outings",
+    select: OUTING_COLUMNS,
     eq: { student_id: studentId, date: TODAY_KEY },
+    augment: addOutingReasons(TODAY_KEY),
     order: ["date"],
     onRows: (rows) => {
       state.outing = rows[0] || null;
@@ -344,6 +413,7 @@ async function init() {
     table: "students",
     select: STUDENT_COLUMNS,
     eq: { id: studentId },
+    augment: addLeaveReasons,
     order: ["id"],
     onRows: (rows) => {
       if (rows[0]) state.student = { id: rows[0].id, ...studentFromRow(rows[0]) };

@@ -25,6 +25,10 @@
     <button type="button" class="back-link" id="logoutBtn">로그아웃</button>
   </header>
 
+  <div class="password-notice" id="passwordNotice" hidden>
+    처음 받은 비밀번호를 쓰고 있어요. 맨 아래 <a href="#passwordSection">비밀번호 바꾸기</a>에서 나만 아는 비밀번호로 바꿔 주세요.
+  </div>
+
   <section class="student-section">
     <div class="student-section__title">오늘 내 상태 <span class="since-text" id="todayDate"></span></div>
     <div class="my-status" id="statusBox"><span class="student-empty">불러오는 중...</span></div>
@@ -67,6 +71,28 @@
   <section class="student-section">
     <div class="student-section__title">오늘 신청 내역</div>
     <div class="student-form" id="requestList"><span class="student-empty">불러오는 중...</span></div>
+  </section>
+
+  <!-- 학생이 직접 비밀번호를 바꾼다(사용자 요청 — 발급한 6자리 숫자 비밀번호는 약해서) -->
+  <section class="student-section" id="passwordSection">
+    <div class="student-section__title">비밀번호 바꾸기</div>
+    <form class="student-form" id="passwordForm" novalidate>
+      <div class="field">
+        <label for="currentPassword">지금 비밀번호</label>
+        <input id="currentPassword" type="password" autocomplete="current-password">
+      </div>
+      <div class="field">
+        <label for="newPassword">새 비밀번호</label>
+        <input id="newPassword" type="password" autocomplete="new-password">
+        <span class="field-hint">8자 이상, 영문과 숫자를 함께 넣어 주세요.</span>
+      </div>
+      <div class="field">
+        <label for="newPasswordConfirm">새 비밀번호 확인</label>
+        <input id="newPasswordConfirm" type="password" autocomplete="new-password">
+      </div>
+      <button type="submit" class="btn-primary" id="passwordBtn">비밀번호 바꾸기</button>
+      <div class="field-hint" id="passwordHint" role="status"></div>
+    </form>
   </section>
 
 </div>

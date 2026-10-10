@@ -10,6 +10,7 @@ import {
   studentToRow,
   STUDENT_COLUMNS,
 } from "./adapters.js";
+import { addContacts, addLeaveReasons, allOf } from "./private-fields.js";
 
 // 학생 계정 발급 요청 한 번에 보낼 최대 인원(student-accounts 함수 제한)
 const MAX_ACCOUNTS_PER_REQUEST = 200;
@@ -1080,18 +1081,10 @@ studentForm.addEventListener("submit", async (event) => {
   closeForm();
 });
 
-// 아이디·연락처·이메일은 서버가 담당 범위(관리자·학년부장 담당 학년·담임 담당 반) 학생 것만 내준다(사용자 요청).
-// 명단 행에 붙여 두면 수정 폼·여러 명 추가가 지금처럼 쓴다. 기숙사부는 쓰지 않으므로 읽지 않음
-async function addContacts(rows) {
-  if (state.leaveOnly) return null;
-  const { data, error } = await supabase.rpc("student_contacts");
-  if (error) return error;
-  const byId = new Map(data.map((c) => [c.id, c]));
-  for (const row of rows) {
-    const c = byId.get(row.id);
-    if (c) Object.assign(row, { login_id: c.login_id, phone: c.phone, parent_phone: c.parent_phone, email: c.email });
-  }
-  return null;
+// 아이디·연락처·이메일(담당 범위)과 명령퇴사 사유는 서버가 허용된 사람에게만 준다(사용자 요청, private-fields.js).
+// 명단 행에 붙여 두면 수정 폼·여러 명 추가가 지금처럼 쓴다. 기숙사부는 연락처를 쓰지 않으므로 읽지 않음
+function studentExtras(rows) {
+  return state.leaveOnly ? addLeaveReasons(rows) : allOf(addContacts, addLeaveReasons)(rows);
 }
 
 function initForGrades(allowedGrades) {
@@ -1118,7 +1111,7 @@ function initForGrades(allowedGrades) {
     table: "students",
     select: STUDENT_COLUMNS,
     order: ["id"],
-    augment: addContacts,
+    augment: studentExtras,
     onRows: (rows) => {
       state.studentsByGrade = groupStudentsByGrade(rows);
       renderRoster();

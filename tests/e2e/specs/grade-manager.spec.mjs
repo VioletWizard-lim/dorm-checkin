@@ -15,7 +15,8 @@ test.describe("학년부장 범위", () => {
     await page.goto("/display.html");
     await expect(page.locator("#gradeChips .filter-chip")).toHaveText(["전체", "1학년"]);
     await expect(page.locator("#filterChips .filter-chip")).toHaveText(["전체", "1학년실"]);
-    await expect(page.locator("#leavePanelList")).not.toContainText("박지훈"); // 3학년 명령퇴사 학생
+    await expect(page.locator("#awayPanelList")).toContainText("김민준");
+    await expect(page.locator("body")).not.toContainText("박지훈"); // 3학년 학생
   });
 
   test("관리자는 그대로 전체가 보인다", async ({ openAs, page }) => {

@@ -12,7 +12,10 @@ import {
   isGradeInView,
   isRoomInView,
   STUDENT_COLUMNS,
+  OUTING_COLUMNS,
+  REQUEST_COLUMNS,
 } from "./adapters.js";
+import { addOutingReasons, addRequestReasons, addLeaveReasons } from "./private-fields.js";
 import { outingPassData } from "./outing-pass.js";
 import { createPassDialog } from "./pass-dialog.js";
 
@@ -396,6 +399,25 @@ async function sendOutingNotice(studentId) {
   if (outingsLive && state.selectedDate === TODAY_KEY) await outingsLive.refresh();
 }
 
+// (날짜, 학생) 행을 고치고, 없으면 새로 넣는다. upsert(on conflict)는 사유 칸을 읽을 권한을 요구해서
+// 쓰지 않는다(사유는 허용된 사람만 읽음 — 마이그레이션 20261010020000_reason_scope). 그 사이 다른 교사가 먼저 넣었으면 다시 고친다
+async function writeOuting(row) {
+  const { date, student_id: studentId, ...fields } = row;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const { data, error } = await supabase
+      .from("outings")
+      .update(fields)
+      .eq("date", date)
+      .eq("student_id", studentId)
+      .select("student_id");
+    if (error) return error;
+    if (data.length > 0) return null;
+    const { error: insertError } = await supabase.from("outings").insert(row);
+    if (!insertError || insertError.code !== "23505") return insertError;
+  }
+  return { message: "저장하지 못했습니다. 잠시 뒤 다시 눌러 주세요." };
+}
+
 // 외출 상태 저장. 시각(since)과 담당 교사는 서버 트리거가 채운다.
 async function saveOuting(studentId, status, reason, expectedReturn) {
   const row = { date: state.selectedDate, student_id: studentId, status };
@@ -403,7 +425,7 @@ async function saveOuting(studentId, status, reason, expectedReturn) {
     row.reason = reason || null;
     row.expected_return = expectedReturn || null;
   }
-  const { error } = await supabase.from("outings").upsert(row, { onConflict: "date,student_id" });
+  const error = await writeOuting(row);
   if (error) {
     alert(`저장하지 못했습니다: ${describeError(error)}`);
     return false;
@@ -498,8 +520,10 @@ function subscribeOutingsForSelectedDate() {
   state.outings = {};
   outingsLive = liveTable({
     table: "outings",
+    select: OUTING_COLUMNS,
     order: ["student_id"],
     eq: { date },
+    augment: addOutingReasons(date),
     onRows: (rows) => {
       if (date !== state.selectedDate) return;
       state.outings = outingsByStudent(rows);
@@ -550,6 +574,7 @@ async function init() {
     table: "students",
     select: STUDENT_COLUMNS,
     order: ["id"],
+    augment: addLeaveReasons,
     onRows: (rows) => {
       state.studentsByGrade = groupStudentsByGrade(rows);
       render();
@@ -571,7 +596,9 @@ async function init() {
 
   requestsLive = liveTable({
     table: "outing_requests",
+    select: REQUEST_COLUMNS,
     eq: { date: TODAY_KEY, status: "pending" },
+    augment: addRequestReasons(TODAY_KEY),
     order: ["created_at", "id"],
     onRows: (rows) => {
       state.pendingRequests = rows;
