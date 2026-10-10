@@ -98,11 +98,11 @@
       <div class="roster-form__row" id="leaveFields">
         <div class="field">
           <label for="inputLeaveFrom">명령퇴사 시작일 (선택)</label>
-          <input id="inputLeaveFrom" type="date">
+          <input id="inputLeaveFrom" type="date" min="2020-01-01" max="2099-12-31">
         </div>
         <div class="field">
           <label for="inputLeaveTo">명령퇴사 종료일 (선택)</label>
-          <input id="inputLeaveTo" type="date">
+          <input id="inputLeaveTo" type="date" min="2020-01-01" max="2099-12-31">
         </div>
         <div class="field">
           <label for="inputLeaveReason">사유 (선택)</label>
@@ -114,11 +114,11 @@
       <div class="roster-form__row" id="banFields" hidden>
         <div class="field">
           <label for="inputBanFrom">외출 금지 시작일 (선택)</label>
-          <input id="inputBanFrom" type="date">
+          <input id="inputBanFrom" type="date" min="2020-01-01" max="2099-12-31">
         </div>
         <div class="field">
           <label for="inputBanTo">외출 금지 종료일 (선택)</label>
-          <input id="inputBanTo" type="date">
+          <input id="inputBanTo" type="date" min="2020-01-01" max="2099-12-31">
         </div>
         <div class="field">
           <label for="inputBanReason">외출 금지 사유 (선택)</label>
