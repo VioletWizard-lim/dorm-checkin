@@ -8,7 +8,7 @@ const MODES = {
   staff: {
     idStorageKey: "dormcheckin.savedUserId",
     idPattern: /^[A-Za-z0-9]+$/,
-    idPatternMessage: "아이디는 영문과 숫자만 사용할 수 있습니다.",
+    idPatternMessage: "교사 아이디는 영문과 숫자만 사용할 수 있습니다.",
     idLabel: "아이디",
     idPlaceholder: "아이디 입력",
     subtitle: "교사 계정으로 로그인해 주세요",
@@ -105,8 +105,8 @@ function mapAuthError(error) {
   return "로그인 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.";
 }
 
-// 탭을 바꾸면 안내 문구·저장된 아이디도 그 탭 것으로 바꾼다(마지막으로 고른 탭은 기억).
-function setMode(nextMode) {
+// 탭 모양·안내 문구만 바꾼다(입력한 값은 그대로)
+function showModeTab(nextMode) {
   mode = MODES[nextMode] ? nextMode : "staff";
   const config = MODES[mode];
   for (const btn of tabButtons) {
@@ -118,11 +118,17 @@ function setMode(nextMode) {
   userIdInput.placeholder = config.idPlaceholder;
   subtitleEl.textContent = config.subtitle;
   footerEl.textContent = config.footer;
+  writeStorage(MODE_STORAGE_KEY, mode);
+  return config;
+}
+
+// 탭을 바꾸면 안내 문구·저장된 아이디도 그 탭 것으로 바꾼다(마지막으로 고른 탭은 기억).
+function setMode(nextMode) {
+  const config = showModeTab(nextMode);
   const savedId = readStorage(config.idStorageKey);
   userIdInput.value = savedId || "";
   rememberCheckbox.checked = Boolean(savedId);
   passwordInput.value = "";
-  writeStorage(MODE_STORAGE_KEY, mode);
 }
 
 for (const btn of tabButtons) {
@@ -151,10 +157,14 @@ supabase.auth.getSession().then(({ data }) => {
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   clearMessages();
-  const config = MODES[mode];
-
   const userId = userIdInput.value.trim();
   const password = passwordInput.value;
+
+  // 교사 아이디에는 . _ - 가 없다. 학생 아이디(리로스쿨 ID, 예 26-10101)를 교사 탭에서 넣었으면 학생으로 로그인(사용자 요청)
+  if (mode === "staff" && !MODES.staff.idPattern.test(userId) && MODES.student.idPattern.test(userId)) {
+    showModeTab("student");
+  }
+  const config = MODES[mode];
 
   if (!userId || !password) {
     showError("아이디와 비밀번호를 입력해 주세요.");
