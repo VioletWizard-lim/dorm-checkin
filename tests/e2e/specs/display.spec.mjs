@@ -5,15 +5,17 @@ import { kstDatePlus, kstWeekdayIndex, todayKst } from "./helpers.mjs";
 const panel = (page, id) => page.locator(`#${id}`);
 
 test.describe("기숙사 현황판", () => {
-  test("자리 없음·외출중·방과후 패널(명령퇴사·외출 금지는 보이지 않음)", async ({ env, openAs, page }) => {
+  test("자리 없음·외출중·명령퇴사·방과후 패널(명령퇴사 사유·외출 금지는 보이지 않음)", async ({ env, openAs, page }) => {
     await env.sql("update public.students set ban_from = public.today_kst(), ban_to = public.today_kst() + 3 where id = $1", [STUDENT.minjun]);
     await openAs("teacher01", "/display.html");
     await expect(panel(page, "awayPanelList").locator(".display-card__name")).toHaveText(["김민준"]);
     await expect(panel(page, "awayPanelCount")).toHaveText("1명");
     await expect(panel(page, "outPanelCount")).toHaveText("0명");
     await expect(panel(page, "outPanelList")).toContainText("외출중인 학생이 없습니다.");
-    await expect(page.locator("#leavePanelList")).toHaveCount(0);
-    await expect(page.locator("body")).not.toContainText("박지훈"); // 명령퇴사 중
+    // 명령퇴사는 보이되(이름·종료일) 사유는 안 보임. 외출 금지 표시는 없음
+    await expect(panel(page, "leavePanelList").locator(".display-card__name")).toHaveText(["박지훈"]);
+    await expect(panel(page, "leavePanelList")).toContainText(`~${kstDatePlus(5)}`);
+    await expect(page.locator("body")).not.toContainText("장기 결석");
     await expect(page.locator(".ban-chip")).toHaveCount(0);
     if (kstWeekdayIndex() === null) {
       await expect(panel(page, "afterschoolPanelList")).toContainText("오늘은 방과후가 없는 날입니다.");
@@ -38,7 +40,9 @@ test.describe("기숙사 현황판", () => {
     await openAs("dorm01", "/display.html");
     await page.click("#gradeChips >> text=3학년");
     await expect(panel(page, "awayPanelCount")).toHaveText("0명");
+    await expect(panel(page, "leavePanelCount")).toHaveText("1명");
     await page.click("#filterChips >> text=1학년실");
+    await expect(panel(page, "leavePanelCount")).toHaveText("0명");
     await page.click("#gradeChips >> text=전체");
     await expect(panel(page, "awayPanelCount")).toHaveText("1명");
   });

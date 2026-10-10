@@ -23,7 +23,7 @@
       <div class="check-header__subtitle">실별 좌석 배치 보기·편집</div>
     </div>
     <div class="check-header__meta">
-      <a href="./check.html" class="back-link">← 체크 화면으로</a>
+      <a href="./check.html" class="back-link">외출 체크</a>
       <a href="./display.html" class="back-link">현황판 보기</a>
       <span class="loading-hint" id="navLoadingHint">메뉴 확인 중...</span>
       <a href="./students.html" class="back-link" id="manageLink" hidden>학생 명단 관리</a>
@@ -85,10 +85,36 @@
 
   <!-- 좌석 일괄 등록(편집 모드, 이 실을 편집할 수 있을 때): 엑셀에 자리 모양대로 적은 학번표를 붙여넣는다 -->
   <div class="roster-form-wrap" id="seatBulkWrap" hidden>
-    <div class="roster-form">
+    <div class="roster-form account-guide">
+      <div class="account-guide__title">좌석 일괄 등록 — <span id="seatBulkRoomName"></span></div>
+      <!-- 안내(사용자 요청: 자세하고 읽기 쉽게, 덮어쓰기 경고 포함) -->
+      <table class="account-guide__table account-guide__table--roles">
+        <tbody>
+          <tr>
+            <th>방법 1<br>좌석표 그대로</th>
+            <td>엑셀에 <b>교실 자리 모양대로</b> 학번을 적고, 그 칸들을 끌어서 복사(Ctrl+C)한 뒤 아래 칸에 붙여넣기(Ctrl+V)<br>
+              · 엑셀의 한 줄 = 좌석 한 줄, 한 칸 = 자리 하나<br>
+              · <b>빈 칸은 빈자리</b>로 남습니다<br>
+              · 칸에 "10305 홍길동"처럼 이름이 같이 있어도 학번만 읽습니다</td>
+          </tr>
+          <tr>
+            <th>방법 2<br>학번 목록</th>
+            <td>학번을 <b>한 줄에 하나씩</b> 붙여넣으면 앞자리부터 차례로 채웁니다(왼쪽 → 오른쪽, 다 차면 다음 줄)</td>
+          </tr>
+          <tr>
+            <th>저장 전 확인</th>
+            <td>붙여넣으면 아래에 <b>미리보기</b>(좌석 모양 표)가 나옵니다. 없는 학번·다른 학년·같은 학번 두 번·실보다 큰 표는 빨갛게 표시되고, <b>빨간 칸이 하나라도 있으면 저장되지 않습니다</b></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="alert alert-error bulk-overwrite-warning">
+        ⚠ 저장하면 이 실의 좌석표가 <b>통째로 새 좌석표로 바뀝니다(덮어쓰기)</b>.<br>
+        · 이번에 붙여넣지 않은 학생은 이 실에서 자리가 빠집니다(되돌리기 없음 — 다시 등록해야 함)<br>
+        · 다른 실에 앉아 있던 학생을 넣으면 그 실의 자리는 비워집니다<br>
+        · 학년부장은 다른 학년 학생 자리를 바꿀 수 없어서, 그 자리는 그대로 남습니다
+      </div>
       <div class="field">
-        <label for="seatBulkInput">좌석 일괄 등록 — <span id="seatBulkRoomName"></span></label>
-        <span class="field-hint">엑셀에 좌석 모양대로 학번을 적고 그 칸들을 복사해 붙여넣으면 같은 모양으로 배정됩니다(빈 칸 = 빈자리, 칸에 "10305 홍길동"처럼 이름이 같이 있어도 됨). 학번만 한 줄에 하나씩 붙여넣으면 앞자리부터(왼쪽→오른쪽, 위→아래) 차례로 채웁니다. 저장하면 이 실의 지금 좌석표는 새 좌석표로 바뀝니다.</span>
+        <label for="seatBulkInput">붙여넣을 칸</label>
         <textarea id="seatBulkInput" rows="6" placeholder="10301	10302	10303
 10304		10306"></textarea>
       </div>

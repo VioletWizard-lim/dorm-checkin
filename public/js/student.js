@@ -47,8 +47,9 @@ const REQUEST_META = {
 const state = {
   student: null,
   outing: null,
-  requests: [],
+  requests: [], // 오늘 신청(신청 칸 잠금 판단용, 실시간)
   requestsLoaded: false,
+  history: null, // 신청 현황 탭: 고른 기간의 내 신청(RPC my_outing_requests, 사유 포함)
   submitting: false,
 };
 let requestsLive = null;
@@ -176,15 +177,66 @@ function renderForm() {
   requestHint.textContent = blocked || "담임 선생님(또는 학년부장 선생님)이 승인하면 바로 외출로 처리됩니다.";
 }
 
-function renderRequests() {
-  if (!state.requestsLoaded) return;
-  const requests = state.requests.slice().sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
-  if (requests.length === 0) {
-    requestListEl.innerHTML = `<span class="student-empty">오늘 신청한 외출이 없습니다.</span>`;
+// ─────────── 신청 현황(사용자 요청): 기간을 골라 내 신청 기록을 본다. 기록은 지울 수 없음 ───────────
+const historyFromEl = document.getElementById("historyFrom");
+const historyToEl = document.getElementById("historyTo");
+const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
+
+function daysAgoKey(days) {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return getDateKey(d);
+}
+
+function dateLabel(key) {
+  const [y, m, d] = key.split("-").map(Number);
+  const label = `${m}월 ${d}일 (${WEEKDAYS[new Date(y, m - 1, d).getDay()]})`;
+  return key === TODAY_KEY ? `${label} · 오늘` : label;
+}
+
+function setHistoryRange(days) {
+  historyToEl.value = TODAY_KEY;
+  historyFromEl.value = daysAgoKey(days - 1);
+  loadHistory();
+}
+
+let historySeq = 0;
+async function loadHistory() {
+  const from = historyFromEl.value;
+  const to = historyToEl.value;
+  if (!from || !to || from > to) {
+    requestListEl.innerHTML = `<span class="student-empty">조회 기간을 확인해 주세요(시작일이 종료일보다 늦을 수 없어요).</span>`;
     return;
   }
+  const seq = ++historySeq;
+  const { data, error } = await supabase.rpc("my_outing_requests", { p_from: from, p_to: to });
+  if (seq !== historySeq) return; // 더 나중에 고른 기간이 있으면 버림
+  if (error) {
+    requestListEl.innerHTML = `<span class="student-empty">신청 현황을 불러오지 못했습니다: ${escapeHtml(describeError(error))}</span>`;
+    return;
+  }
+  state.history = data || [];
+  renderRequests();
+}
+
+historyFromEl.addEventListener("change", loadHistory);
+historyToEl.addEventListener("change", loadHistory);
+for (const btn of document.querySelectorAll("[data-history-days]")) {
+  btn.addEventListener("click", () => setHistoryRange(Number(btn.dataset.historyDays)));
+}
+
+function renderRequests() {
+  if (!state.history) return;
+  const requests = state.history;
+  if (requests.length === 0) {
+    requestListEl.innerHTML = `<span class="student-empty">이 기간에 신청한 외출이 없습니다.</span>`;
+    return;
+  }
+  let lastDate = "";
   requestListEl.innerHTML = requests
     .map((r) => {
+      const dateHeader = r.date !== lastDate ? `<div class="request-item__date">${escapeHtml(dateLabel(r.date))}</div>` : "";
+      lastDate = r.date;
       const meta = REQUEST_META[r.status] || REQUEST_META.pending;
       const times = [];
       if (r.start_time) times.push(`외출 ${r.start_time}`);
@@ -194,7 +246,7 @@ function renderRequests() {
       if (r.status === "rejected") {
         lines.push(`${formatTime(r.decided_at)} ${r.decided_by_name || ""} 선생님 반려${r.reject_reason ? ` · 사유: ${r.reject_reason}` : ""}`);
       }
-      return `
+      return `${dateHeader}
         <div class="request-item">
           <div class="request-item__top">
             <div class="request-item__reason">${escapeHtml(r.reason)}</div>
@@ -202,7 +254,7 @@ function renderRequests() {
           </div>
           ${lines.map((line) => `<div class="request-item__meta">${escapeHtml(line)}</div>`).join("")}
           ${
-            r.status === "pending"
+            r.status === "pending" && r.date === TODAY_KEY
               ? `<div><button type="button" class="btn-secondary btn-small" data-cancel-request="${escapeHtml(r.id)}">신청 취소</button></div>`
               : ""
           }
@@ -356,6 +408,12 @@ async function init() {
   todayDateEl.textContent = formatToday();
   render();
 
+  historyToEl.value = TODAY_KEY;
+  historyFromEl.value = daysAgoKey(6); // 기본: 최근 7일
+  historyToEl.max = TODAY_KEY;
+  historyFromEl.max = TODAY_KEY;
+  loadHistory();
+
   const studentId = state.student.id;
   requestsLive = liveTable({
     table: "outing_requests",
@@ -367,6 +425,8 @@ async function init() {
       state.requests = rows;
       state.requestsLoaded = true;
       render();
+      // 오늘 신청이 바뀌면(신청·취소·승인·반려) 신청 현황도 다시 읽는다(기간에 오늘이 들어 있을 때)
+      if (historyToEl.value >= TODAY_KEY && historyFromEl.value <= TODAY_KEY) loadHistory();
     },
     onError: reportLoadError,
   });

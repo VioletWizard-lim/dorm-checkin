@@ -80,7 +80,19 @@
 
   <div class="student-tab-panel" id="tabStatus" role="tabpanel" data-tab-panel="status" hidden>
   <section class="student-section">
-    <div class="student-section__title">오늘 신청 내역</div>
+    <div class="student-section__title">신청 현황</div>
+    <!-- 기간을 골라 내 신청 기록을 본다(사용자 요청). 기록은 지울 수 없고, 오늘 대기 중인 신청만 취소할 수 있다 -->
+    <div class="history-range">
+      <input type="date" id="historyFrom" aria-label="조회 시작일" min="2020-01-01" max="2099-12-31">
+      <span>~</span>
+      <input type="date" id="historyTo" aria-label="조회 종료일" min="2020-01-01" max="2099-12-31">
+    </div>
+    <div class="history-quick">
+      <button type="button" class="btn-secondary btn-small" data-history-days="1">오늘</button>
+      <button type="button" class="btn-secondary btn-small" data-history-days="7">최근 7일</button>
+      <button type="button" class="btn-secondary btn-small" data-history-days="30">최근 30일</button>
+    </div>
+    <span class="field-hint">내가 신청한 기록이에요. 기록은 지울 수 없고, 오늘 승인 대기 중인 신청만 취소할 수 있어요.</span>
     <div class="student-form" id="requestList"><span class="student-empty">불러오는 중...</span></div>
   </section>
   </div>
@@ -93,7 +105,7 @@
       <div class="field">
         <label for="verifyPassword">비밀번호</label>
         <input id="verifyPassword" type="password" autocomplete="current-password">
-        <span class="field-hint">개인정보를 보려면 비밀번호를 한 번 더 입력해 주세요.</span>
+        <span class="field-hint">개인정보를 보려면 비밀번호를 한 번 더 입력해 주세요. 비밀번호를 잊었으면 관리자(임재성 선생님)에게 말씀해 주세요.</span>
       </div>
       <button type="submit" class="btn-primary" id="verifyBtn">확인</button>
       <div class="field-hint" id="verifyHint" role="status"></div>
