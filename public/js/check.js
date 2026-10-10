@@ -30,6 +30,7 @@ const dateEl = document.getElementById("todayDate");
 const outCountEl = document.getElementById("outCountText");
 const searchInput = document.getElementById("search");
 const chipsEl = document.getElementById("filterChips");
+const gradeChipsEl = document.getElementById("gradeChips");
 const listEl = document.getElementById("studentList");
 const dateSelectEl = document.getElementById("dateSelect");
 const pastDateNoticeEl = document.getElementById("pastDateNotice");
@@ -45,6 +46,7 @@ const state = {
   rooms: {},
   searchTerm: "",
   activeFilter: "all",
+  activeGradeFilter: "all",
   selectedDate: TODAY_KEY,
   pendingRequests: [], // 오늘 승인 대기 중인 학생 외출 신청(outing_requests)
 };
@@ -153,6 +155,19 @@ function getOutingStatus(student) {
 
 // 외출 예정 학생의 외출 시각이 되면 다시 그려서 "외출중"으로 바꾼다.
 const updateStartTicker = createStartTimeTicker(() => render());
+
+// 학년 탭: 전체 / 1학년 / 2학년 / 3학년(학년부장은 담당 학년만)
+function renderGradeChips() {
+  const grades = GRADES.filter((g) => isGradeInView(currentProfile, g));
+  if (state.activeGradeFilter !== "all" && !grades.includes(state.activeGradeFilter)) state.activeGradeFilter = "all";
+  gradeChipsEl.innerHTML = [
+    `<button type="button" class="filter-chip${state.activeGradeFilter === "all" ? " is-active" : ""}" data-grade-filter="all">전체</button>`,
+    ...grades.map(
+      (grade) =>
+        `<button type="button" class="filter-chip${state.activeGradeFilter === grade ? " is-active" : ""}" data-grade-filter="${grade}">${grade}학년</button>`
+    ),
+  ].join("");
+}
 
 function renderChips() {
   const roomEntries = Object.entries(state.rooms).filter(([id, room]) => isRoomInView(currentProfile, id, room));
@@ -270,9 +285,13 @@ function render() {
     : `그 날 외출 기록 ${outCount}명`;
   updateStartTicker(isToday ? Object.values(state.outings) : []);
 
+  renderGradeChips();
   renderChips();
 
   let filtered = allStudents;
+  if (state.activeGradeFilter !== "all") {
+    filtered = filtered.filter((s) => s.grade === state.activeGradeFilter);
+  }
   if (state.activeFilter !== "all") {
     filtered = filtered.filter((s) => roomIdByStudent[s.id] === state.activeFilter);
   }
@@ -440,6 +459,13 @@ async function toggleOuting(studentId, grade, currentStatus, reason, expectedRet
 function restoreToIn(studentId) {
   return saveOuting(studentId, "in");
 }
+
+gradeChipsEl.addEventListener("click", (event) => {
+  const btn = event.target.closest("[data-grade-filter]");
+  if (!btn) return;
+  state.activeGradeFilter = btn.dataset.gradeFilter;
+  render();
+});
 
 chipsEl.addEventListener("click", (event) => {
   const btn = event.target.closest("[data-filter]");
