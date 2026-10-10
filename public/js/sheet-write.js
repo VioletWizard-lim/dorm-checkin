@@ -20,6 +20,17 @@ function columnName(index) {
   return name;
 }
 
+// 엑셀 시트 이름 규칙: \ / ? * [ ] : 는 쓸 수 없고, 앞뒤 작은따옴표 안 됨, 31자까지, 비면 안 됨
+// (어기면 엑셀이 "내용에 문제가 있습니다"라며 복구하려 함 — 실 이름 "1/2학년"에서 실제로 생김)
+export function safeSheetName(name) {
+  const cleaned = String(name ?? "")
+    .replace(/[\\/?*[\]:]/g, "_")
+    .replace(/^'+|'+$/g, "")
+    .trim()
+    .slice(0, 31);
+  return cleaned || "Sheet1";
+}
+
 // rows: 문자열 2차원 배열. 모든 줄을 width 칸으로 맞춰 테두리를 그린다
 export function buildXlsx(rows, { sheetName = "Sheet1", columnWidth = 14 } = {}) {
   const width = Math.max(1, ...rows.map((row) => row.length));
@@ -56,7 +67,7 @@ export function buildXlsx(rows, { sheetName = "Sheet1", columnWidth = 14 } = {})
     "xl/workbook.xml":
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
       '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
-      `<sheets><sheet name="${xmlEscape(sheetName.slice(0, 31))}" sheetId="1" r:id="rId1"/></sheets></workbook>`,
+      `<sheets><sheet name="${xmlEscape(safeSheetName(sheetName))}" sheetId="1" r:id="rId1"/></sheets></workbook>`,
     "xl/_rels/workbook.xml.rels":
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
       '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
@@ -103,6 +114,8 @@ function crc32(bytes) {
   return (crc ^ 0xffffffff) >>> 0;
 }
 
+const DOS_DATE = (0 << 9) | (1 << 5) | 1; // 1980-01-01
+
 function zipStored(entries) {
   const locals = [];
   const centrals = [];
@@ -116,6 +129,7 @@ function zipStored(entries) {
     lv.setUint16(4, 20, true); // 필요한 버전
     lv.setUint16(6, 0x0800, true); // 파일 이름 UTF-8
     lv.setUint16(8, 0, true); // stored
+    lv.setUint16(12, DOS_DATE, true); // 날짜가 0이면 엑셀이 문제로 볼 수 있어 1980-01-01로
     lv.setUint32(14, crc, true);
     lv.setUint32(18, data.length, true);
     lv.setUint32(22, data.length, true);
@@ -130,6 +144,7 @@ function zipStored(entries) {
     cv.setUint16(6, 20, true);
     cv.setUint16(8, 0x0800, true);
     cv.setUint16(10, 0, true);
+    cv.setUint16(14, DOS_DATE, true);
     cv.setUint32(16, crc, true);
     cv.setUint32(20, data.length, true);
     cv.setUint32(24, data.length, true);

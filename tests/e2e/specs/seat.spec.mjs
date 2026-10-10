@@ -162,17 +162,22 @@ test.describe("좌석 배치판 — 편집 모드", () => {
     expect((await room(env, ROOM.first)).seat_map).toEqual({ r0c0: STUDENT.minjun, r0c1: STUDENT.haneul, r1c0: STUDENT.hong });
   });
 
-  test("좌석 일괄 등록: 양식(엑셀) 내려받기 → 그대로 올리면 같은 좌석표, 빈 양식은 학번이 없다고 안내", async ({ openAs, page }) => {
+  test("좌석 일괄 등록: 양식(엑셀) 내려받기 → 그대로 올리면 같은 좌석표, 빈 양식은 학번이 없다고 안내", async ({ env, openAs, page }) => {
     const alerts = collectAlerts(page);
+    // 엑셀 시트 이름에 / 는 못 쓴다(쓰면 엑셀이 "내용에 문제가 있습니다") — 실 이름 "1/2학년" 그대로 시험
+    await env.sql("update public.rooms set name = '1/2학년' where id = $1", [ROOM.first]);
     await openAs("admin01", "/seat.html");
     await page.click("#editModeToggle");
     await page.click("#seatBulkBtn");
 
     // 지금 좌석표(1학년실 2×2: r0c0 홍길동, r0c1 김민준)를 엑셀로 받는다
     const [current] = await Promise.all([page.waitForEvent("download"), page.click("#seatTemplateCurrentBtn")]);
-    expect(current.suggestedFilename()).toBe("좌석표_1학년실_2x2.xlsx");
+    expect(current.suggestedFilename()).toBe("좌석표_1_2학년_2x2.xlsx");
     const currentBytes = await readDownload(current);
     expect(currentBytes.subarray(0, 2).toString()).toBe("PK"); // zip(xlsx)
+    // 압축 없는 zip이라 workbook.xml이 그대로 들어 있다: 시트 이름의 / 는 _ 로
+    expect(currentBytes.toString("utf8")).toContain('<sheet name="1_2학년"');
+    expect(currentBytes.toString("utf8")).not.toContain('name="1/2학년"');
 
     // 받은 파일을 그대로 올리면 같은 모양으로 미리보기(바로 저장되지는 않음)
     await page.setInputFiles("#seatBulkFile", { name: "좌석표.xlsx", mimeType: XLSX_TYPE, buffer: currentBytes });
@@ -182,7 +187,7 @@ test.describe("좌석 배치판 — 편집 모드", () => {
 
     // 빈 양식: 칸만 있고 학번이 없다
     const [blank] = await Promise.all([page.waitForEvent("download"), page.click("#seatTemplateBlankBtn")]);
-    expect(blank.suggestedFilename()).toBe("좌석 양식_1학년실_2x2.xlsx");
+    expect(blank.suggestedFilename()).toBe("좌석 양식_1_2학년_2x2.xlsx");
     await page.setInputFiles("#seatBulkFile", { name: "양식.xlsx", mimeType: XLSX_TYPE, buffer: await readDownload(blank) });
     await expect.poll(() => alerts.join("\n")).toContain("학번을 찾지 못했습니다");
   });
