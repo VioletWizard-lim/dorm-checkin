@@ -391,17 +391,10 @@ for (const btn of tabButtons) btn.addEventListener("click", () => selectTab(btn.
 window.addEventListener("hashchange", () => selectTab(window.location.hash.slice(1)));
 selectTab(window.location.hash.slice(1));
 
-// 처음 받은 비밀번호를 쓰는 학생에게 "개인정보 수정에서 바꿔 주세요" 안내(바꾸면 user_metadata.password_changed = true — myinfo.js)
-const passwordNotice = document.getElementById("passwordNotice");
-function showPasswordNotice(user) {
-  passwordNotice.hidden = Boolean(user && user.user_metadata && user.user_metadata.password_changed === true);
-}
-
 async function init() {
   const session = await requireStudent();
   if (!session) return;
-  initStudentInfo(session);
-  supabase.auth.getUser().then(({ data }) => showPasswordNotice(data && data.user));
+  initStudentInfo(session); // 개인정보 수정 탭 + "처음 받은 비밀번호" 안내
   state.student = session.student;
   nameEl.textContent = state.student.name || session.loginId;
   metaEl.textContent = `학번 ${state.student.sid || "-"} · ${state.student.cls || "-"}`;

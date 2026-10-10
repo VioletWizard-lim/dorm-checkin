@@ -22,7 +22,7 @@ function columnName(index) {
 
 // 엑셀 시트 이름 규칙: \ / ? * [ ] : 는 쓸 수 없고, 앞뒤 작은따옴표 안 됨, 31자까지, 비면 안 됨
 // (어기면 엑셀이 "내용에 문제가 있습니다"라며 복구하려 함 — 실 이름 "1/2학년"에서 실제로 생김)
-export function safeSheetName(name) {
+function safeSheetName(name) {
   const cleaned = String(name ?? "")
     .replace(/[\\/?*[\]:]/g, "_")
     .replace(/^'+|'+$/g, "")

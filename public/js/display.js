@@ -89,12 +89,11 @@ function renderRoomChips() {
   chipsEl.innerHTML = chips.join("");
 }
 
-function renderOutingPanel(students, statuses, listEl, countEl, extraLabel, emptyText) {
-  const statusList = Array.isArray(statuses) ? statuses : [statuses];
+function renderOutingPanel(students, status, listEl, countEl, extraLabel, emptyText) {
   // 외출 예정(승인됐지만 외출 시각 전)은 외출중 패널 맨 아래에 따로 표시하고 인원에서는 뺀다.
   const isScheduled = (s) => isScheduledOuting(state.outings[s.id], TODAY_KEY, TODAY_KEY);
   const matched = students
-    .filter((s) => state.outings[s.id] && statusList.includes(state.outings[s.id].status))
+    .filter((s) => state.outings[s.id] && state.outings[s.id].status === status)
     .sort((a, b) => {
       const sa = isScheduled(a);
       const sb = isScheduled(b);
@@ -211,8 +210,7 @@ function render() {
   const onLeave = filtered.filter((s) => isOnLeave(s, TODAY_KEY));
   const notOnLeave = filtered.filter((s) => !isOnLeave(s, TODAY_KEY));
 
-  // "unauthorized"는 예전 상태 이름(자리비움과 합쳐지기 전) — 기존 데이터 호환용으로 계속 같이 조회
-  renderOutingPanel(notOnLeave, ["away", "unauthorized"], awayListEl, awayCountEl, "자리 없음", "자리 없음으로 표시된 학생이 없습니다.");
+  renderOutingPanel(notOnLeave, "away", awayListEl, awayCountEl, "자리 없음", "자리 없음으로 표시된 학생이 없습니다.");
   renderOutingPanel(notOnLeave, "out", outListEl, outCountEl, "외출", "외출중인 학생이 없습니다.");
   renderLeavePanel(onLeave);
   renderAfterschoolPanel(notOnLeave);

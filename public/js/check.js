@@ -142,13 +142,12 @@ const STATUS_META = {
 };
 
 // "자리 없음"은 자동 판단 없이 순회하는 교사가 직접 표시하는 수동 상태다(재실에서만 진입, 재실로만 복귀).
-// 예전에 무단외출/자리비움 두 상태로 나눠뒀던 걸 하나로 합침 — 기존에 저장된 "unauthorized" 값도 같은 걸로 취급한다.
 // "명령퇴사"(기간제 상태)는 무엇보다 우선한다 — students.html에서 설정하며 여기서는 표시만 한다.
 function getOutingStatus(student) {
   if (isOnLeave(student, state.selectedDate)) return "leave";
   const outing = state.outings[student.id];
   const status = outing && outing.status;
-  if (status === "away" || status === "unauthorized") return "away";
+  if (status === "away") return "away";
   if (status === "out" && isScheduledOuting(outing, state.selectedDate, TODAY_KEY)) return "scheduled";
   return status === "out" ? "out" : "in";
 }
@@ -224,16 +223,16 @@ function renderList(filtered) {
         actionsHtml = `<div class="since-text ml-auto">외출 금지 — 학년부장·관리자만 외출 처리</div>`;
       } else if (status === "in") {
         actionsHtml = canManage
-          ? `<button type="button" class="toggle-btn toggle-btn--mark-out" data-toggle-id="${escapeHtml(s.id)}" data-grade="${escapeHtml(s.grade)}" data-current-status="in"${ban ? banConfirmAttr(s, ban) : ""}>외출 체크</button>`
+          ? `<button type="button" class="toggle-btn toggle-btn--mark-out" data-toggle-id="${escapeHtml(s.id)}" data-current-status="in"${ban ? banConfirmAttr(s, ban) : ""}>외출 체크</button>`
           : `<div class="ml-auto"></div>`;
       } else if (isOut) {
         // 외출중·외출 예정: 학생 화면과 같은 외출증을 볼 수 있다
         let toggleBtn = "";
         if (status === "out" && (canManage || supervisor)) {
           const confirmReturn = !canManage ? ` data-confirm-return="${escapeHtml(s.name || "이 학생")}"` : "";
-          toggleBtn = `<button type="button" class="toggle-btn toggle-btn--mark-in" data-toggle-id="${escapeHtml(s.id)}" data-grade="${escapeHtml(s.grade)}" data-current-status="out"${confirmReturn}>복귀 체크</button>`;
+          toggleBtn = `<button type="button" class="toggle-btn toggle-btn--mark-in" data-toggle-id="${escapeHtml(s.id)}" data-current-status="out"${confirmReturn}>복귀 체크</button>`;
         } else if (status === "scheduled" && canManage) {
-          toggleBtn = `<button type="button" class="toggle-btn toggle-btn--mark-in" data-toggle-id="${escapeHtml(s.id)}" data-grade="${escapeHtml(s.grade)}" data-current-status="out" data-confirm-cancel="${escapeHtml(s.name || "이 학생")}">외출 취소</button>`;
+          toggleBtn = `<button type="button" class="toggle-btn toggle-btn--mark-in" data-toggle-id="${escapeHtml(s.id)}" data-current-status="out" data-confirm-cancel="${escapeHtml(s.name || "이 학생")}">외출 취소</button>`;
         }
         actionsHtml = `<div class="roster-actions">${passBtn}${toggleBtn}</div>`;
       } else if (status === "leave") {
@@ -447,12 +446,12 @@ async function saveOuting(studentId, status, reason, expectedReturn) {
   return true;
 }
 
-async function toggleOuting(studentId, grade, currentStatus, reason, expectedReturn) {
+async function toggleOuting(studentId, currentStatus, reason, expectedReturn) {
   const nextStatus = currentStatus === "out" ? "in" : "out";
   const dateWhenClicked = state.selectedDate;
   const saved = await saveOuting(studentId, nextStatus, reason, expectedReturn);
 
-  // 지난 날짜 기록을 고치는 중이면(오늘이 아니면) 문자를 보내지 않는다 — 실시간 외출이 아니라 사후 정정이기 때문.
+  // 문자는 오늘 외출만(지난 날짜는 보기만 할 수 있지만, 저장 중에 날짜를 바꿨을 때를 대비해 한 번 더 확인)
   if (saved && nextStatus === "out" && dateWhenClicked === TODAY_KEY) sendOutingNotice(studentId);
 }
 
@@ -518,7 +517,7 @@ listEl.addEventListener("click", (event) => {
     }
   }
   btn.disabled = true;
-  toggleOuting(btn.dataset.toggleId, btn.dataset.grade, currentStatus, reason, expectedReturn).finally(() => {
+  toggleOuting(btn.dataset.toggleId, currentStatus, reason, expectedReturn).finally(() => {
     btn.disabled = false;
   });
 });

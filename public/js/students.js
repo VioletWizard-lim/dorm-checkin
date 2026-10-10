@@ -1,6 +1,6 @@
 import { supabase, requireStaff, signOutTo, describeError, callFunction, reportLoadError } from "./supabase-client.js";
 import { renderNav } from "./nav.js";
-import { getDateKey, isOnLeave, escapeHtml, insertTabOnKeydown, outingBanOn, outingBanText } from "./util.js";
+import { getDateKey, isOnLeave, escapeHtml, insertTabOnKeydown, outingBanOn, outingBanText, csvCell } from "./util.js";
 import { liveTable } from "./live-table.js";
 import {
   GRADES as ALL_GRADES,
@@ -764,12 +764,7 @@ function renderAccountResults() {
 }
 
 // 발급·재발급한 비밀번호를 CSV 파일로 내려받는다(서버에 저장하지 않으므로 관리자가 따로 보관 — 사용자 요청).
-// 엑셀에서 한글이 깨지지 않게 BOM을 붙이고, 수식으로 읽히지 않게 =·+·-·@로 시작하는 칸은 앞에 '를 붙인다.
-function csvCell(value) {
-  let text = String(value ?? "");
-  if (/^[=+\-@]/.test(text)) text = `'${text}`;
-  return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
-}
+// 엑셀에서 한글이 깨지지 않게 BOM을 붙인다(칸은 util.js의 csvCell).
 
 function formatDateTime(date) {
   return `${getDateKey(date)} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;

@@ -40,14 +40,14 @@
   - `supabase/functions/`: Edge Functions(Deno)
     - `staff-accounts`: 교사 계정 생성(역할 teacher·gradeManager·studyHallSupervisor·dormStaff·afterschoolTeacher 지정 가능, admin은 거부)·비밀번호 재발급·비활성화(ban), 관리자 전용
     - `student-accounts`: 학생 계정 발급(여러 명)·비밀번호 재발급·삭제(`withStudent`면 명단 행까지)·여러 학생 한 번에 삭제(`delete-students`, 계정까지). 발급·재발급·계정이 있는 학생 삭제·여러 명 삭제는 관리자만. 담임·학년부장은 계정 없는 학생의 명단 삭제(`withStudent`)만(`_shared/scope.ts`의 `canManageStudent` — DB `can_manage_student`와 같은 규칙)
-    - `notify-outing`: 오늘 외출이 시작되면(외출 체크·신청 승인) 학부모에게 안내 문자(장문). 학생 외출증은 문자 대신 학생 화면에 띄움(문자 비용: MMS를 빼서 1회 약 155원 → 약 45원). 교직원만 호출, 같은 외출에는 한 번만(`outings.notice`가 빈 'out' 기록을 먼저 차지), 결과를 `outings.notice`에 기록
+    - `notify-outing`: 오늘 외출이 시작되면(외출 체크·신청 승인) 학부모에게 안내 문자(장문). 학생 외출증은 문자 대신 학생 화면에 띄움(문자 비용: 학생 MMS(약 110원)를 빼서 외출 1회 약 155원 → 약 45원). 교직원만 호출, 같은 외출에는 한 번만(`outings.notice`가 빈 'out' 기록을 먼저 차지), 결과를 `outings.notice`에 기록
     - `_shared/solapi.ts`: 솔라피 REST(HMAC 인증·여러 건 발송, 같은 번호 중복 허용). 키가 없으면 문자만 건너뜀
     - `config.toml`에서 `verify_jwt`를 끄고, 함수 안(`_shared/supabase.ts`의 `getCaller`)에서 호출자를 확인한다
   - `public/js/`의 공통 모듈
     - `supabase-config.js`: 프로젝트 URL·publishable 키(공개돼도 안전한 값)·가짜 이메일 도메인
     - `supabase-client.js`: 클라이언트, `requireStaff()`(세션·프로필 확인, 비활성화 계정 로그아웃, 학생 계정은 student.html로, 2시간 자동 로그아웃 시작 — `idle-logout.js`), `requireStudent()`(교직원 계정은 check.html로), `signOutTo()`(이 기기만 로그아웃), `describeError()`, `callFunction()`, `showPageError()`
     - `live-table.js`: 테이블 하나를 "전체 조회 + Realtime 변경 알림이 오면 다시 조회"로 화면에 맞춰 둔다. 1000행씩 나눠 읽고, 구독이 다시 연결될 때·화면이 다시 보일 때 다시 조회하며, Realtime이 안 되면 15초마다 조회한다. `refresh()`는 다시 읽기가 끝나면 풀리는 Promise
-    - `util.js`: 화면 공통 도우미(`escapeHtml`·`getDateKey`·`formatTime`·`formatToday`·`isOnLeave`·`todayWeekdayIndex`·`insertTabOnKeydown`). 화면마다 같은 함수를 복사하지 말고 여기서 가져온다. 데이터 로드 오류 안내는 `supabase-client.js`의 `reportLoadError`
+    - `util.js`: 화면 공통 도우미(`escapeHtml`·`getDateKey`·`formatTime`·`formatToday`·`isOnLeave`·`todayWeekdayIndex`·`insertTabOnKeydown`·`outingBanOn`·`outingBanText`·`csvCell`(엑셀 수식 방지)). 화면마다 같은 함수를 복사하지 말고 여기서 가져온다. 데이터 로드 오류 안내는 `supabase-client.js`의 `reportLoadError`
     - `private-fields.js`: 열 권한으로 막아 둔 칸(학생 연락처·사유)을 허용된 사람만 RPC로 읽어 행에 붙이는 `liveTable` `augment` 도우미(`addContacts`·`addOutingReasons`·`addRequestReasons`·`addLeaveReasons`·`allOf`). `live-table.js`의 `augment(rows)`는 조회 뒤 행을 넘기기 전에 불리고, 실패하면 조회 실패처럼 다시 시도
     - `adapters.js`: DB 행(snake_case) ↔ 화면 코드가 쓰는 예전 Firebase 모양(`studentsByGrade`, `seatMap`, `managedClasses` 등) 변환. 화면 렌더링 코드는 예전 모양을 그대로 쓴다
 - 배포
@@ -105,7 +105,7 @@
   - **외출중·외출 예정** 카드에는 [외출증 보기]도 있음 → 학생 화면과 같은 외출증(`outing-pass.js`)을 팝업으로 보여 줌(`pass-dialog.js`의 `createPassDialog`, seat.html과 같은 팝업). 학생이 휴대폰을 못 보여 줄 때 등 교사가 직접 확인용. 열려 있는 동안 기록이 바뀌면 다시 그리고, 복귀·취소로 외출이 끝나면 저절로 닫힘. 지난 날짜를 볼 때도 그 날짜로 보임
   - **자리 없음** → "재실로 되돌리기" 버튼만 노출(자동 판단 없이 전부 수동 — seat.html에서 순회하는 교사가 직접 표시하고, 여기서는 해제만 가능. 예전엔 "무단외출"/"자리비움" 두 상태로 나눠뒀다가 하나로 합침)
   - **명령퇴사**(기간제 상태, 학생의 `leave_from`~`leave_to`가 조회 중인 날짜를 포함할 때) → 조작 버튼 없이 "학생 명단 관리에서 설정"만 표시(설정은 students.html에서 함). 이 기간 동안은 "자리 없음" 판정에서 제외되고 다른 어떤 상태보다 우선 표시됨
-- 저장은 `outings`에 (날짜, 학생) 기준 upsert. 시각(`since`)과 담당 교사(`checked_by`·`checked_by_name`)는 서버 트리거가 채운다. 저장 중에는 버튼을 잠가 두 번 눌리지 않게 함
+- 저장은 `outings`의 (날짜, 학생) 행을 고치고 없으면 새로 넣음(`writeOuting` — upsert는 사유 칸 읽기 권한이 필요해서 안 씀, 아래 "보안 규칙"의 사유 글). 시각(`since`)과 담당 교사(`checked_by`·`checked_by_name`)는 서버 트리거가 채운다. 저장 중에는 버튼을 잠가 두 번 눌리지 않게 함
 - **외출 금지 학생**(사용자 요청, 학생 명단에서 학년부장·관리자가 기간·사유를 정함): 이름 옆에 검은 "외출 금지 ~10/13" 표시(사유는 마우스를 올리면, 명령퇴사 중인 카드에도). 금지 기간에는 **학년부장(그 학년)·관리자만** 외출 처리 — [외출 체크]·신청 [승인]을 누르면 "외출 금지 기간입니다(…). 그래도 외출 처리할까요?" 확인 창. 담임 등 다른 교사에게는 버튼 대신 "외출 금지 — 학년부장·관리자만 외출 처리"/"학년부장·관리자만 승인". 복귀·자리 없음은 그대로. 서버 트리거 `private.outings_check_ban`도 같은 규칙
 - **기숙사부(dormStaff)는 보기만**: 카드에 조작 버튼이 없고(외출중·외출 예정이면 [외출증 보기]만), 승인 패널도 안 보임. 서버도 외출 기록 쓰기를 막음(`private.can_write_outings`)
 - **역할별 외출 처리 범위**(사용자 요청, 서버 트리거 `private.outings_check_scope`도 같은 규칙):
@@ -306,7 +306,7 @@ outing_requests   -- 학생 외출 신청: date(KST), student_id, requested_by, 
 afterschool_dates -- 방과후 있는 날(afterschool.html): date(PK), created_by, created_at. 행이 있는 날만 "오늘 방과후"를 보여 줌
 ```
 - 화면 코드는 `adapters.js`로 위 행을 예전 모양(`studentsByGrade[grade][id]`, `room.seatMap`, `outing.expectedReturn`, `user.managedClasses[grade][cls]` 등)으로 바꿔서 쓴다
-- "자리 없음"의 예전 값 `unauthorized`는 이전할 때 `away`로 바뀌었다
+- "자리 없음"의 예전 값 `unauthorized`는 이전할 때 `away`로 바뀌었다(DB는 `in`·`out`·`away`만 받으므로 화면도 `unauthorized`를 따로 다루지 않음)
 - 외출 시각 표시: `start_time`이 있으면 그 값, 없으면(교사가 직접 "외출 체크") `since`
 - **외출 예정**: 오늘 기록이 `out`이고 `start_time`이 지금(화면을 연 컴퓨터 시각)보다 나중이면 화면에서만 "외출 예정"으로 취급(`adapters.js`의 `isScheduledOuting`, DB 상태는 그대로 `out`). 각 화면은 `createStartTimeTicker`로 가장 가까운 외출 시각에 다시 그려서 "외출중"으로 바꾼다
   - check.html: "외출 예정" 배지 + [외출 취소](재실로, 확인 창 한 번), 상단 인원은 "외출중 N명 · 외출 예정 M명"
@@ -361,7 +361,7 @@ afterschool_dates -- 방과후 있는 날(afterschool.html): date(PK), created_b
 - [x] Supabase 프로젝트 생성(서울 리전), 공개 가입 끄기
 - [x] `public/js/supabase-config.js`에 프로젝트 URL·publishable 키 채우기(공개돼도 안전한 값이라 그대로 커밋)
 - [x] 로그인 화면: 아이디→이메일 변환 로직 구현
-- [x] 외출 체크 입력 화면: 날짜별 `outings` 갱신, "자리 없음" 해제, 지난 날짜 조회·수정
+- [x] 외출 체크 입력 화면: 날짜별 `outings` 갱신, "자리 없음" 해제, 지난 날짜 조회(지금은 보기만)
 - [x] 학생 명단 관리 화면(`students.html`): 학년별 학생 등록/수정/삭제, 권한별 범위
 - [x] 현황판: `outings`, `students`, `rooms` 실시간 렌더링
 - [x] 좌석 배치판: `rooms` CRUD, 좌석 배정 RPC, 권한별 편집 가능 여부 분기
@@ -369,16 +369,16 @@ afterschool_dates -- 방과후 있는 날(afterschool.html): date(PK), created_b
 - [x] EmailJS 가입 및 `public/js/emailjs-config.js` 실제 값 채우기(4단계에서 문자로 바꾸며 제거)
 - [x] `firebase init hosting:github` 실행해 GitHub Actions 자동 배포 연결
 - [x] "자리 없음" 수동 상태 + 명령퇴사(기간제 상태) 추가, 현황판·좌석 배치판 표시 반영
-- [x] 자습 감독용 역할(studyHallSupervisor) 추가 — 외출 체크 화면 전용
+- [x] 자습 감독용 역할(studyHallSupervisor) 추가 — 처음엔 외출 체크 화면 전용, 지금은 현황판·좌석 배치판도(위 "사용자 역할")
 - [x] 좌석 배치판에서도 좌석을 클릭해 출석 상태(복귀/자리 없음)를 바로 바꿀 수 있게 추가 — "외출"(새로 나가는 것)은 제외, check.html 전용으로 유지
 - [x] check.html에서 "자리 없음으로 표시" 버튼 제거 — 자리 없음 표시/해제는 seat.html 전용으로 통합(check.html은 해제만 가능)
-- [x] "기숙사부"(dormStaff) 역할 추가 — 계정 관리(accounts.html)를 제외한 모든 화면에서 admin과 동일한 권한
+- [x] "기숙사부"(dormStaff) 역할 추가 — 처음엔 계정 관리를 뺀 admin과 같았고, 지금은 보기 + 명령퇴사 기간만(위 "사용자 역할")
 - [x] 모든 화면 헤더에 권한별 전체 메뉴 링크 통일
 - [x] Supabase 이전 1단계: 스키마·RLS·RPC, `staff-accounts` Edge Function, 배포·이전 워크플로, DB·함수·이전 스크립트 테스트
 - [x] Supabase 이전 2단계: 화면을 Supabase로 전환(기능 동일) + 비밀번호 재발급 + 화면 E2E 테스트
 - [x] 전환 실행: 데이터 이전 → 관리자 비밀번호 설정 → 미리보기 확인 → 머지
 - [x] Supabase 이전 3단계: 학생 계정(리로스쿨 ID) + 외출 신청/승인(`student.html`, 승인 패널), 명단에 ID·연락처, 붙여넣기로 정보 갱신
-- [x] Supabase 이전 4단계: 외출증 문자(학생 MMS·학부모 문자, 솔라피) + 학생 비밀번호 문자 발송 + 외출증 이메일 제거(코드)
+- [x] Supabase 이전 4단계: 외출 문자(학부모 문자, 솔라피 — 학생 MMS는 나중에 빼고 외출증을 학생 화면에) + 학생 비밀번호 문자 발송 + 외출증 이메일 제거(코드)
 - [x] 솔라피 키·발신번호를 Edge Function 시크릿에 넣고 본인 번호로 시험
 - [ ] 발신번호를 학교 번호로 교체(솔라피 심사 후 `SMS_SENDER`만 바꿈)
 - [x] Supabase 이전 5단계: Firebase Auth·RTDB 코드와 규칙 배포 워크플로, 데이터 이전 스크립트 정리
