@@ -15,6 +15,8 @@ import {
 import { addOutingReasons } from "./private-fields.js";
 import { outingPassData } from "./outing-pass.js";
 import { createPassDialog } from "./pass-dialog.js";
+import { readSheetFile } from "./sheet-read.js";
+import { buildXlsx } from "./sheet-write.js";
 
 const MIN_SIZE = 1;
 let currentTeacherName = "";
@@ -758,6 +760,7 @@ seatBulkBtn.addEventListener("click", () => {
   if (!canEditRoom(state.activeRoomId)) return;
   state.editingCellKey = null;
   seatBulkInput.value = "";
+  document.getElementById("seatBulkFileNote").textContent = "";
   renderSeatBulkPreview();
   seatBulkWrap.hidden = false;
   render();
@@ -766,6 +769,82 @@ seatBulkBtn.addEventListener("click", () => {
 
 seatBulkCancelBtn.addEventListener("click", closeSeatBulk);
 seatBulkInput.addEventListener("input", renderSeatBulkPreview);
+
+// ── 양식 내려받기·파일 올리기(사용자 요청) ──
+// 양식 = 이 실의 행×열 칸(테두리)만 있는 엑셀. [지금 좌석표 받기]는 칸에 "학번 이름"을 채워 준다(올릴 때는 학번만 읽음).
+// 좌석 모양 그대로 읽어야 하므로 머리글 없이 표만 둔다.
+function seatTemplateRows(room, withCurrent) {
+  const rows = Number(room.rows) || 1;
+  const cols = Number(room.cols) || 1;
+  const studentsById = getStudentsById();
+  const grid = [];
+  for (let r = 0; r < rows; r++) {
+    const line = [];
+    for (let c = 0; c < cols; c++) {
+      const student = withCurrent ? studentsById[(room.seatMap || {})[`r${r}c${c}`]] : null;
+      line.push(student ? `${student.sid} ${student.name}` : "");
+    }
+    grid.push(line);
+  }
+  return grid;
+}
+
+function downloadSeatTemplate(withCurrent) {
+  const room = state.rooms[state.activeRoomId];
+  if (!room) return;
+  const blob = buildXlsx(seatTemplateRows(room, withCurrent), { sheetName: room.name || "좌석표" });
+  const safeName = String(room.name || "좌석표").replace(/[\\/:*?"<>|]/g, "_");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `${withCurrent ? "좌석표" : "좌석 양식"}_${safeName}_${room.rows}x${room.cols}.xlsx`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+document.getElementById("seatTemplateBlankBtn").addEventListener("click", () => downloadSeatTemplate(false));
+document.getElementById("seatTemplateCurrentBtn").addEventListener("click", () => downloadSeatTemplate(true));
+
+// 파일의 표 → 붙여넣기 칸(탭·줄바꿈). 위·왼쪽의 빈 줄·빈 칸과 끝의 빈 줄은 떼어 좌석 모양을 맞춘다
+function sheetRowsToSeatText(rows) {
+  const cleaned = rows.map((row) => row.map((cell) => String(cell ?? "").trim()));
+  while (cleaned.length && !cleaned[cleaned.length - 1].some(Boolean)) cleaned.pop();
+  while (cleaned.length && !cleaned[0].some(Boolean)) cleaned.shift();
+  const firstCol = Math.min(...cleaned.map((row) => {
+    const i = row.findIndex(Boolean);
+    return i < 0 ? Infinity : i;
+  }));
+  const shift = Number.isFinite(firstCol) ? firstCol : 0;
+  return cleaned
+    .map((row) => {
+      const cells = row.slice(shift);
+      while (cells.length && !cells[cells.length - 1]) cells.pop();
+      return cells.join("\t");
+    })
+    .join("\n");
+}
+
+const seatBulkFile = document.getElementById("seatBulkFile");
+const seatBulkFileNote = document.getElementById("seatBulkFileNote");
+seatBulkFile.addEventListener("change", async () => {
+  const file = seatBulkFile.files && seatBulkFile.files[0];
+  seatBulkFile.value = ""; // 같은 파일을 고쳐서 다시 올려도 읽히게
+  if (!file) return;
+  seatBulkFileNote.textContent = `${file.name} 읽는 중...`;
+  try {
+    const rows = await readSheetFile(file);
+    const text = sheetRowsToSeatText(rows);
+    if (!text.trim()) throw new Error("파일에서 학번을 찾지 못했습니다.");
+    // 한 칸짜리 줄만 있으면(학번 목록) 탭이 없어 "앞자리부터 차례로"로 읽힌다
+    seatBulkInput.value = text;
+    seatBulkFileNote.textContent = `${file.name}을(를) 불러왔습니다. 아래 미리보기를 확인한 뒤 저장하세요.`;
+    renderSeatBulkPreview();
+  } catch (error) {
+    seatBulkFileNote.textContent = "";
+    alert(error && error.message ? error.message : "파일을 읽지 못했습니다.");
+  }
+});
 
 seatBulkSaveBtn.addEventListener("click", async () => {
   const room = state.rooms[state.activeRoomId];
