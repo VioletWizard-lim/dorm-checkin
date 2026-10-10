@@ -17,18 +17,17 @@
 
 <div class="check-page">
 
+  <!-- 공통 메뉴(js/nav.js가 채움): 모든 화면에서 같은 순서, 지금 화면은 강조 -->
+  <nav class="app-nav" id="appNav" aria-label="메뉴">
+    <span class="loading-hint" id="navLoadingHint">메뉴 확인 중...</span>
+  </nav>
+
   <header class="check-header">
     <div class="check-header__titles">
       <div class="check-header__title">계정 관리</div>
       <div class="check-header__subtitle">교사 계정 생성과 역할 지정 (관리자 전용)</div>
     </div>
     <div class="check-header__meta">
-      <a href="./check.html" class="back-link">외출 체크</a>
-      <a href="./display.html" class="back-link">현황판 보기</a>
-      <a href="./seat.html" class="back-link">좌석 배치판 보기</a>
-      <a href="./students.html" class="back-link">학생 명단 관리</a>
-      <a href="./history.html" class="back-link">외출 기록</a>
-      <a href="./afterschool.html" class="back-link">방과후 일정</a>
       <div class="current-user" id="currentUserBox">
         <span class="current-user__name" id="currentUserName"></span>
         <span class="role-badge" id="currentUserRoleBadge"></span>

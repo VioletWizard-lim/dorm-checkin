@@ -4,6 +4,7 @@
 //   3) 학생별 방과후 요일 일괄 등록: "학번[탭]요일" 줄을 붙여넣어 students.afterschool_days를 한 번에 바꾼다
 // 현황판의 "오늘 방과후"·좌석 색은 방과후 있는 날에만, 학생의 방과후 요일대로 나온다(display.js·seat.js).
 import { supabase, requireStaff, signOutTo, describeError, reportLoadError } from "./supabase-client.js";
+import { renderNav } from "./nav.js";
 import { getDateKey, escapeHtml } from "./util.js";
 import { liveTable } from "./live-table.js";
 import { groupStudentsByGrade, STUDENT_COLUMNS } from "./adapters.js";
@@ -867,8 +868,8 @@ async function init() {
   currentUserNameEl.textContent = profile.name || loginId;
   currentUserRoleBadgeEl.textContent = role;
   currentUserRoleBadgeEl.className = `role-badge role-badge--${role}`;
-  // 다른 화면 링크는 관리자에게만(방과후 선생님은 이 화면만 쓴다)
-  for (const link of document.querySelectorAll("[data-admin-link]")) link.hidden = role !== "admin";
+  // 방과후 선생님은 이 화면만 쓰므로 메뉴에 다른 화면이 없다
+  renderNav(profile);
 
   renderRangeDays();
   renderWeekdayDays();

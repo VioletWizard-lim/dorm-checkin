@@ -1,12 +1,10 @@
 // 외출 기록 화면: outing_log(외출할 때마다 한 줄, DB 트리거가 쌓음)를 기간·학년·이름으로 본다.
 // 볼 수 있는 범위는 서버(RLS)가 정한다 — 담임은 담당 반, 학년부장은 담당 학년, 관리자는 전체. 기숙사부·일반 교사·자습 감독은 못 들어옴.
 import { supabase, requireStaff, signOutTo, describeError, showPageError } from "./supabase-client.js";
+import { renderNav } from "./nav.js";
 import { getDateKey, escapeHtml, formatTime } from "./util.js";
 import { GRADES, groupStudentsByGrade } from "./adapters.js";
 
-const navLoadingHint = document.getElementById("navLoadingHint");
-const accountsLink = document.getElementById("accountsLink");
-const afterschoolLink = document.getElementById("afterschoolLink");
 const logoutBtn = document.getElementById("logoutBtn");
 const currentUserNameEl = document.getElementById("currentUserName");
 const currentUserRoleBadgeEl = document.getElementById("currentUserRoleBadge");
@@ -171,9 +169,7 @@ async function init() {
     window.location.replace("./check.html");
     return;
   }
-  navLoadingHint.hidden = true;
-  accountsLink.hidden = role !== "admin";
-  afterschoolLink.hidden = role !== "admin";
+  renderNav(profile);
   currentUserNameEl.textContent = profile.name || loginId;
   currentUserRoleBadgeEl.textContent = role;
   currentUserRoleBadgeEl.className = `role-badge role-badge--${role}`;

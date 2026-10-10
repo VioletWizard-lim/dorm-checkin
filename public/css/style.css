@@ -300,6 +300,44 @@ input {
   flex-direction: column;
 }
 
+/* 교직원 화면 공통 메뉴(js/nav.js) — 모든 화면에서 같은 순서, 지금 화면은 강조 */
+.app-nav {
+  background: var(--color-card-bg);
+  border-bottom: 1px solid var(--color-border);
+  padding: 10px 40px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 56px;
+  box-sizing: border-box;
+}
+
+.app-nav__link {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-label);
+  text-decoration: none;
+  padding: 8px 14px;
+  border-radius: 999px;
+}
+
+.app-nav__link:hover {
+  background: #F3F4F7;
+  color: var(--color-text);
+}
+
+.app-nav__link.is-current {
+  background: #1C2230;
+  color: #FFFFFF;
+}
+
+@media (max-width: 600px) {
+  .app-nav {
+    padding: 8px 16px;
+  }
+}
+
 .check-header {
   background: var(--color-card-bg);
   border-bottom: 1px solid var(--color-border);
