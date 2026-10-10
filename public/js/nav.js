@@ -8,9 +8,17 @@ function hasManagedClasses(profile) {
   return Object.values(profile.managedClasses || {}).some((classes) => Object.keys(classes || {}).length > 0);
 }
 
+// 외출 체크를 할 수 있는 계정(관리자·학년부장·담임)에게만 체크 화면 이름이 "외출 체크".
+// 자습 감독·기숙사부·담당 반 없는 교사는 그 화면에서 복귀·자리 없음 해제·보기만 하므로 "학생 상태"(사용자 요청)
+export function checkPageLabel(profile) {
+  const role = profile?.role || "teacher";
+  const canCheckOut = role === "admin" || role === "gradeManager" || (role === "teacher" && hasManagedClasses(profile || {}));
+  return canCheckOut ? "외출 체크" : "학생 상태";
+}
+
 // 순서 고정. visible(role, homeroom): 그 계정이 들어갈 수 있는 화면인지(화면의 리다이렉트 기준과 같음)
 const NAV_ITEMS = [
-  { id: "checkLink", page: "check.html", label: "외출 체크", visible: (role) => role !== "afterschoolTeacher" },
+  { id: "checkLink", page: "check.html", label: checkPageLabel, visible: (role) => role !== "afterschoolTeacher" },
   { id: "displayLink", page: "display.html", label: "현황판", visible: (role) => role !== "afterschoolTeacher" },
   { id: "seatLink", page: "seat.html", label: "좌석 배치판", visible: (role) => role !== "afterschoolTeacher" },
   {
@@ -44,7 +52,7 @@ export function renderNav(profile) {
       const current = item.page === here;
       return `<a href="./${item.page}" id="${item.id}" class="app-nav__link${current ? " is-current" : ""}"${
         current ? ' aria-current="page"' : ""
-      }>${escapeHtml(item.label)}</a>`;
+      }>${escapeHtml(typeof item.label === "function" ? item.label(profile) : item.label)}</a>`;
     })
     .join("");
 }

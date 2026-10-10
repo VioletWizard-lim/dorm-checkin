@@ -1,5 +1,5 @@
 import { supabase, requireStaff, signOutTo, describeError, showPageError, callFunction, reportLoadError } from "./supabase-client.js";
-import { renderNav } from "./nav.js";
+import { renderNav, checkPageLabel } from "./nav.js";
 import { getDateKey, isOnLeave, escapeHtml, formatToday, formatTime, outingBanOn, outingBanText } from "./util.js";
 import { liveTable } from "./live-table.js";
 import {
@@ -544,6 +544,12 @@ async function init() {
   dateSelectEl.value = state.selectedDate;
 
   renderNav(profile);
+  // 외출 체크를 못 하는 계정(자습 감독·기숙사부·담당 반 없는 교사)에게는 "학생 상태" 화면
+  if (checkPageLabel(profile) === "학생 상태") {
+    document.getElementById("pageTitle").textContent = "학생 상태";
+    document.getElementById("pageSubtitle").textContent = "학생별 외출·복귀 상태를 보고 복귀·자리 없음을 처리합니다";
+    document.title = "기숙사 면학 시스템 - 학생 상태";
+  }
   currentTeacherName = profile.name || "";
 
   const role = profile.role || "teacher";

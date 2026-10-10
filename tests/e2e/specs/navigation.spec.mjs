@@ -21,9 +21,11 @@ for (const c of CASES) {
     // 현황판·좌석 배치판은 모든 교직원(자습 감독 포함)이 볼 수 있다
     await expect(page.locator("#displayLink")).toBeVisible();
     await expect(page.locator("#seatLink")).toBeVisible();
-    // 메뉴 순서는 고정: 외출 체크 → 현황판 → 좌석 배치판 → 학생 명단 관리 → 외출 기록 → 방과후 일정 → 계정 관리
+    // 메뉴 순서는 고정: 외출 체크(또는 학생 상태) → 현황판 → 좌석 배치판 → 학생 명단 관리 → 외출 기록 → 방과후 일정 → 계정 관리
+    // 체크 화면 이름: 외출 체크를 할 수 있는 관리자·학년부장·담임은 "외출 체크", 그 밖은 "학생 상태"(사용자 요청)
+    const checkLabel = c.history ? "외출 체크" : "학생 상태";
     const menu = [
-      "외출 체크",
+      checkLabel,
       "현황판",
       "좌석 배치판",
       ...(c.manage ? ["학생 명단 관리"] : []),
@@ -32,6 +34,7 @@ for (const c of CASES) {
     ];
     await expect(page.locator("#appNav a")).toHaveText(menu);
     await expect(page.locator("#checkLink")).toHaveAttribute("aria-current", "page");
+    await expect(page.locator("#pageTitle")).toHaveText(c.history ? "기숙사 외출 체크" : "학생 상태");
 
     for (const [target, landing] of Object.entries(c.pages)) {
       await page.goto(`/${target}`);
