@@ -26,7 +26,7 @@
   </header>
 
   <div class="password-notice" id="passwordNotice" hidden>
-    처음 받은 비밀번호를 쓰고 있어요. 맨 아래 <a href="#passwordSection">비밀번호 바꾸기</a>에서 나만 아는 비밀번호로 바꿔 주세요.
+    처음 받은 비밀번호를 쓰고 있어요. <a href="#info">개인정보 수정</a>에서 나만 아는 비밀번호로 바꿔 주세요.
   </div>
 
   <section class="student-section">
@@ -41,6 +41,14 @@
     <div class="field-hint">확인하는 선생님께 이 화면을 그대로 보여 주세요. 위의 시계가 움직이지 않으면 캡처한 화면입니다.</div>
   </section>
 
+  <!-- 탭(사용자 요청): 신청 / 신청 현황 / 개인정보 수정. 오늘 내 상태·외출증은 탭과 상관없이 위에 늘 보인다 -->
+  <nav class="login-tabs student-tabs" role="tablist" aria-label="학생 메뉴">
+    <button type="button" class="login-tab" role="tab" data-student-tab="apply" aria-controls="tabApply">신청</button>
+    <button type="button" class="login-tab" role="tab" data-student-tab="status" aria-controls="tabStatus">신청 현황</button>
+    <button type="button" class="login-tab" role="tab" data-student-tab="info" aria-controls="tabInfo">개인정보 수정</button>
+  </nav>
+
+  <div class="student-tab-panel" id="tabApply" role="tabpanel" data-tab-panel="apply">
   <section class="student-section">
     <div class="student-section__title">외출 신청</div>
     <form class="student-form" id="requestForm" novalidate>
@@ -68,19 +76,56 @@
     </form>
   </section>
 
+  </div>
+
+  <div class="student-tab-panel" id="tabStatus" role="tabpanel" data-tab-panel="status" hidden>
   <section class="student-section">
     <div class="student-section__title">오늘 신청 내역</div>
     <div class="student-form" id="requestList"><span class="student-empty">불러오는 중...</span></div>
   </section>
+  </div>
 
-  <!-- 학생이 직접 비밀번호를 바꾼다(사용자 요청 — 발급한 6자리 숫자 비밀번호는 약해서) -->
-  <section class="student-section" id="passwordSection">
+  <!-- 개인정보 수정(사용자 요청): 비밀번호로 본인 확인 → 내 정보·연락처·이메일, 비밀번호 바꾸기(student-info.js) -->
+  <div class="student-tab-panel" id="tabInfo" role="tabpanel" data-tab-panel="info" hidden>
+  <section class="student-section" id="verifySection">
+    <div class="student-section__title">본인 확인</div>
+    <form class="student-form" id="verifyForm" novalidate>
+      <div class="field">
+        <label for="verifyPassword">비밀번호</label>
+        <input id="verifyPassword" type="password" autocomplete="current-password">
+        <span class="field-hint">개인정보를 보려면 비밀번호를 한 번 더 입력해 주세요.</span>
+      </div>
+      <button type="submit" class="btn-primary" id="verifyBtn">확인</button>
+      <div class="field-hint" id="verifyHint" role="status"></div>
+    </form>
+  </section>
+
+  <section class="student-section" id="infoSection" hidden>
+    <div class="student-section__title">내 정보</div>
+    <dl class="my-info">
+      <dt>이름</dt><dd id="infoName"></dd>
+      <dt>학번 · 반</dt><dd id="infoClass"></dd>
+      <dt>아이디</dt><dd id="infoLoginId"></dd>
+      <dt>학부모 연락처</dt><dd id="infoParentPhone"></dd>
+    </dl>
+    <span class="field-hint">이름·학번·아이디·학부모 연락처를 바꾸려면 담임 선생님께 말씀해 주세요(학부모 연락처로 외출 안내 문자가 가요).</span>
+    <form class="student-form" id="contactForm" novalidate>
+      <div class="field">
+        <label for="phoneInput">내 연락처</label>
+        <input id="phoneInput" type="tel" inputmode="tel" placeholder="예: 010-1234-5678" autocomplete="tel">
+      </div>
+      <div class="field">
+        <label for="emailInput">이메일</label>
+        <input id="emailInput" type="email" placeholder="예: name@example.com" autocomplete="email">
+      </div>
+      <button type="submit" class="btn-primary" id="contactBtn">저장</button>
+      <div class="field-hint" id="contactHint" role="status"></div>
+    </form>
+  </section>
+
+  <section class="student-section" id="passwordSection" hidden>
     <div class="student-section__title">비밀번호 바꾸기</div>
     <form class="student-form" id="passwordForm" novalidate>
-      <div class="field">
-        <label for="currentPassword">지금 비밀번호</label>
-        <input id="currentPassword" type="password" autocomplete="current-password">
-      </div>
       <div class="field">
         <label for="newPassword">새 비밀번호</label>
         <input id="newPassword" type="password" autocomplete="new-password">
@@ -94,6 +139,7 @@
       <div class="field-hint" id="passwordHint" role="status"></div>
     </form>
   </section>
+  </div>
 
 </div>
 

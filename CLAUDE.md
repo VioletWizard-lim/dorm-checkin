@@ -190,6 +190,8 @@
 
 ### 6. 학생 화면 (`student.html`, 휴대폰 기준)
 - 학생 계정 전용. 헤더에 이름·학번·반, 로그아웃
+- **탭 3개**(사용자 요청): **신청**(외출 신청 칸) / **신청 현황**(오늘 신청 내역) / **개인정보 수정**. 주소의 `#apply`·`#status`·`#info`로 고르고(새로고침해도 유지, 기본 탭은 주소를 안 바꿈), 신청하면 신청 현황으로 넘어감. **오늘 내 상태·외출증은 탭과 상관없이 위에 늘 보임**(선생님께 바로 보여 줘야 해서)
+- **개인정보 수정 탭**(`public/js/student-info.js`, 사용자 요청): 비밀번호로 본인 확인(그 비밀번호로 다시 로그인) → 내 정보(이름·학번·반·아이디·학부모 연락처 — 보기만) + **내 연락처·이메일 수정**(RPC `update_my_contact`, 마이그레이션 `20261010030000_student_self_info`) + **비밀번호 바꾸기**(새 비밀번호 8자 이상·영문+숫자, `supabase.auth.updateUser`로 바꾸고 `user_metadata.password_changed = true`). **학부모 연락처는 학생이 못 바꿈**(외출 안내 문자가 가는 번호라서 — 담임 선생님께). 비밀번호 변경은 선택(사용자 결정 — 강제하면 잊어버린 학생 재발급 부담): `password_changed`가 true가 아니면(처음 받은 비밀번호, 이 기능 전에 발급한 학생 포함) 맨 위에 "처음 받은 비밀번호를 쓰고 있어요" 안내(`#passwordNotice`, 링크 = 개인정보 수정 탭). 관리자가 [비번 재발급]하면 `student-accounts`가 false로 되돌려 안내가 다시 뜸
 - **오늘 내 상태**: 재실 / 외출중(시각·사유·예상 복귀·확인한 교사) / 자리 없음 / 명령퇴사(기간)
 - **외출 신청**: 사유(필수, 200자) + 외출 시각(필수, 기본값 지금) + 예상 복귀 시각(필수, 외출 시각보다 늦어야 함 — 이 시각이 지나면 자동 복귀) → RPC `create_outing_request`
   - 시각은 시(0~23)·분(00~59) `<select>` 두 칸으로 고름 — 브라우저 시간 선택기는 분 목록이 끝없이 돌아서 쓰지 않음
@@ -197,7 +199,6 @@
   - 승인 대기 중인 신청이 있거나, 이미 외출 중이거나, 명령퇴사 기간이거나, **외출 금지 기간**이면("외출 금지 기간입니다(~날짜 · 사유). 외출이 꼭 필요하면 학년부장 선생님께 말씀드리세요.", 상태 칸에도 "외출 금지 ~날짜") 신청 칸이 잠기고 이유를 보여줌(서버도 같은 조건을 거부 — 외출 금지는 트리거 `private.outing_requests_ban_check`)
 - **외출증**(승인된 외출이 있을 때 = 외출중·외출 예정): 종이 외출증 모양을 canvas로 그려 보여 줌(`public/js/outing-pass.js` — 내용은 `outingPassData`로 모으고 `drawOutingPass`로 그림, check.html의 [외출증 보기]·seat.html의 [외출증]도 같은 함수) — 이름, 학년·반·번호, 외출 일시, 사유, 확인 교사(학번은 반·번호와 겹쳐서 뺌), 가운데에 "강화고 기숙사 / 외출승인 / 날짜" 빨간 도장(반투명, 그 위에 글자; 문구는 `STAMP_*`), 맨 아래 가운데에 학교 로고(`public/img/school-logo.png`, 마크+학교 이름, 원본 163×55를 1.6배로). 제목 옆에 초 단위로 움직이는 시계(캡처한 화면이 아님을 보여 줌). 확인하는 교사에게 이 화면을 보여 줌
 - **오늘 신청 내역**: 승인 대기(→ [신청 취소], RPC `cancel_outing_request`) / 승인됨(교사·시각) / 반려됨(사유) / 취소함
-- **비밀번호 바꾸기**(사용자 요청 — 발급한 6자리 숫자 비밀번호는 약해서): 맨 아래 칸에서 지금 비밀번호·새 비밀번호(8자 이상, 영문+숫자)·확인. 지금 비밀번호로 다시 로그인해 확인한 뒤 `supabase.auth.updateUser`로 바꾸고 `user_metadata.password_changed = true`. 이 값이 true가 아니면(처음 받은 비밀번호 — 이 기능 전에 발급한 학생 포함) 맨 위에 "처음 받은 비밀번호를 쓰고 있어요" 안내(`#passwordNotice`). 관리자가 [비번 재발급]하면 `student-accounts`가 false로 되돌려 안내가 다시 뜸
 - 승인·반려·외출 상태가 실시간으로 바뀜. 학생은 자기 행만 읽을 수 있음(RLS)
 
 ### 7. 외출 기록 (`history.html`)
@@ -327,6 +328,7 @@ afterschool_dates -- 방과후 있는 날(afterschool.html): date(PK), created_b
 - `students`의 명령퇴사 칸(`leave_*`)은 admin·dormStaff만 바꿀 수 있음(트리거 `private.students_leave_editors`, service_role 제외)
 - `profiles`: 교직원은 교직원 계정 전체 + 담당 범위 학생 계정, 그 외는 자기 것만 읽기. 역할·이름·담당 범위 수정은 admin만, 본인 행 제외. 생성·삭제·비활성화는 Edge Function(service_role)만
 - `outing_requests`: 교직원 + 신청한 본인 읽기, 쓰기는 RPC로만
+- 학생 본인 정보: `student_contacts()`는 학생에게 자기 행만 준다. 학생은 `students`를 직접 못 고치고 RPC `update_my_contact(phone, email)`로 자기 연락처·이메일만(트리거 `students_leave_only`도 학생은 이 두 칸만 허용)
 - 계정 비활성화는 로그인 자체를 차단(ban)한다
 - 권한 판정 함수(`is_staff`·`can_manage_student` 등)와 RPC 본체(security definer)는 API로 열리지 않는 `private` 스키마에 둔다. 화면이 부르는 RPC는 `public`에 같은 이름·인자의 security invoker 껍데기만 있다(Supabase 보안 점검 경고 방지, DB 테스트가 같은 기준으로 확인). 새 RPC도 이 방식으로 추가할 것
 - RLS는 조건에 안 맞는 행을 조용히 건너뛰므로(에러 없이 0행), 화면은 update·delete 뒤 `.select("id")`로 실제로 바뀐 행이 있는지 확인한다

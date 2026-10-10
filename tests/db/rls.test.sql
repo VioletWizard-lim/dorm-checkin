@@ -156,6 +156,7 @@ select tests.expect_error('select phone from public.students', 'staff cannot rea
 select tests.expect_error('select login_id from public.students', 'staff cannot read login id column directly', '%permission denied%');
 select tests.expect_error('select * from public.students', 'select * is refused (contact columns)', '%permission denied%');
 select tests.expect_count('select * from public.student_contacts()', 1, 'homeroom reads only own class contacts');
+select tests.expect_error($$select public.update_my_contact('01011112222', null)$$, 'staff cannot use the student self-edit RPC', '%학생 계정만%');
 select tests.expect_true(format($$(select login_id from public.student_contacts() where id = %L) = 'hong'$$, :st1), 'homeroom contact row has the login id');
 select tests.expect_count($$select * from public.profiles where kind = 'student'$$, 1, 'homeroom sees only own class student accounts');
 select tests.expect_count($$select * from public.profiles where kind = 'staff'$$, 8, 'homeroom still sees every staff profile');
@@ -303,7 +304,18 @@ select tests.login(:s1);
 set role authenticated;
 select tests.expect_count('select id from public.students', 1, 'student sees only own student row');
 select tests.expect_count('select * from public.profiles', 1, 'student sees only own profile');
-select tests.expect_count('select * from public.student_contacts()', 0, 'student reads no contacts');
+select tests.expect_count('select * from public.student_contacts()', 1, 'student reads only own contacts');
+-- 개인정보 수정(사용자 요청): 학생은 자기 연락처·이메일만 고친다(학부모 연락처는 못 바꿈)
+select public.update_my_contact('010-2222-3333', 'me@example.com');
+select tests.expect_true(format($$(select phone = '01022223333' and email = 'me@example.com' from public.student_contacts() where id = %L)$$, :st1),
+  'student updates own phone and email');
+select tests.expect_error($$select public.update_my_contact('02-123-4567', null)$$, 'student phone must be a mobile number', '%010%');
+select tests.expect_error($$select public.update_my_contact(null, 'not-an-email')$$, 'student email format is checked', '%이메일%');
+select tests.expect_affected(format($$update public.students set parent_phone = '01099990000' where id = %L$$, :st1), 0,
+  'student cannot update the row directly (parent phone stays)');
+select public.update_my_contact('', '');
+select tests.expect_true(format($$(select phone is null and email is null from public.student_contacts() where id = %L)$$, :st1),
+  'empty values clear own phone and email');
 select tests.expect_count('select * from public.rooms', 0, 'student cannot read rooms');
 select tests.expect_affected(format($$update public.students set name = 'x' where id = %L$$, :st1), 0, 'student cannot edit own row');
 select tests.expect_error(format($$insert into public.outings (date, student_id, status) values (current_date, %L, 'in')$$, :st1),

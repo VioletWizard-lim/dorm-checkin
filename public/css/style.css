@@ -1565,6 +1565,44 @@ body.is-dragging-seat * {
   padding: 8px 4px 0;
 }
 
+.student-tabs {
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-border);
+}
+
+.student-tabs .login-tab.is-active {
+  background: var(--color-active, #1C2230);
+  color: #fff;
+}
+
+.student-tab-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.student-tab-panel[hidden] {
+  display: none;
+}
+
+.my-info {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 16px;
+  margin: 0;
+  font-size: 15px;
+}
+
+.my-info dt {
+  color: var(--color-text-muted);
+}
+
+.my-info dd {
+  margin: 0;
+  font-weight: 600;
+  word-break: break-all;
+}
+
 .student-header__name {
   font-size: 20px;
   font-weight: 800;
