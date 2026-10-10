@@ -1,4 +1,5 @@
 import { supabase, requireStaff, signOutTo, describeError, callFunction, reportLoadError } from "./supabase-client.js";
+import { renderNav } from "./nav.js";
 import { getDateKey, isOnLeave, escapeHtml, insertTabOnKeydown, outingBanOn, outingBanText } from "./util.js";
 import { liveTable } from "./live-table.js";
 import {
@@ -20,10 +21,6 @@ const DAY_LABELS = ["월", "화", "수", "목", "금"];
 const logoutBtn = document.getElementById("logoutBtn");
 const currentUserNameEl = document.getElementById("currentUserName");
 const currentUserRoleBadgeEl = document.getElementById("currentUserRoleBadge");
-const accountsLink = document.getElementById("accountsLink");
-const afterschoolLink = document.getElementById("afterschoolLink");
-const historyLink = document.getElementById("historyLink");
-const navLoadingHint = document.getElementById("navLoadingHint");
 const gradeTabsEl = document.getElementById("gradeTabs");
 const rosterListEl = document.getElementById("rosterList");
 const addStudentBtn = document.getElementById("addStudentBtn");
@@ -1140,13 +1137,9 @@ async function init() {
   if (!session) return;
   const { loginId, profile } = session;
   const role = profile.role;
-  navLoadingHint.hidden = true;
-  accountsLink.hidden = role !== "admin";
-  afterschoolLink.hidden = role !== "admin";
-  // 이 화면에 들어오는 사람 중 외출 기록을 못 보는 건 기숙사부뿐
-  historyLink.hidden = role === "dormStaff";
 
   function showCurrentUser() {
+    renderNav(profile);
     currentUserNameEl.textContent = profile.name || loginId;
     currentUserRoleBadgeEl.textContent = role;
     currentUserRoleBadgeEl.className = `role-badge role-badge--${role}`;

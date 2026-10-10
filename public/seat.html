@@ -17,19 +17,17 @@
 
 <div class="check-page">
 
+  <!-- 공통 메뉴(js/nav.js가 채움): 모든 화면에서 같은 순서, 지금 화면은 강조 -->
+  <nav class="app-nav" id="appNav" aria-label="메뉴">
+    <span class="loading-hint" id="navLoadingHint">메뉴 확인 중...</span>
+  </nav>
+
   <header class="check-header">
     <div class="check-header__titles">
       <div class="check-header__title">좌석 배치판</div>
       <div class="check-header__subtitle">실별 좌석 배치 보기·편집</div>
     </div>
     <div class="check-header__meta">
-      <a href="./check.html" class="back-link">외출 체크</a>
-      <a href="./display.html" class="back-link">현황판 보기</a>
-      <span class="loading-hint" id="navLoadingHint">메뉴 확인 중...</span>
-      <a href="./students.html" class="back-link" id="manageLink" hidden>학생 명단 관리</a>
-      <a href="./history.html" class="back-link" id="historyLink" hidden>외출 기록</a>
-      <a href="./afterschool.html" class="back-link" id="afterschoolLink" hidden>방과후 일정</a>
-      <a href="./accounts.html" class="back-link" id="accountsLink" hidden>계정 관리</a>
       <div class="check-header__date" id="todayDate"></div>
       <div class="current-user" id="currentUserBox">
         <span class="current-user__name" id="currentUserName"></span>

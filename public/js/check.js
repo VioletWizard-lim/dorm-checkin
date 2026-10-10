@@ -1,4 +1,5 @@
 import { supabase, requireStaff, signOutTo, describeError, showPageError, callFunction, reportLoadError } from "./supabase-client.js";
+import { renderNav } from "./nav.js";
 import { getDateKey, isOnLeave, escapeHtml, formatToday, formatTime, outingBanOn, outingBanText } from "./util.js";
 import { liveTable } from "./live-table.js";
 import {
@@ -22,13 +23,6 @@ import { createPassDialog } from "./pass-dialog.js";
 let currentTeacherId = "";
 let currentTeacherName = "";
 
-const manageLink = document.getElementById("manageLink");
-const accountsLink = document.getElementById("accountsLink");
-const afterschoolLink = document.getElementById("afterschoolLink");
-const historyLink = document.getElementById("historyLink");
-const displayLink = document.getElementById("displayLink");
-const seatLink = document.getElementById("seatLink");
-const navLoadingHint = document.getElementById("navLoadingHint");
 const logoutBtn = document.getElementById("logoutBtn");
 const currentUserNameEl = document.getElementById("currentUserName");
 const currentUserRoleBadgeEl = document.getElementById("currentUserRoleBadge");
@@ -549,20 +543,7 @@ async function init() {
   dateSelectEl.max = TODAY_KEY;
   dateSelectEl.value = state.selectedDate;
 
-  const hasManagedClasses = Object.values(profile.managedClasses || {}).some(
-    (classes) => Object.keys(classes || {}).length > 0
-  );
-  navLoadingHint.hidden = true;
-  // 기숙사부는 학생 명단 화면에서 명령퇴사 기간만 설정한다.
-  manageLink.hidden =
-    profile.role !== "admin" && profile.role !== "gradeManager" && profile.role !== "dormStaff" && !hasManagedClasses;
-  accountsLink.hidden = profile.role !== "admin";
-  afterschoolLink.hidden = profile.role !== "admin";
-  // 외출 기록: 관리자·학년부장·담임(담당 반이 있을 때)
-  historyLink.hidden = profile.role !== "admin" && profile.role !== "gradeManager" && !hasManagedClasses;
-  // 자습 감독도 현황판·좌석 배치판은 볼 수 있다(사용자 요청)
-  displayLink.hidden = false;
-  seatLink.hidden = false;
+  renderNav(profile);
   currentTeacherName = profile.name || "";
 
   const role = profile.role || "teacher";

@@ -1,4 +1,5 @@
 import { supabase, requireStaff, signOutTo, describeError, reportLoadError } from "./supabase-client.js";
+import { renderNav } from "./nav.js";
 import { getDateKey, isOnLeave, escapeHtml, formatToday, todayWeekdayIndex, outingBanOn, outingBanText } from "./util.js";
 import { liveTable } from "./live-table.js";
 import {
@@ -49,11 +50,6 @@ const seatBulkPreview = document.getElementById("seatBulkPreview");
 const seatBulkSaveBtn = document.getElementById("seatBulkSaveBtn");
 const seatBulkCancelBtn = document.getElementById("seatBulkCancelBtn");
 const logoutBtn = document.getElementById("logoutBtn");
-const manageLink = document.getElementById("manageLink");
-const accountsLink = document.getElementById("accountsLink");
-const afterschoolLink = document.getElementById("afterschoolLink");
-const historyLink = document.getElementById("historyLink");
-const navLoadingHint = document.getElementById("navLoadingHint");
 const currentUserNameEl = document.getElementById("currentUserName");
 const currentUserRoleBadgeEl = document.getElementById("currentUserRoleBadge");
 
@@ -1042,15 +1038,7 @@ async function init() {
   currentUserNameEl.textContent = currentTeacherName || loginId;
   currentUserRoleBadgeEl.textContent = state.role;
   currentUserRoleBadgeEl.className = `role-badge role-badge--${state.role}`;
-  const hasManagedClasses = Object.values(profile.managedClasses || {}).some(
-    (classes) => Object.keys(classes || {}).length > 0
-  );
-  navLoadingHint.hidden = true;
-  manageLink.hidden =
-    state.role !== "admin" && state.role !== "gradeManager" && state.role !== "dormStaff" && !hasManagedClasses;
-  accountsLink.hidden = state.role !== "admin";
-  afterschoolLink.hidden = state.role !== "admin";
-  historyLink.hidden = state.role !== "admin" && state.role !== "gradeManager" && !hasManagedClasses;
+  renderNav(profile);
   render();
 
   liveTable({

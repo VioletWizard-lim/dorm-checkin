@@ -272,7 +272,8 @@ test.describe("방과후 일정(관리자)", () => {
     await openAs("after01", "/check.html");
     await expect(page).toHaveURL(/afterschool\.html$/); // 다른 화면은 방과후 일정으로
     await expect(page.locator("#currentUserRoleBadge")).toHaveText("afterschoolTeacher");
-    await expect(page.locator("[data-admin-link]:visible")).toHaveCount(0);
+    // 메뉴에는 지금 화면(방과후 일정)만
+    await expect(page.locator("#appNav a")).toHaveText(["방과후 일정"]);
     await expect(page.locator("#logoutBtn")).toBeVisible();
     for (const target of ["display.html", "seat.html", "students.html", "history.html", "accounts.html"]) {
       await page.goto(`/${target}`);

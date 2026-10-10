@@ -1,4 +1,5 @@
 import { supabase, requireStaff, signOutTo, describeError, callFunction, reportLoadError } from "./supabase-client.js";
+import { renderNav } from "./nav.js";
 import { escapeHtml, insertTabOnKeydown } from "./util.js";
 import { liveTable } from "./live-table.js";
 import { GRADES, groupStudentsByGrade, managedClassesToRows, roomsById, userFromProfile } from "./adapters.js";
@@ -716,6 +717,7 @@ async function init() {
     return;
   }
   state.currentUid = uid;
+  renderNav(profile);
   currentUserNameEl.textContent = profile.name || loginId;
   currentUserRoleBadgeEl.textContent = "admin";
   currentUserRoleBadgeEl.className = "role-badge role-badge--admin";
