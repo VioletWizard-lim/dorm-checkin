@@ -104,6 +104,15 @@ test.describe("외출 금지", () => {
     expect(outing.status).toBe("out");
   });
 
+  test("명령퇴사 중인 학생도 체크 화면·좌석 배치판에 외출 금지가 보인다", async ({ env, openAs, page }) => {
+    await banHong(env);
+    await env.sql("update public.students set leave_from = $2, leave_to = $3 where id = $1", [STUDENT.hong, todayKst(), kstDatePlus(5)]);
+    await openAs("admin01", "/check.html");
+    await expect(card(page, "홍길동").locator(".ban-chip")).toHaveText(untilText());
+    await page.goto("/seat.html");
+    await expect(page.locator("#seatGrid .seat-cell", { hasText: "홍길동" }).locator(".seat-cell__ban")).toHaveText(untilText());
+  });
+
   test("현황판·좌석 배치판에도 표시된다", async ({ env, openAs, page }) => {
     await banHong(env);
     await env.sql("insert into public.outings (date, student_id, status) values ($1, $2, 'away')", [todayKst(), STUDENT.hong]);

@@ -197,7 +197,7 @@ function renderList(filtered) {
       const hasPendingRequest =
         state.selectedDate === TODAY_KEY && state.pendingRequests.some((r) => r.student_id === s.id);
       // 외출 금지(사용자 요청): 이름 옆에 표시, 외출 체크는 학년부장·관리자만(확인 창)
-      const ban = status === "leave" ? null : outingBanOn(s, state.selectedDate);
+      const ban = outingBanOn(s, state.selectedDate); // 명령퇴사 중에도 표시(사용자 요청)
 
       // 외출 체크·외출 취소는 담당 범위(담임 담당 반·학년부장 담당 학년·관리자 전체)만,
       // 복귀 체크는 담당 범위 + 자습 감독(확인 창 한 번) — 서버 트리거 outings_check_scope와 같은 규칙
