@@ -90,9 +90,16 @@ test.describe("좌석 배치판 — 편집 모드", () => {
     await page.click("#editModeToggle");
     await expect(cell(page, 0)).toContainText("홍길동");
 
+    // 저장 뒤 실시간 갱신으로 좌석이 다시 그려지는 순간에는 boundingBox()가 null일 수 있어 다시 읽는다(CI에서 가끔 실패했음)
+    async function boxOf(index) {
+      let box = null;
+      await expect.poll(async () => (box = await cell(page, index).boundingBox())).not.toBeNull();
+      return box;
+    }
+
     async function dragCell(fromIndex, toIndex) {
-      const from = await cell(page, fromIndex).boundingBox();
-      const to = await cell(page, toIndex).boundingBox();
+      const from = await boxOf(fromIndex);
+      const to = await boxOf(toIndex);
       await page.mouse.move(from.x + 20, from.y + 20);
       await page.mouse.down();
       await page.mouse.move(from.x + 40, from.y + 40, { steps: 3 });

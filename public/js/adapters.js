@@ -69,7 +69,7 @@ export function studentToRow(grade, data) {
   };
 }
 
-export function roomFromRow(row) {
+function roomFromRow(row) {
   return {
     name: row.name || "",
     grades: (row.grades || []).map(String).sort(),

@@ -69,3 +69,10 @@ export function insertTabOnKeydown(event) {
   el.selectionStart = el.selectionEnd = start + 1;
   el.dispatchEvent(new Event("input", { bubbles: true }));
 }
+
+// CSV 칸 하나(엑셀용): 수식으로 읽히지 않게 =·+·-·@로 시작하면 앞에 '를 붙이고, 쉼표·따옴표·줄바꿈이 있으면 따옴표로 감싼다
+export function csvCell(value) {
+  let text = String(value ?? "");
+  if (/^[=+\-@]/.test(text)) text = `'${text}`;
+  return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}

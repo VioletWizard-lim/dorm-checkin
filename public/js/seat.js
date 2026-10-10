@@ -94,8 +94,7 @@ function getStudentStatus(studentId, studentsById) {
   // 우선순위: 명령퇴사 > 자리 없음 > 외출중 > 오늘 방과후 > 재실
   if (isOnLeave(student, TODAY_KEY)) return "leave";
   const outing = state.outings[studentId];
-  // "unauthorized"는 예전 상태 이름(자리비움과 합쳐지기 전) — 기존 데이터 호환용으로 계속 away 취급
-  if (outing && (outing.status === "away" || outing.status === "unauthorized")) return "away";
+  if (outing && outing.status === "away") return "away";
   // 외출 예정(승인됐지만 외출 시각 전)은 아직 자리에 있으므로 외출 색으로 칠하지 않는다.
   if (outing && outing.status === "out" && !isScheduledOuting(outing, TODAY_KEY, TODAY_KEY)) return "out";
   // 방과후는 방과후 일정에서 고른 "방과후 있는 날"에만, 학생의 방과후 요일대로
@@ -110,7 +109,7 @@ function getStudentStatus(studentId, studentsById) {
 function getRawOutingStatus(studentId) {
   const outing = state.outings[studentId];
   const status = outing && outing.status;
-  if (status === "away" || status === "unauthorized") return "away";
+  if (status === "away") return "away";
   if (status === "out" && isScheduledOuting(outing, TODAY_KEY, TODAY_KEY)) return "scheduled";
   return status === "out" ? "out" : "in";
 }
@@ -384,6 +383,12 @@ const passDialog = createPassDialog((studentId) => {
 // 외출 예정 학생의 외출 시각이 되면 다시 그려서 외출 색으로 바꾼다.
 const updateStartTicker = createStartTimeTicker(() => render());
 
+// 실을 직접 고치거나 지운 결과({ data, error }): RLS는 권한이 없으면 오류 없이 0행이라 그것도 실패로 본다
+function roomWriteError({ data, error }) {
+  if (error) return error;
+  return data && data.length > 0 ? null : { message: "실을 바꾸지 못했습니다(권한이 없거나 이미 지워진 실입니다)." };
+}
+
 // 저장 결과 처리: 실패하면 알리고, 성공하면 Realtime 알림을 기다리지 않고 바로 다시 읽는다.
 async function afterWrite(error, live) {
   if (error) {
@@ -416,11 +421,12 @@ async function toggleRoomGrade(grade) {
   const grades = new Set(room.grades || []);
   if (grades.has(grade)) grades.delete(grade);
   else grades.add(grade);
-  const { error } = await supabase
+  const result = await supabase
     .from("rooms")
     .update({ grades: Array.from(grades).sort().map(Number) })
-    .eq("id", roomId);
-  await afterWrite(error, roomsLive);
+    .eq("id", roomId)
+    .select("id");
+  await afterWrite(roomWriteError(result), roomsLive);
 }
 
 // 그 학생이 다른 자리(다른 실 포함)에 앉아 있던 기록은 서버(assign_seat)가 함께 지운다.
@@ -893,8 +899,9 @@ deleteRoomBtn.addEventListener("click", () => {
     .from("rooms")
     .delete()
     .eq("id", roomId)
-    .then(async ({ error }) => {
-      if ((await afterWrite(error, roomsLive)) && state.activeRoomId === roomId) {
+    .select("id")
+    .then(async (result) => {
+      if ((await afterWrite(roomWriteError(result), roomsLive)) && state.activeRoomId === roomId) {
         state.activeRoomId = null;
         render();
       }
@@ -904,8 +911,8 @@ deleteRoomBtn.addEventListener("click", () => {
 roomNameInput.addEventListener("change", async () => {
   if (!state.activeRoomId) return;
   const value = roomNameInput.value.trim() || "이름 없음";
-  const { error } = await supabase.from("rooms").update({ name: value }).eq("id", state.activeRoomId);
-  await afterWrite(error, roomsLive);
+  const result = await supabase.from("rooms").update({ name: value }).eq("id", state.activeRoomId).select("id");
+  await afterWrite(roomWriteError(result), roomsLive);
 });
 
 roomGradeToggleRow.addEventListener("click", (event) => {

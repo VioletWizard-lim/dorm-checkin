@@ -30,7 +30,7 @@ function decodeText(bytes) {
   }
 }
 
-export function parseCsv(text) {
+function parseCsv(text) {
   const rows = [];
   let row = [];
   let cell = "";

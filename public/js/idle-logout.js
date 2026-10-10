@@ -3,7 +3,7 @@
 // 마지막 조작 시각은 localStorage에 둬서 같은 브라우저의 다른 탭에서 조작해도 함께 연장되고,
 // 브라우저를 닫았다가 2시간 뒤에 다시 열어도 바로 로그아웃된다.
 
-export const IDLE_LIMIT_MS = 2 * 60 * 60 * 1000;
+const IDLE_LIMIT_MS = 2 * 60 * 60 * 1000;
 const STORAGE_KEY = "dormcheckin.lastActivityAt";
 const WRITE_EVERY_MS = 15 * 1000; // 마우스를 움직일 때마다 저장하지 않도록
 const CHECK_EVERY_MS = 30 * 1000;
@@ -26,7 +26,7 @@ export function markActivity() {
   }
 }
 
-export function isIdleExpired(now = Date.now()) {
+function isIdleExpired(now = Date.now()) {
   const last = readLastActivity();
   return last !== null && now - last >= IDLE_LIMIT_MS;
 }

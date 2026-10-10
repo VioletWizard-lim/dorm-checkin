@@ -5,7 +5,7 @@
 // 현황판의 "오늘 방과후"·좌석 색은 방과후 있는 날에만, 학생의 방과후 요일대로 나온다(display.js·seat.js).
 import { supabase, requireStaff, signOutTo, describeError, reportLoadError } from "./supabase-client.js";
 import { renderNav } from "./nav.js";
-import { getDateKey, escapeHtml } from "./util.js";
+import { getDateKey, escapeHtml, csvCell } from "./util.js";
 import { liveTable } from "./live-table.js";
 import { groupStudentsByGrade, STUDENT_COLUMNS } from "./adapters.js";
 import { readSheetFile } from "./sheet-read.js";
@@ -711,11 +711,6 @@ function currentRoster() {
 function renderRosterButton() {
   const dayText = DAY_LABELS.filter((_, i) => state.weekdayDays[i]).join("·");
   weekdayRosterBtn.textContent = `${dayText ? `${dayText}요일` : "전체"} 현재 명단 받기 (CSV, ${currentRoster().length}명)`;
-}
-
-function csvCell(value) {
-  const text = String(value ?? "");
-  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
 weekdayRosterBtn.addEventListener("click", () => {

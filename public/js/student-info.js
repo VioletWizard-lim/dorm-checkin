@@ -142,7 +142,8 @@ passwordForm.addEventListener("submit", async (event) => {
   }
 });
 
-// student.js가 로그인 확인 뒤 부른다
+// student.js가 로그인 확인 뒤 부른다. 처음 받은 비밀번호를 쓰는 학생에게는 맨 위에 바꾸라는 안내를 띄운다
 export function initStudentInfo(studentSession) {
   session = studentSession;
+  supabase.auth.getUser().then(({ data }) => showPasswordNotice(data && data.user));
 }
