@@ -45,7 +45,8 @@ export async function tryLogin(openOtherAs, loginId, password, { student = false
   await page.fill("#userId", loginId);
   await page.fill("#password", password);
   await page.click("#submitBtn");
-  const target = student ? /student\.html$/ : /check\.html$/;
+  // 교직원은 역할에 따라 첫 화면이 다르다(기숙사부는 학생 관리, 방과후 선생님은 방과후 일정)
+  const target = student ? /student\.html$/ : /(check|students|afterschool)\.html$/;
   await Promise.race([
     page.waitForURL(target, { timeout: 8000 }).catch(() => {}),
     page.locator("#errorBox").waitFor({ state: "visible", timeout: 8000 }).catch(() => {}),

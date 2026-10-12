@@ -146,12 +146,21 @@ if (new URLSearchParams(window.location.search).get("disabled") === "1") {
   showNotice("2시간 동안 사용하지 않아 자동으로 로그아웃되었습니다. 다시 로그인해 주세요.");
 }
 
-// 이미 로그인돼 있으면 계정 종류에 맞는 화면으로(학생 계정은 만들 때 app_metadata.kind = "student").
-supabase.auth.getSession().then(({ data }) => {
+// 로그인 뒤 첫 화면: 학생은 학생 화면, 교직원은 역할에 맞는 화면(사용자 요청 — 기숙사부는 학생 관리,
+// 방과후 선생님은 방과후 일정). 그 밖의 교직원은 외출 체크. 프로필을 못 읽으면 외출 체크(그 화면이 다시 확인함)
+const STAFF_HOME = { dormStaff: "./students.html", afterschoolTeacher: "./afterschool.html" };
+
+async function homeFor(user) {
+  if (user && user.app_metadata && user.app_metadata.kind === "student") return MODES.student.target;
+  const { data } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
+  return STAFF_HOME[data && data.role] || MODES.staff.target;
+}
+
+// 이미 로그인돼 있으면 계정에 맞는 화면으로(학생 계정은 만들 때 app_metadata.kind = "student").
+supabase.auth.getSession().then(async ({ data }) => {
   const session = data && data.session;
   if (!session) return;
-  const kind = session.user && session.user.app_metadata && session.user.app_metadata.kind;
-  window.location.replace(kind === "student" ? MODES.student.target : MODES.staff.target);
+  window.location.replace(await homeFor(session.user));
 });
 
 form.addEventListener("submit", async (event) => {
@@ -181,12 +190,12 @@ form.addEventListener("submit", async (event) => {
 
   writeStorage(config.idStorageKey, rememberCheckbox.checked ? userId : null);
 
-  const { error } = await supabase.auth.signInWithPassword({ email: config.toEmail(userId), password });
+  const { data, error } = await supabase.auth.signInWithPassword({ email: config.toEmail(userId), password });
   if (error) {
     setSubmitting(false);
     showError(mapAuthError(error));
     return;
   }
   markActivity(); // 예전 기록 때문에 로그인하자마자 자동 로그아웃되지 않게
-  window.location.replace(config.target);
+  window.location.replace(mode === "student" ? config.target : await homeFor(data.user));
 });

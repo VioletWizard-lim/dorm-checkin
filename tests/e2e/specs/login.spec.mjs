@@ -14,6 +14,17 @@ test.describe("로그인", () => {
     expect(await page.evaluate(() => localStorage.getItem("dormcheckin.savedUserId"))).toBe("Admin01");
   });
 
+  test("기숙사부는 로그인하면 바로 학생 관리 화면으로 간다(이미 로그인돼 있으면 다시 와도 같음)", async ({ page }) => {
+    await page.goto("/login.html");
+    await page.fill("#userId", "dorm01");
+    await page.fill("#password", PASSWORD);
+    await page.click("#submitBtn");
+    await expect(page).toHaveURL(/\/students\.html$/);
+    await expect(page.locator("#currentUserName")).not.toHaveText("");
+    await page.goto("/login.html");
+    await expect(page).toHaveURL(/\/students\.html$/);
+  });
+
   test("틀린 비밀번호·형식 오류·빈 칸은 안내 문구를 보여준다", async ({ page }) => {
     await page.goto("/login.html");
     await page.click("#submitBtn");

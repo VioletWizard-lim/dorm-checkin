@@ -27,13 +27,18 @@ test.describe("외출 체크 화면", () => {
 
   test("외출 체크는 담당 범위만, 자습 감독은 확인 후 복귀만", async ({ env, openAs, openOtherAs, page }) => {
     await env.sql("insert into public.outings (date, student_id, status, reason, expected_return) values ($1, $2, 'out', '학원', '23:59')", [todayKst(), STUDENT.seoyeon]);
-    // 1학년 3반 담임: 자기 반(홍길동·최하늘)만 외출 체크, 다른 반 외출생(이서연)은 복귀 버튼 없음. 자리 없음 해제는 누구나
+    // 1학년 3반 담임: 체크 화면에는 자기 반 학생(홍길동·최하늘)만 보인다(사용자 요청). 학년·실 탭도 자기 반이 있는 것만
     await openAs("homeroom01", "/check.html");
+    await expect(page.locator(".student-card .student-name")).toHaveText(["최하늘", "홍길동"]);
     await expect(card(page, "홍길동").getByRole("button", { name: "외출 체크" })).toBeVisible();
     await expect(card(page, "최하늘").getByRole("button", { name: "외출 체크" })).toBeVisible();
-    await expect(card(page, "김민준").getByRole("button", { name: "외출 체크" })).toHaveCount(0);
-    await expect(card(page, "김민준").getByRole("button", { name: "재실로 되돌리기" })).toBeVisible();
-    await expect(card(page, "이서연").locator("button")).toHaveText(["외출증 보기"]);
+    await expect(page.locator("#gradeChips .filter-chip")).toHaveText(["전체", "1학년"]);
+    await expect(page.locator("#filterChips .filter-chip")).toHaveText(["전체", "1학년실"]);
+    // 담당 반이 없는 교사는 전체가 보이고, 다른 반 외출생(이서연)에게는 버튼이 없다. 자리 없음 해제는 누구나
+    const plain = await openOtherAs("teacher01", "/check.html");
+    await expect(card(plain, "김민준").getByRole("button", { name: "외출 체크" })).toHaveCount(0);
+    await expect(card(plain, "김민준").getByRole("button", { name: "재실로 되돌리기" })).toBeVisible();
+    await expect(card(plain, "이서연").locator("button")).toHaveText(["외출증 보기"]);
 
     // 자습 감독: 외출 체크 없음, 복귀는 확인 창을 거쳐서
     const sup = await openOtherAs("super01", "/check.html");

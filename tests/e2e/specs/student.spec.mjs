@@ -199,8 +199,10 @@ test.describe("외출 신청 승인", () => {
     const [request] = await requestsOf(env, STUDENT.seoyeon);
 
     // 1학년 3반 담임: 2학년 학생의 신청은 안 보임, 직접 승인 시도도 거부
+    // (체크 화면에는 자기 반 학생만 보이므로 이서연 카드도 없다)
     await openAs("homeroom01", "/check.html");
-    await expect(page.locator(".student-card", { hasText: "이서연" }).locator(".pending-chip")).toBeVisible();
+    await expect(page.locator(".student-card", { hasText: "홍길동" })).toBeVisible();
+    await expect(page.locator(".student-card", { hasText: "이서연" })).toHaveCount(0);
     await expect(page.locator("#requestPanel")).toBeHidden();
     const error = await page.evaluate(async (id) => {
       const { supabase } = await import("/js/supabase-client.js");
