@@ -21,7 +21,7 @@ test.describe("외출 체크 화면", () => {
     await expect(card(page, "김민준").locator(".status-badge")).toHaveText("자리 없음");
     await expect(card(page, "김민준").getByRole("button", { name: "재실로 되돌리기" })).toBeVisible();
     await expect(card(page, "박지훈").locator(".status-badge")).toHaveText("명령퇴사");
-    await expect(card(page, "박지훈")).toContainText("학생 명단 관리에서 설정");
+    await expect(card(page, "박지훈")).toContainText("학생 관리에서 설정");
     await expect(card(page, "박지훈").locator("button")).toHaveCount(0);
   });
 

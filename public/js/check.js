@@ -236,7 +236,7 @@ function renderList(filtered) {
         }
         actionsHtml = `<div class="roster-actions">${passBtn}${toggleBtn}</div>`;
       } else if (status === "leave") {
-        actionsHtml = `<div class="since-text ml-auto">학생 명단 관리에서 설정</div>`;
+        actionsHtml = `<div class="since-text ml-auto">학생 관리에서 설정</div>`;
       } else {
         actionsHtml = `
           <div class="roster-actions">

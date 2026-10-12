@@ -9,7 +9,7 @@ async function studentByName(env, name) {
   return (await env.sql("select * from public.students where name = $1", [name]))[0] ?? null;
 }
 
-test.describe("학생 명단 관리", () => {
+test.describe("학생 관리", () => {
   test("관리자: 학년 탭, 추가(반 자동 계산·방과후 요일), 수정(명령퇴사 기간), 삭제", async ({ env, openAs, page }) => {
     answerDialogs(page, [true]);
     await openAs("admin01", "/students.html");
