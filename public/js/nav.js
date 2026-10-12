@@ -24,7 +24,7 @@ const NAV_ITEMS = [
   {
     id: "manageLink",
     page: "students.html",
-    label: "학생 명단 관리",
+    label: "학생 관리",
     visible: (role, homeroom) => ["admin", "gradeManager", "dormStaff"].includes(role) || (role === "teacher" && homeroom),
   },
   {
