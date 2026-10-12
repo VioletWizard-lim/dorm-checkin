@@ -70,12 +70,15 @@ test.describe("학생 개인정보", () => {
       });
       await openAs(loginId, "/check.html");
       await expect(studentCard(page, "홍길동").locator(".status-badge")).toHaveText("외출중");
-      await expect(studentCard(page, "박지훈").locator(".status-badge")).toHaveText("명령퇴사");
+      // 담임은 체크 화면에서 자기 반 학생만 보므로 다른 반 박지훈 카드는 없다(사유는 응답으로 확인)
+      const seesJihun = loginId !== "homeroom01";
+      if (seesJihun) await expect(studentCard(page, "박지훈").locator(".status-badge")).toHaveText("명령퇴사");
       const hong = studentCard(page, "홍길동");
       const jihun = studentCard(page, "박지훈");
       if (seesOutingReason) await expect(hong).toContainText("병원 진료");
       else await expect(hong).not.toContainText("병원 진료");
-      if (seesLeaveReason) await expect(jihun).toContainText("장기 결석");
+      if (!seesJihun) await expect(jihun).toHaveCount(0);
+      else if (seesLeaveReason) await expect(jihun).toContainText("장기 결석");
       else await expect(jihun).not.toContainText("장기 결석");
       const all = bodies.join("\n");
       expect(all.includes("병원 진료")).toBe(seesOutingReason);

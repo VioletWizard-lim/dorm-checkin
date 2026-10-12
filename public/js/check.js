@@ -70,13 +70,27 @@ function describeNotice(notice) {
   };
 }
 
-// 학년부장은 담당 학년 학생만 보인다(사용자 요청 — isGradeInView). 다른 역할은 전체
+// 담당 반이 있는 담임(teacher)인지 — 이 화면에서는 담당 반 학생만 보인다(사용자 요청)
+function homeroomClasses() {
+  const p = currentProfile;
+  if (!p || p.role !== "teacher") return null;
+  const classes = p.managedClasses || {};
+  return Object.values(classes).some((c) => Object.keys(c || {}).length > 0) ? classes : null;
+}
+
+function isStudentInView(grade, student) {
+  const classes = homeroomClasses();
+  return !classes || Boolean((classes[grade] || {})[student.cls]);
+}
+
+// 학년부장은 담당 학년 학생만(isGradeInView), 담임은 담당 반 학생만 보인다(사용자 요청). 다른 역할은 전체
+// 화면에서 보이는 것만 줄이는 것이고, 읽기 권한(RLS)은 그대로다
 function getAllStudents() {
   const list = [];
   for (const grade of GRADES.filter((g) => isGradeInView(currentProfile, g))) {
     const group = state.studentsByGrade[grade] || {};
     for (const [id, data] of Object.entries(group)) {
-      list.push({ id, grade, ...data });
+      if (isStudentInView(grade, data)) list.push({ id, grade, ...data });
     }
   }
   return list;
@@ -155,9 +169,12 @@ function getOutingStatus(student) {
 // 외출 예정 학생의 외출 시각이 되면 다시 그려서 "외출중"으로 바꾼다.
 const updateStartTicker = createStartTimeTicker(() => render());
 
-// 학년 탭: 전체 / 1학년 / 2학년 / 3학년(학년부장은 담당 학년만)
+// 학년 탭: 전체 / 1학년 / 2학년 / 3학년(학년부장은 담당 학년만, 담임은 담당 반이 있는 학년만)
 function renderGradeChips() {
-  const grades = GRADES.filter((g) => isGradeInView(currentProfile, g));
+  const classes = homeroomClasses();
+  const grades = GRADES.filter(
+    (g) => isGradeInView(currentProfile, g) && (!classes || Object.keys(classes[g] || {}).length > 0)
+  );
   if (state.activeGradeFilter !== "all" && !grades.includes(state.activeGradeFilter)) state.activeGradeFilter = "all";
   gradeChipsEl.innerHTML = [
     `<button type="button" class="filter-chip${state.activeGradeFilter === "all" ? " is-active" : ""}" data-grade-filter="all">전체</button>`,
@@ -168,8 +185,15 @@ function renderGradeChips() {
   ].join("");
 }
 
-function renderChips() {
-  const roomEntries = Object.entries(state.rooms).filter(([id, room]) => isRoomInView(currentProfile, id, room));
+// 실 탭: 학년부장은 담당 실(+ 담당 학년이 앉는 실), 담임은 담당 반 학생이 앉아 있는 실만
+function renderChips(visibleStudents) {
+  const classes = homeroomClasses();
+  const mine = classes ? new Set(visibleStudents.map((s) => s.id)) : null;
+  const roomEntries = Object.entries(state.rooms).filter(
+    ([id, room]) =>
+      isRoomInView(currentProfile, id, room) &&
+      (!mine || Object.values((room && room.seatMap) || {}).some((studentId) => mine.has(studentId)))
+  );
   if (state.activeFilter !== "all" && !roomEntries.some(([id]) => id === state.activeFilter)) state.activeFilter = "all";
   const chips = [
     `<button type="button" class="filter-chip${state.activeFilter === "all" ? " is-active" : ""}" data-filter="all">전체</button>`,
@@ -285,7 +309,7 @@ function render() {
   updateStartTicker(isToday ? Object.values(state.outings) : []);
 
   renderGradeChips();
-  renderChips();
+  renderChips(allStudents);
 
   let filtered = allStudents;
   if (state.activeGradeFilter !== "all") {
