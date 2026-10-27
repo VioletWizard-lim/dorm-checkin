@@ -5,7 +5,7 @@
 // 예전 형식(.xls)은 읽지 못한다(엑셀에서 "다른 이름으로 저장 → .xlsx"로 바꾸거나 표를 복사해 붙여넣기).
 
 // tests/e2e/package.json의 pdfjs-dist와 같은 버전이어야 한다(다르면 E2E가 바로 알려 줌)
-const PDFJS_VERSION = "5.7.284";
+const PDFJS_VERSION = "6.4.299";
 const PDFJS_ROOT = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}`;
 
 export async function readSheetFile(file) {
