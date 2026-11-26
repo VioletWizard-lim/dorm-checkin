@@ -1,5 +1,5 @@
 import { assertEquals, assertMatch } from "jsr:@std/assert@1";
-import { normalizeStaffId, normalizeStudentId, randomPassword, randomPin, staffEmail, studentEmail } from "./accounts.ts";
+import { normalizeStaffId, normalizeStudentId, randomPassword, randomStudentPassword, staffEmail, studentEmail } from "./accounts.ts";
 import { getServiceKey } from "./supabase.ts";
 
 Deno.test("staff ids are lowercase letters and digits only", () => {
@@ -21,9 +21,17 @@ Deno.test("generated passwords use the unambiguous alphabet", () => {
   assertEquals(randomPassword(4, () => new Uint32Array([0, 1, 53, 54])), "AB9A");
 });
 
-Deno.test("student pins are 6 digits", () => {
-  assertMatch(randomPin(), /^[0-9]{6}$/);
-  assertEquals(randomPin(6, () => new Uint32Array([10, 11, 12, 13, 14, 19])), "012349");
+Deno.test("student passwords are 8 lowercase letters and digits, with both kinds", () => {
+  for (let i = 0; i < 200; i++) {
+    const value = randomStudentPassword();
+    assertMatch(value, /^[abcdefghjkmnpqrstuvwxyz23456789]{8}$/);
+    assertMatch(value, /[a-z]/);
+    assertMatch(value, /[0-9]/);
+  }
+  assertEquals(randomStudentPassword(4, () => new Uint32Array([0, 1, 23, 30])), "ab29");
+  // 글자만(또는 숫자만) 나오면 다시 뽑는다
+  const draws = [new Uint32Array([0, 1, 2, 3]), new Uint32Array([23, 24, 25, 26]), new Uint32Array([0, 23, 1, 24])];
+  assertEquals(randomStudentPassword(4, () => draws.shift()!), "a2b3");
 });
 
 Deno.test("service key prefers the new secret keys and falls back to the legacy key", () => {

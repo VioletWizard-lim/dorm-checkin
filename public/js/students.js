@@ -622,7 +622,7 @@ function findStudent(id) {
   return null;
 }
 
-// 학생 계정 발급(여러 명). 서버(student-accounts)가 권한·아이디·중복을 확인하고 6자리 비밀번호를 만든다.
+// 학생 계정 발급(여러 명). 서버(student-accounts)가 권한·아이디·중복을 확인하고 비밀번호(영문 소문자+숫자 8자리)를 만든다.
 async function issueAccounts(studentIds, btn) {
   const originalText = btn.textContent;
   btn.disabled = true;
