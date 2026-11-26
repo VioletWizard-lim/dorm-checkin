@@ -43,7 +43,7 @@ test.describe("학생 계정 관리(학생 명단 화면)", () => {
     expect(env.sms.messages[0]).toMatchObject({ to: "01011112222", from: "0212345678" });
     expect(env.sms.messages[0].text).toContain("아이디: hong123");
     expect(env.sms.messages[0].text).toContain("접속: http://dorm.test/login.html");
-    const pin = /비밀번호: (\d{6})/.exec(env.sms.messages[0].text)[1];
+    const pin = /비밀번호: ([a-z0-9]{8})/.exec(env.sms.messages[0].text)[1];
     await expect(rosterCard(page, "홍길동").locator(".account-chip")).toHaveText("계정 있음");
     expect(await studentAccount(env, STUDENT.hong)).toMatchObject({ kind: "student", role: "student", login_id: "hong123" });
 
@@ -55,7 +55,7 @@ test.describe("학생 계정 관리(학생 명단 화면)", () => {
     const reset = page.locator("#accountResultList .student-card").first();
     await expect(reset).toContainText("재발급됨");
     await expect(reset).toContainText("문자 실패(수신번호 오류)");
-    const newPin = /비밀번호: (\d{6})/.exec(await reset.textContent())[1];
+    const newPin = /비밀번호: ([a-z0-9]{8})/.exec(await reset.textContent())[1];
     await expect(page.locator("#accountResultCopy")).toHaveValue(`홍길동\t10305\thong123\t${newPin}`);
     expect(await tryLogin(openOtherAs, "hong123", pin, { student: true })).toBe(WRONG_LOGIN);
     expect(await tryLogin(openOtherAs, "hong123", newPin, { student: true })).toBe("ok");

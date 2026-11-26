@@ -235,6 +235,12 @@ export function createGateway({ auth, postgrestUrl, functionUrls }) {
           });
           return json(200, auth.userJson(user), apiHeaders);
         }
+        // 계정 하나 조회. supabase-js 2.x 최근 버전의 admin.deleteUser가 지우기 전에 먼저 부른다(진짜 Supabase도 지원)
+        if (method === "GET" && id) {
+          const user = auth.users.get(id);
+          if (!user) throw new AuthError(404, "user_not_found", "User not found");
+          return json(200, auth.userJson(user), apiHeaders);
+        }
         if (method === "PUT" && id) return json(200, auth.userJson(await auth.updateUser(id, input)), apiHeaders);
         if (method === "DELETE" && id) return json(200, auth.userJson(await auth.deleteUser(id)), apiHeaders);
       }

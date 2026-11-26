@@ -1,6 +1,6 @@
 // 학생 계정 관리 — 발급·비밀번호 재발급·계정 삭제는 관리자만(사용자 요청).
-//   issue          : 계정 발급(여러 명). 아이디 = 학생 명단의 ID, 초기 비밀번호 = 6자리 숫자
-//   reset-password : 새 6자리 비밀번호 발급
+//   issue          : 계정 발급(여러 명). 아이디 = 학생 명단의 ID, 초기 비밀번호 = 영문 소문자+숫자 8자리
+//   reset-password : 새 비밀번호(영문 소문자+숫자 8자리) 발급
 //   발급·재발급한 비밀번호는 문자(솔라피)가 설정돼 있고 학생 연락처가 있으면 학생에게 문자로 보낸다.
 //   비밀번호는 서버에 저장하지 않고 응답으로 한 번만 돌려준다(관리자가 화면에서 파일로 받아 따로 보관 — 사용자 요청).
 //   delete         : 계정 삭제(로그인 정보 + 프로필). withStudent가 true면 학생 명단에서도 지운다.
@@ -48,7 +48,7 @@ export type StudentAccountsDeps = {
     findByStudentIds(ids: string[]): Promise<Profile[]>;
     insert(row: Record<string, unknown>): Promise<{ error: { message: string } | null }>;
   };
-  generatePin(): string;
+  generatePassword(): string;
   sms: SmsSender | null;
   appUrl: string | null; // 문자에 넣을 접속 주소(호출한 화면의 주소)
 };
@@ -142,7 +142,7 @@ async function issueAccounts(raw: unknown, deps: StudentAccountsDeps): Promise<I
       continue;
     }
 
-    const password = deps.generatePin();
+    const password = deps.generatePassword();
     const { data, error } = await deps.auth.createUser({
       email: studentEmail(loginId),
       password,
@@ -227,7 +227,7 @@ async function resetPassword(
 ): Promise<{ loginId: string; password?: string } & Delivery> {
   const { student, account } = await loadTarget(rawStudentId, deps);
   if (!account) throw new HttpError(404, "계정이 아직 발급되지 않았습니다.");
-  const password = deps.generatePin();
+  const password = deps.generatePassword();
   // 학생 화면의 "비밀번호 바꾸기" 안내가 다시 뜨게 한다(학생이 바꾸면 true)
   const { error } = await deps.auth.updateUserById(account.id, { password, user_metadata: { password_changed: false } });
   if (error) throw new Error(`password reset failed: ${error.message}`);

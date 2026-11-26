@@ -83,7 +83,7 @@ function fakeDeps(
         return Promise.resolve({ error: null });
       },
     },
-    generatePin: () => String(123450 + ++pin),
+    generatePassword: () => String(123450 + ++pin),
     sms: options.sms
       ? {
         send(messages) {
@@ -117,7 +117,7 @@ Deno.test("only active staff with a role may call it", async () => {
 
 const admin = () => staff({ role: "admin" });
 
-Deno.test("issue creates lowercase student logins with 6-digit pins and links the profile", async () => {
+Deno.test("issue creates lowercase student logins with generated passwords and links the profile", async () => {
   const { deps, calls } = fakeDeps({ caller: admin() });
   const result = await handleStudentAccounts({ action: "issue", studentIds: ["s-hong", "s-hong"] }, deps) as { results: unknown[] };
   assertEquals(calls.created, [{ email: "hong.gd@student.donghall.local", password: "123451" }]);
@@ -202,7 +202,7 @@ Deno.test("only admins may issue student accounts", async () => {
   assertEquals(result.results[0].ok, true);
 });
 
-Deno.test("reset-password (admin only) gives a new pin for an existing account", async () => {
+Deno.test("reset-password (admin only) gives a new password for an existing account", async () => {
   const { deps, calls } = fakeDeps({ caller: staff({ role: "admin" }) });
   assertEquals(await handleStudentAccounts({ action: "reset-password", studentId: "s-done" }, deps), {
     loginId: "done1",

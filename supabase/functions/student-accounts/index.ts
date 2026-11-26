@@ -1,6 +1,6 @@
 import { jsonResponse, readJson, serve } from "../_shared/http.ts";
 import { createAdminClient, getCaller } from "../_shared/supabase.ts";
-import { randomPin } from "../_shared/accounts.ts";
+import { randomStudentPassword } from "../_shared/accounts.ts";
 import { createSmsSender, smsConfigFromEnv } from "../_shared/solapi.ts";
 import type { Profile } from "../_shared/types.ts";
 import { handleStudentAccounts, loginPageUrl, type StudentRow } from "./handler.ts";
@@ -45,7 +45,7 @@ serve(async (req) => {
         return { error };
       },
     },
-    generatePin: () => randomPin(6),
+    generatePassword: () => randomStudentPassword(),
     sms: smsConfig ? createSmsSender(smsConfig) : null,
     appUrl: loginPageUrl(req.headers.get("Origin"), body.appPath),
   });
