@@ -52,6 +52,7 @@
     - `adapters.js`: DB 행(snake_case) ↔ 화면 코드가 쓰는 예전 Firebase 모양(`studentsByGrade`, `seatMap`, `managedClasses` 등) 변환. 화면 렌더링 코드는 예전 모양을 그대로 쓴다
 - 배포
   - main에 `supabase/**`가 들어오면 `supabase-deploy.yml`이 테스트 후 `db push`와 `functions deploy --use-api`를 실행한다
+  - Supabase CLI는 버전을 고정해 둔다(`supabase-deploy.yml`의 `setup-cli` `version`). `latest`를 쓰다가 3.x로 올라가며 `db push`가 기본으로 로컬 DB를 가리키게 바뀌어 배포가 실패한 적이 있음(3.x: 원격은 `--remote`, 확인 질문은 `--yes`)
   - 시크릿 `SUPABASE_ACCESS_TOKEN`(프로젝트 하나로 범위를 좁힌 토큰), `SUPABASE_PROJECT_REF`, `SUPABASE_DB_PASSWORD`가 없으면 배포를 건너뛴다
   - 마이그레이션 SQL을 Supabase SQL 편집기에서 직접 실행하지 않는다(배포 워크플로가 적용하고 이력을 남김)
 - 화면: `pages-deploy.yml`이 main의 `public/`을 GitHub Pages에 올린다(위 "기술 스택")
