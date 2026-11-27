@@ -49,9 +49,11 @@ jobs:
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
     steps:
       - uses: actions/checkout@v4
+      # CLI 버전 고정: latest가 3.x로 올라가며 db push가 기본으로 로컬 DB를 가리키게 바뀌어 배포가 실패했음.
+      # 올릴 때는 아래 명령의 옵션이 그대로인지 확인할 것(3.x: 원격은 --remote, 확인 질문은 --yes)
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
-      - run: supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
-      - run: supabase db push --password "$SUPABASE_DB_PASSWORD"
-      - run: supabase functions deploy --project-ref "$SUPABASE_PROJECT_REF" --use-api
+          version: 3.4.0
+      - run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
+      - run: supabase db push --remote --password "$SUPABASE_DB_PASSWORD" --yes
+      - run: supabase functions deploy --use-api --yes
